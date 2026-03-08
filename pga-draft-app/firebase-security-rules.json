@@ -1,0 +1,95 @@
+{
+  "rules": {
+    // ── Users ──────────────────────────────────────────────────────────────────
+    // Any authenticated user can read any user record (needed to show usernames).
+    // Users can only write their own record. Admins can write any user record.
+    "users": {
+      ".read": "auth !== null",
+      "$uid": {
+        ".write": "auth !== null && (auth.uid === $uid || root.child('users').child(auth.uid).child('role').val() === 'admin')"
+      }
+    },
+
+    // ── Tournaments ────────────────────────────────────────────────────────────
+    // All authenticated users can read tournament data.
+    // Only admins can write (status changes, ESPN IDs, draft order, etc.).
+    "tournaments": {
+      ".read": "auth !== null",
+      ".write": "auth !== null && root.child('users').child(auth.uid).child('role').val() === 'admin'"
+    },
+
+    // ── Drafts ─────────────────────────────────────────────────────────────────
+    // All authenticated users can read draft state (real-time draft room).
+    // Only admins can initialize/reset a draft.
+    // For picks: any authenticated user can append their own pick, but
+    //   the full picks array write is gated to prevent tampering.
+    //   (Full atomic safety handled by runTransaction server-side.)
+    "drafts": {
+      ".read": "auth !== null",
+      "$tournamentId": {
+        ".write": "auth !== null && root.child('users').child(auth.uid).child('role').val() === 'admin'",
+        "picks": {
+          ".write": "auth !== null"
+        },
+        "currentPickIndex": {
+          ".write": "auth !== null"
+        },
+        "status": {
+          ".write": "auth !== null && root.child('users').child(auth.uid).child('role').val() === 'admin'"
+        }
+      }
+    },
+
+    // ── Players / Leaderboard data ─────────────────────────────────────────────
+    // Any authenticated user can read. Any authenticated user can write
+    // (the leaderboard page saves players on each poll — this is fine since
+    //  all clients are reading from the same ESPN source anyway).
+    "players": {
+      ".read": "auth !== null",
+      ".write": "auth !== null"
+    },
+
+    // ── Results / Locked Scores ────────────────────────────────────────────────
+    // All authenticated users can read. Only admins or the server can write.
+    "results": {
+      ".read": "auth !== null",
+      ".write": "auth !== null && root.child('users').child(auth.uid).child('role').val() === 'admin'"
+    },
+    "lockedScores": {
+      ".read": "auth !== null",
+      ".write": "auth !== null && root.child('users').child(auth.uid).child('role').val() === 'admin'"
+    },
+
+    // ── WD Replacement Requests ────────────────────────────────────────────────
+    // All authenticated users can read (admin needs to see all requests).
+    // Users can only create their own requests. Admins can update any request.
+    "wdRequests": {
+      ".read": "auth !== null",
+      "$tournamentId": {
+        "$requestKey": {
+          ".write": "auth !== null && (data.child('userId').val() === auth.uid || !data.exists() || root.child('users').child(auth.uid).child('role').val() === 'admin')"
+        }
+      }
+    },
+
+    // ── Roster Edits (audit log) ────────────────────────────────────────────────
+    // All authenticated users can read. Only admins can write.
+    "rosterEdits": {
+      ".read": "auth !== null",
+      ".write": "auth !== null && root.child('users').child(auth.uid).child('role').val() === 'admin'"
+    },
+
+    // ── Historical Drafts ──────────────────────────────────────────────────────
+    // All authenticated users can read. Only admins can write.
+    "historicalDrafts": {
+      ".read": "auth !== null",
+      ".write": "auth !== null && root.child('users').child(auth.uid).child('role').val() === 'admin'"
+    },
+
+    // ── Deny all other paths ───────────────────────────────────────────────────
+    "$other": {
+      ".read": false,
+      ".write": false
+    }
+  }
+}

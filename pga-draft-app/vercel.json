@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/lock-scores",
+      "schedule": "0 0 * * 2"
+    }
+  ]
+}

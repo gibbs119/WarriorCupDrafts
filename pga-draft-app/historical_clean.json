@@ -1,0 +1,2071 @@
+[
+  {
+    "id": "masters-2019",
+    "tournamentId": "masters",
+    "year": 2019,
+    "name": "The Masters",
+    "users": [
+      "Gibbs",
+      "Furm",
+      "Kev",
+      "Doby",
+      "Dief",
+      "Ryan"
+    ],
+    "picks": {
+      "Gibbs": [
+        "McIlroy",
+        "Kuchar",
+        "Leishman",
+        "Watson",
+        "45.0",
+        "5.0",
+        "Dief",
+        "1.0"
+      ],
+      "Furm": [
+        "D. Johnson",
+        "Casey",
+        "Stenson",
+        "Finau",
+        "16",
+        "4.0",
+        "Ryan",
+        "2.0"
+      ],
+      "Kev": [
+        "Spieth",
+        "Fleetwood",
+        "Mickelson",
+        "Garcia",
+        "65",
+        "6.0",
+        "Doby",
+        "3.0"
+      ],
+      "Doby": [
+        "Thomas",
+        "Fowler",
+        "Schauffele",
+        "Matsuyama",
+        "-5",
+        "3.0",
+        "Furm",
+        "4.0"
+      ],
+      "Dief": [
+        "Rose",
+        "Rahm",
+        "Day",
+        "Molinari",
+        "-14",
+        "1.0",
+        "Gibbs",
+        "5.0"
+      ],
+      "Ryan": [
+        "Koepka",
+        "Woods",
+        "Dechambeau",
+        "Reed",
+        "-11",
+        "2.0",
+        "Kev",
+        "6.0"
+      ]
+    },
+    "picksPerUser": 8,
+    "hasScores": false
+  },
+  {
+    "id": "pga-championship-2019",
+    "tournamentId": "pga-championship",
+    "year": 2019,
+    "name": "PGA Championship",
+    "users": [
+      "Dief",
+      "Ryan",
+      "Doby",
+      "Furm",
+      "Gibbs",
+      "Kev"
+    ],
+    "picks": {
+      "Dief": [
+        "Woods",
+        "Fleetwood",
+        "Schauffele",
+        "Scott",
+        "Watson",
+        "61",
+        "5.0",
+        "Dief"
+      ],
+      "Ryan": [
+        "Koepka",
+        "Day",
+        "Dechambeau",
+        "Stenson",
+        "Poulter",
+        "46",
+        "4.0",
+        "Ryan"
+      ],
+      "Doby": [
+        "D. Johnson",
+        "Rose",
+        "Matsuyama",
+        "Simpson",
+        "Casey",
+        "30",
+        "3.0",
+        "Doby"
+      ],
+      "Furm": [
+        "Fowler",
+        "Finau",
+        "Kuchar",
+        "Kisner",
+        "Cantlay",
+        "23",
+        "2.0",
+        "Furm"
+      ],
+      "Gibbs": [
+        "Rahm",
+        "Molanari",
+        "Garcia",
+        "Leishman",
+        "Perez",
+        "209",
+        "6.0",
+        "Gibbs"
+      ],
+      "Kev": [
+        "McIlroy",
+        "Spieth",
+        "Mickelson",
+        "Woodland",
+        "Reed",
+        "-16",
+        "1.0",
+        "Kev"
+      ]
+    },
+    "picksPerUser": 8,
+    "hasScores": false
+  },
+  {
+    "id": "the-open-2019",
+    "tournamentId": "the-open",
+    "year": 2019,
+    "name": "The Open Championship",
+    "users": [
+      "Furm",
+      "Kev",
+      "Doby",
+      "Ryan",
+      "Dief",
+      "Gibbs"
+    ],
+    "picks": {
+      "Furm": [
+        "Koepka",
+        "Thomas",
+        "Fowler",
+        "Casey",
+        "-1",
+        "Furm",
+        "1.0",
+        "TOTAL:",
+        "10.0"
+      ],
+      "Kev": [
+        "Rory",
+        "Spieth",
+        "Woodland",
+        "Kisner",
+        "124.0",
+        "Kev",
+        "6.0",
+        "18.0"
+      ],
+      "Doby": [
+        "D. Johnson",
+        "Schauffele",
+        "Scott",
+        "Finau",
+        "82",
+        "Doby",
+        "3.0",
+        "19.0"
+      ],
+      "Ryan": [
+        "Woods",
+        "Fleetwood",
+        "Molinari",
+        "Oosthuizen",
+        "16",
+        "Ryan",
+        "2.0",
+        "18.0"
+      ],
+      "Dief": [
+        "Rahm",
+        "Rose",
+        "DeChambeau",
+        "Day",
+        "105.0",
+        "Dief",
+        "5.0",
+        "21.0"
+      ],
+      "Gibbs": [
+        "Kuchar",
+        "Cantlay",
+        "Stenson",
+        "Matsuyama",
+        "101.0",
+        "Gibbs",
+        "4.0",
+        "22.0"
+      ]
+    },
+    "picksPerUser": 9,
+    "hasScores": false
+  },
+  {
+    "id": "us-open-2019",
+    "tournamentId": "us-open",
+    "year": 2019,
+    "name": "U.S. Open",
+    "users": [
+      "Kev",
+      "Furm",
+      "Doby",
+      "Ryan",
+      "Dief",
+      "Gibbs"
+    ],
+    "picks": {
+      "Kev": [
+        "Koepka",
+        "Fleetwood",
+        "Woodland",
+        "Garcia",
+        "Watson",
+        "12",
+        "Furm",
+        "2.0",
+        "Kev"
+      ],
+      "Furm": [
+        "McIlroy",
+        "Kuchar",
+        "Rahm",
+        "Kisner",
+        "Stenson",
+        "-14",
+        "Kev",
+        "1.0",
+        "Furm"
+      ],
+      "Doby": [
+        "D. Johnson",
+        "Schauffele",
+        "Day",
+        "Casey",
+        "Simpson",
+        "27",
+        "Doby",
+        "3.0",
+        "Doby"
+      ],
+      "Ryan": [
+        "Woods",
+        "Rose",
+        "Molinari",
+        "Mickelson",
+        "DeChambeau",
+        "27",
+        "Ryan",
+        "4.0",
+        "Ryan"
+      ],
+      "Dief": [
+        "Spieth",
+        "Cantlay",
+        "Matsuyama",
+        "Leishman",
+        "Oosthiuzen",
+        "38",
+        "Dief",
+        "5.0",
+        "Dief"
+      ],
+      "Gibbs": [
+        "Fowler",
+        "Thomas",
+        "Scott",
+        "Finau",
+        "Snedeker",
+        "116",
+        "Gibbs",
+        "6.0",
+        "Gibbs"
+      ]
+    },
+    "picksPerUser": 9,
+    "hasScores": false
+  },
+  {
+    "id": "masters-2020",
+    "tournamentId": "masters",
+    "year": 2020,
+    "name": "The Masters",
+    "users": [
+      "Doby",
+      "Dief",
+      "Ryan",
+      "Furm",
+      "Jimmy",
+      "Gibbs",
+      "Kev"
+    ],
+    "picks": {
+      "Doby": [
+        "Thomas",
+        "Simpson",
+        "Hatton",
+        "Scheffler",
+        "10.0",
+        "TOTAL:",
+        "1.0"
+      ],
+      "Dief": [
+        "DeChambeau",
+        "Morikawa",
+        "Reed",
+        "Hovland",
+        "77.0",
+        "6.0"
+      ],
+      "Ryan": [
+        "Koepka",
+        "Finau",
+        "Fleetwood",
+        "Oosthuizen",
+        "38.0",
+        "3.0"
+      ],
+      "Furm": [
+        "D. Johnson",
+        "Matsuyama",
+        "Casey",
+        "Kisner",
+        "26.0",
+        "2.0"
+      ],
+      "Jimmy": [
+        "Rahm",
+        "Schauffele",
+        "Wolff",
+        "Day",
+        "74.0",
+        "5.0"
+      ],
+      "Gibbs": [
+        "McIlroy",
+        "Cantlay",
+        "Watson",
+        "Scott",
+        "45.0",
+        "4.0"
+      ],
+      "Kev": [
+        "Rose",
+        "Woods",
+        "Fowler",
+        "Woodland",
+        "90.0",
+        "7.0"
+      ]
+    },
+    "picksPerUser": 7,
+    "hasScores": false
+  },
+  {
+    "id": "memorial-2020",
+    "tournamentId": "memorial",
+    "year": 2020,
+    "name": "Memorial Tournament",
+    "users": [
+      "Kev",
+      "Doby",
+      "Dief",
+      "Ryan",
+      "Gibbs",
+      "Jimmy",
+      "Furm"
+    ],
+    "picks": {
+      "Kev": [
+        "Woods",
+        "Rose",
+        "Woodland",
+        "Oosthuizen",
+        "Reed",
+        "78",
+        "TOTAL:"
+      ],
+      "Doby": [
+        "Thomas",
+        "Simpson",
+        "Hovland",
+        "Anser",
+        "Casey",
+        "98"
+      ],
+      "Dief": [
+        "DeChambeau",
+        "Matsuyama",
+        "Finau",
+        "Kisner",
+        "Wolff",
+        "78"
+      ],
+      "Ryan": [
+        "McIlroy",
+        "Fowler",
+        "Berger",
+        "Kuchar",
+        "Leishman",
+        "94"
+      ],
+      "Gibbs": [
+        "D. Johnson",
+        "Cantlay",
+        "Spieth",
+        "An",
+        "Fitzpatrick",
+        "28"
+      ],
+      "Jimmy": [
+        "Rahm",
+        "Morikawa",
+        "Day",
+        "Horschel",
+        "Scheffler",
+        "-19"
+      ],
+      "Furm": [
+        "Koepka",
+        "Schauffele",
+        "Streelman",
+        "Poulter",
+        "Ca. Smith",
+        "164"
+      ]
+    },
+    "picksPerUser": 7,
+    "hasScores": false
+  },
+  {
+    "id": "phoenix-open-2020",
+    "tournamentId": "phoenix-open",
+    "year": 2020,
+    "name": "Phoenix Open",
+    "users": [
+      "Furm",
+      "Ryan",
+      "Dief",
+      "Jimmy",
+      "Doby",
+      "Gibbs",
+      "Kev"
+    ],
+    "picks": {
+      "Furm": [
+        "Thomas",
+        "C. Smith",
+        "Spieth",
+        "Knox",
+        "Putnam",
+        "TOTAL:"
+      ],
+      "Ryan": [
+        "Rahm",
+        "Na",
+        "Im",
+        "Z. Johnson",
+        "List"
+      ],
+      "Dief": [
+        "Fowler",
+        "Holmes",
+        "Wolff",
+        "Walker",
+        "Schwartzel"
+      ],
+      "Jimmy": [
+        "Simpson",
+        "Snedeker",
+        "Horschel",
+        "Watson",
+        "Bradley"
+      ],
+      "Doby": [
+        "Woodland",
+        "Dechambeau",
+        "Reavie",
+        "An",
+        "Choi"
+      ],
+      "Gibbs": [
+        "Schauffele",
+        "Matsuyama",
+        "Hadwin",
+        "Morikawa",
+        "Varner III"
+      ],
+      "Kev": [
+        "Kuchar",
+        "Finau",
+        "Chappell",
+        "Hoffman",
+        "Grace"
+      ]
+    },
+    "picksPerUser": 6,
+    "hasScores": false
+  },
+  {
+    "id": "us-open-2020",
+    "tournamentId": "us-open",
+    "year": 2020,
+    "name": "U.S. Open",
+    "users": [
+      "Ryan",
+      "Jimmy",
+      "Gibbs",
+      "Dief",
+      "Kev",
+      "Furm",
+      "Doby"
+    ],
+    "picks": {
+      "Ryan": [
+        "D. Johnson",
+        "Simpson",
+        "Day",
+        "Garcia",
+        "Im",
+        "14.0",
+        "3.0",
+        "TOTAL:"
+      ],
+      "Jimmy": [
+        "Rahm",
+        "Scott",
+        "Matsuyama",
+        "Stenson",
+        "Horschel",
+        "78",
+        "5.0"
+      ],
+      "Gibbs": [
+        "Schauffele",
+        "Fleetwood",
+        "Berger",
+        "Fitzpatrick",
+        "Hatton",
+        "90",
+        "6.0"
+      ],
+      "Dief": [
+        "McIlroy",
+        "Finau",
+        "Hovland",
+        "Reavie",
+        "Kisner",
+        "7",
+        "2.0"
+      ],
+      "Kev": [
+        "Woods",
+        "Rose",
+        "Fowler",
+        "Kuchar",
+        "Harman",
+        "149",
+        "7.0"
+      ],
+      "Furm": [
+        "Thomas",
+        "Cantlay",
+        "Casey",
+        "Woodland",
+        "Lowry",
+        "57",
+        "4.0"
+      ],
+      "Doby": [
+        "Morikawa",
+        "DeChambeau",
+        "Wolff",
+        "Reed",
+        "Niemann",
+        "-27.0",
+        "1.0"
+      ]
+    },
+    "picksPerUser": 8,
+    "hasScores": false
+  },
+  {
+    "id": "masters-2021",
+    "tournamentId": "masters",
+    "year": 2021,
+    "name": "The Masters",
+    "users": [
+      "Furm",
+      "Gibbs",
+      "Doby",
+      "Kev",
+      "Ryan",
+      "Erm",
+      "Dief"
+    ],
+    "picks": {
+      "Furm": [
+        "Thomas",
+        "Westwood",
+        "Berger",
+        "Niemann",
+        "116",
+        "TOTAL:",
+        "7.0"
+      ],
+      "Gibbs": [
+        "D. Johnson",
+        "Finau",
+        "Garcia",
+        "C. Smith",
+        "53",
+        "2.0"
+      ],
+      "Doby": [
+        "McIlroy",
+        "Morikawa",
+        "Simpson",
+        "Kuchar",
+        "85.0",
+        "6.0"
+      ],
+      "Kev": [
+        "Speith",
+        "Fitzpatrick",
+        "Fleetwood",
+        "Woodland",
+        "64.0",
+        "4.0"
+      ],
+      "Ryan": [
+        "Rahm",
+        "Cantlay",
+        "Day",
+        "Casey",
+        "75.0",
+        "5.0"
+      ],
+      "Erm": [
+        "DeChambeau",
+        "Schauffele",
+        "Scheffler",
+        "Im",
+        "54.0",
+        "3.0"
+      ],
+      "Dief": [
+        "Koepka",
+        "Reed",
+        "Hovland",
+        "Matsuyama",
+        "-7.0",
+        "1.0"
+      ]
+    },
+    "picksPerUser": 7,
+    "hasScores": false
+  },
+  {
+    "id": "pga-championship-2021",
+    "tournamentId": "pga-championship",
+    "year": 2021,
+    "name": "PGA Championship",
+    "users": [
+      "Dief",
+      "Gibbs",
+      "Erm",
+      "Kev",
+      "Ryan",
+      "Doby",
+      "Furm"
+    ],
+    "picks": {
+      "Dief": [
+        "Thomas",
+        "Reed",
+        "Finau",
+        "Scott",
+        "Oothuzien",
+        "-1",
+        "TOTAL:",
+        "1.0"
+      ],
+      "Gibbs": [
+        "McIlroy",
+        "C. Smith",
+        "Zalatoris",
+        "Burns",
+        "Connors",
+        "63",
+        "6.0"
+      ],
+      "Erm": [
+        "Spieth",
+        "Hovland",
+        "Berger",
+        "Scheffler",
+        "Leishman",
+        "57",
+        "5.0"
+      ],
+      "Kev": [
+        "Koepka",
+        "Cantlay",
+        "Fitzpatrick",
+        "Na",
+        "Ancer",
+        "5",
+        "2.0"
+      ],
+      "Ryan": [
+        "Rahm",
+        "DeChambeau",
+        "Matsuyama",
+        "Rose",
+        "Garcia",
+        "17",
+        "3.0"
+      ],
+      "Doby": [
+        "D. Johnson",
+        "Schauffele",
+        "Hatton",
+        "Niemann",
+        "Bradley",
+        "85",
+        "7.0"
+      ],
+      "Furm": [
+        "Morikawa",
+        "Simpson",
+        "Casey",
+        "Fleetwood",
+        "Woodland",
+        "19",
+        "4.0"
+      ]
+    },
+    "picksPerUser": 8,
+    "hasScores": false
+  },
+  {
+    "id": "players-championship-2021",
+    "tournamentId": "players-championship",
+    "year": 2021,
+    "name": "The Players Championship",
+    "users": [
+      "Kev",
+      "Dief",
+      "Ryan",
+      "Doby",
+      "Gibbs",
+      "Furm"
+    ],
+    "picks": {
+      "Kev": [
+        "D. Johnson",
+        "Speith",
+        "Garcia",
+        "Merritt",
+        "Stenson",
+        "94",
+        "Furm",
+        "TOTAL:",
+        "4.0"
+      ],
+      "Dief": [
+        "McIlroy",
+        "Matsuyama",
+        "Cantlay",
+        "Scott",
+        "Oosthuzien",
+        "161",
+        "Gibbs",
+        "6.0"
+      ],
+      "Ryan": [
+        "DeChambeau",
+        "Finau",
+        "Fleetwood",
+        "Hatton",
+        "Hossler",
+        "134",
+        "Doby",
+        "5.0"
+      ],
+      "Doby": [
+        "Rahm",
+        "Hovland",
+        "Berger",
+        "Scheffler",
+        "Ancer",
+        "18",
+        "Kev",
+        "3.0"
+      ],
+      "Gibbs": [
+        "Schauffele",
+        "Simpson",
+        "Casey",
+        "Fitzpatrick",
+        "Im",
+        "9",
+        "Ryan",
+        "2.0"
+      ],
+      "Furm": [
+        "Thomas",
+        "Morikawa",
+        "Horschel",
+        "Westwood",
+        "Niemann",
+        "-11",
+        "Dief",
+        "1.0"
+      ]
+    },
+    "picksPerUser": 9,
+    "hasScores": false
+  },
+  {
+    "id": "the-open-2021",
+    "tournamentId": "the-open",
+    "year": 2021,
+    "name": "The Open Championship",
+    "users": [
+      "Erm",
+      "Doby",
+      "Dief",
+      "Gibbs",
+      "Furm",
+      "Kev",
+      "Ryan"
+    ],
+    "picks": {
+      "Erm": [
+        "Koepka",
+        "Scheffler",
+        "Hovland",
+        "Zalatoris",
+        "Smith",
+        "4.0",
+        "TOTAL:",
+        "2.0"
+      ],
+      "Doby": [
+        "Mcilroy",
+        "Cantlay",
+        "Finau",
+        "English",
+        "Leishman",
+        "107.0",
+        "7.0"
+      ],
+      "Dief": [
+        "Rahm",
+        "Lowry",
+        "Fitzpatrick",
+        "Simpson",
+        "Westwood",
+        "21.0",
+        "4.0"
+      ],
+      "Gibbs": [
+        "Schauffele",
+        "Morikawa",
+        "Casey",
+        "Grace",
+        "Niemann",
+        "16.0",
+        "3.0"
+      ],
+      "Furm": [
+        "Thomas",
+        "Oosthuzien",
+        "Hatton",
+        "Berger",
+        "Connors",
+        "2.0",
+        "1.0"
+      ],
+      "Kev": [
+        "Johnson",
+        "Fleetwood",
+        "Ancer",
+        "Noren",
+        "Mickelson",
+        "89.0",
+        "6.0"
+      ],
+      "Ryan": [
+        "DeChambeau",
+        "Speith",
+        "Reed",
+        "Rose",
+        "Poulter",
+        "49.0",
+        "5.0"
+      ]
+    },
+    "picksPerUser": 8,
+    "hasScores": false
+  },
+  {
+    "id": "us-open-2021",
+    "tournamentId": "us-open",
+    "year": 2021,
+    "name": "U.S. Open",
+    "users": [
+      "Dief",
+      "Kev",
+      "Ryan",
+      "Furm",
+      "Erm",
+      "Gibbs",
+      "Doby"
+    ],
+    "picks": {
+      "Dief": [
+        "Rahm",
+        "Matsuyama",
+        "Zalatoris",
+        "Homa",
+        "Wolff",
+        "16.0",
+        "TOTAL:",
+        "3.0"
+      ],
+      "Kev": [
+        "Koepka",
+        "Rose",
+        "Fleetwood",
+        "Woodland",
+        "Ancer",
+        "92.0",
+        "6.0"
+      ],
+      "Ryan": [
+        "D. Johnson",
+        "Hovland",
+        "Simpson",
+        "Hatton",
+        "C. Smith",
+        "163.0",
+        "7.0"
+      ],
+      "Furm": [
+        "DeChambeau",
+        "Cantlay",
+        "Casey",
+        "Im",
+        "Burns",
+        "37.0",
+        "5.0"
+      ],
+      "Erm": [
+        "Morikawa",
+        "Finau",
+        "Scheffler",
+        "Oosthuizen",
+        "Molinari",
+        "-27.0",
+        "1.0"
+      ],
+      "Gibbs": [
+        "Thomas",
+        "Speith",
+        "Reed",
+        "Fitzpatrick",
+        "Grace",
+        "34.0",
+        "4.0"
+      ],
+      "Doby": [
+        "McIlroy",
+        "Schauffele",
+        "Berger",
+        "Conners",
+        "Niemann",
+        "-12.0",
+        "2.0"
+      ]
+    },
+    "picksPerUser": 8,
+    "hasScores": false
+  },
+  {
+    "id": "masters-2022",
+    "tournamentId": "masters",
+    "year": 2022,
+    "name": "The Masters",
+    "users": [
+      "Doby",
+      "Dief",
+      "Furm",
+      "Ryan",
+      "Gibbs",
+      "Kev",
+      "Erm"
+    ],
+    "picks": {
+      "Doby": [
+        "Thomas",
+        "Hovland",
+        "Berger",
+        "Rose",
+        "Scott",
+        "74",
+        "TOTAL:",
+        "5"
+      ],
+      "Dief": [
+        "Speith",
+        "Zalatoris",
+        "Oosthuzien",
+        "Fleetwood",
+        "Watson",
+        "62",
+        "4"
+      ],
+      "Furm": [
+        "Rahm",
+        "Matsuyama",
+        "Horschel",
+        "Kisner",
+        "Casey",
+        "84",
+        "7"
+      ],
+      "Ryan": [
+        "Morikawa",
+        "Schauffele",
+        "DeChambeau",
+        "Reed",
+        "Lowry",
+        "82",
+        "6"
+      ],
+      "Gibbs": [
+        "Kopeka",
+        "D. Johnson",
+        "Conners",
+        "Burns",
+        "Fitzpatrick",
+        "60",
+        "3"
+      ],
+      "Kev": [
+        "Rory",
+        "Cantlay",
+        "Finau",
+        "Woods",
+        "Garcia",
+        "59",
+        "2"
+      ],
+      "Erm": [
+        "Scheffler",
+        "Smith",
+        "Niemann",
+        "Hatton",
+        "Ancer",
+        "0",
+        "1"
+      ]
+    },
+    "picksPerUser": 8,
+    "hasScores": false
+  },
+  {
+    "id": "pga-championship-2022",
+    "tournamentId": "pga-championship",
+    "year": 2022,
+    "name": "PGA Championship",
+    "users": [
+      "Erm",
+      "Kev",
+      "Gibbs",
+      "Dief",
+      "Doby",
+      "Ryan",
+      "Furm"
+    ],
+    "picks": {
+      "Erm": [
+        "Scheffler",
+        "Hovland",
+        "Niemann",
+        "Homa",
+        "Beuizenheudt",
+        "77",
+        "TOTAL:",
+        "5"
+      ],
+      "Kev": [
+        "McIlroy",
+        "Schauffele",
+        "Day",
+        "Horschel",
+        "Gooch",
+        "30",
+        "3"
+      ],
+      "Gibbs": [
+        "Speith",
+        "Zalatoris",
+        "Woods",
+        "Fleetwood",
+        "Garcia",
+        "13",
+        "1"
+      ],
+      "Dief": [
+        "Thomas",
+        "Matsuyama",
+        "Finau",
+        "Oosthuizen",
+        "Woodland",
+        "39",
+        "4"
+      ],
+      "Doby": [
+        "Rahm",
+        "Johnson",
+        "Lowry",
+        "Conners",
+        "Reed",
+        "105",
+        "6"
+      ],
+      "Ryan": [
+        "Morikawa",
+        "Koepka",
+        "Fitzpatrick",
+        "Burns",
+        "Rose",
+        "27",
+        "2"
+      ],
+      "Furm": [
+        "C. Smith",
+        "Cantlay",
+        "Hatton",
+        "Berger",
+        "Kisner",
+        "106",
+        "7"
+      ]
+    },
+    "picksPerUser": 8,
+    "hasScores": false
+  },
+  {
+    "id": "players-championship-2022",
+    "tournamentId": "players-championship",
+    "year": 2022,
+    "name": "The Players Championship",
+    "users": [
+      "Dief",
+      "Gibbs",
+      "Doby",
+      "Ryan",
+      "Erm",
+      "Kev",
+      "Furm"
+    ],
+    "picks": {
+      "Dief": [
+        "Thomas",
+        "Zalatoris",
+        "Casey",
+        "Fleetwood",
+        "Westwood",
+        "38",
+        "TOTAL:",
+        "2.0"
+      ],
+      "Gibbs": [
+        "Morikawa",
+        "Fitzpatrick",
+        "Connors",
+        "Garcia",
+        "Gooch",
+        "123",
+        "5.0"
+      ],
+      "Doby": [
+        "Rahm",
+        "Hovland",
+        "Smith",
+        "Ancer",
+        "Homa",
+        "-14",
+        "1.0"
+      ],
+      "Ryan": [
+        "Scheffler",
+        "Cantlay",
+        "D. Johnson",
+        "Lowry",
+        "Im",
+        "66",
+        "4.0"
+      ],
+      "Erm": [
+        "Matsuyama",
+        "Speith",
+        "Oosthuizen",
+        "Horschel",
+        "Simpson",
+        "184",
+        "7.0"
+      ],
+      "Kev": [
+        "McIlroy",
+        "Koepka",
+        "Finau",
+        "Rose",
+        "Noren",
+        "130",
+        "6.0"
+      ],
+      "Furm": [
+        "Schauffele",
+        "Burger",
+        "Hatton",
+        "Burns",
+        "Kokrak",
+        "52",
+        "3.0"
+      ]
+    },
+    "picksPerUser": 8,
+    "hasScores": false
+  },
+  {
+    "id": "the-open-2022",
+    "tournamentId": "the-open",
+    "year": 2022,
+    "name": "The Open Championship",
+    "users": [
+      "Dief",
+      "Erm",
+      "Doby",
+      "Ryan",
+      "Gibbs",
+      "Kev",
+      "Furm"
+    ],
+    "picks": {
+      "Dief": [
+        "McIlroy",
+        "Matsuyama",
+        "D. Johnson",
+        "Oosthuzien",
+        "Scott",
+        "Voldemort",
+        "TOTAL:"
+      ],
+      "Erm": [
+        "Rahm",
+        "Hovland",
+        "Fleetwood",
+        "Connors",
+        "Ancer",
+        "Young"
+      ],
+      "Doby": [
+        "Scheffler",
+        "Lowry",
+        "Koepka",
+        "Im",
+        "Bradley",
+        "Leishman"
+      ],
+      "Ryan": [
+        "Fitzpatrick",
+        "Cantlay",
+        "Woods",
+        "Rose",
+        "Westwood",
+        "Poulter"
+      ],
+      "Gibbs": [
+        "Thomas",
+        "C. Smith",
+        "Hatton",
+        "Woodland",
+        "MacIntyre",
+        "Reed"
+      ],
+      "Kev": [
+        "Speith",
+        "Schauffele",
+        "Finau",
+        "Homa",
+        "Molinari",
+        "Na"
+      ],
+      "Furm": [
+        "Morikawa",
+        "Zalatoris",
+        "Niemann",
+        "Burns",
+        "Kisner",
+        "Casey"
+      ]
+    },
+    "picksPerUser": 7,
+    "hasScores": false
+  },
+  {
+    "id": "us-open-2022",
+    "tournamentId": "us-open",
+    "year": 2022,
+    "name": "U.S. Open",
+    "users": [
+      "Gibbs",
+      "Ryan",
+      "Kev",
+      "Dief",
+      "Erm",
+      "Doby",
+      "Furm"
+    ],
+    "picks": {
+      "Gibbs": [
+        "McIlroy",
+        "Finau",
+        "Fleetwood",
+        "Conners",
+        "Riley",
+        "90",
+        "TOTAL:",
+        "5"
+      ],
+      "Ryan": [
+        "Thomas",
+        "Cantlay",
+        "Hovland",
+        "Im",
+        "Rose",
+        "88",
+        "4"
+      ],
+      "Kev": [
+        "Rahm",
+        "Koepka",
+        "Johnson",
+        "Gooch",
+        "Simpson",
+        "91",
+        "6"
+      ],
+      "Dief": [
+        "Scheffler",
+        "Spieth",
+        "Matsuyama",
+        "Molinari",
+        "Kisner",
+        "14",
+        "1"
+      ],
+      "Erm": [
+        "Morikawa",
+        "Zalatoris",
+        "Young",
+        "Oosthuizen",
+        "Hatton",
+        "35",
+        "2"
+      ],
+      "Doby": [
+        "C. Smith",
+        "Fitzpatrick",
+        "Homa",
+        "Niemann",
+        "Varner",
+        "69",
+        "3"
+      ],
+      "Furm": [
+        "Schauffele",
+        "Lowry",
+        "Horschel",
+        "Burns",
+        "Berger",
+        "106",
+        "7"
+      ]
+    },
+    "picksPerUser": 8,
+    "hasScores": false
+  },
+  {
+    "id": "masters-2023",
+    "tournamentId": "masters",
+    "year": 2023,
+    "name": "The Masters",
+    "users": [
+      "Furm",
+      "Kev",
+      "Erm",
+      "Dief",
+      "Doby",
+      "Ryan",
+      "Gibbs"
+    ],
+    "picks": {
+      "Furm": [
+        "Rahm",
+        "D. Johnson",
+        "Im",
+        "Horschel",
+        "Kim",
+        "TOTAL:"
+      ],
+      "Kev": [
+        "McIlroy",
+        "Koepka",
+        "Fitzpatrick",
+        "Matsuyama",
+        "Kisner"
+      ],
+      "Erm": [
+        "Scheffler",
+        "Hovland",
+        "Oosthuzien",
+        "Niemann",
+        "Conners"
+      ],
+      "Dief": [
+        "Spieth",
+        "Zalatoris",
+        "Finau",
+        "Rose",
+        "Burns"
+      ],
+      "Doby": [
+        "Thomas",
+        "Homa",
+        "Hatton",
+        "Fleetwood",
+        "Conners"
+      ],
+      "Ryan": [
+        "C. Smith",
+        "Cantlay",
+        "Day",
+        "Young",
+        "Burns"
+      ],
+      "Gibbs": [
+        "Morikawa",
+        "Schuaffele",
+        "Woods",
+        "Lowry",
+        "Reed"
+      ]
+    },
+    "picksPerUser": 6,
+    "hasScores": false
+  },
+  {
+    "id": "masters-2025",
+    "tournamentId": "masters",
+    "year": 2025,
+    "name": "The Masters",
+    "users": [
+      "Gibbs",
+      "Erm",
+      "Doby",
+      "Kev",
+      "Dief",
+      "Geoff",
+      "Stevie",
+      "Ryan"
+    ],
+    "picks": {
+      "Gibbs": [
+        "Scheffler",
+        "Fleetwood",
+        "Niemann",
+        "Conners",
+        "10.0",
+        "TOTAL:",
+        "1"
+      ],
+      "Erm": [
+        "McIlroy",
+        "C. Smith",
+        "Clark",
+        "Fitzpatrick",
+        "54",
+        "5"
+      ],
+      "Doby": [
+        "Morikawa",
+        "Matsuyama",
+        "MW Lee",
+        "Bradley",
+        "110",
+        "6"
+      ],
+      "Kev": [
+        "Schauffele",
+        "Lowry",
+        "Finau",
+        "Henley",
+        "49",
+        "4"
+      ],
+      "Dief": [
+        "Rahm",
+        "Zalatoris",
+        "Cantlay",
+        "Scott",
+        "122",
+        "8"
+      ],
+      "Geoff": [
+        "Aberg",
+        "Speith",
+        "Theegala",
+        "MacIntyre",
+        "43",
+        "3"
+      ],
+      "Stevie": [
+        "DeChambeau",
+        "Hovland",
+        "Bhatia",
+        "T. Kim",
+        "36",
+        "2"
+      ],
+      "Ryan": [
+        "Koepka",
+        "Thomas",
+        "Hatton",
+        "Straka",
+        "120",
+        "7"
+      ]
+    },
+    "picksPerUser": 7,
+    "hasScores": false
+  },
+  {
+    "id": "pga-championship-2025",
+    "tournamentId": "pga-championship",
+    "year": 2025,
+    "name": "PGA Championship",
+    "users": [
+      "Gibbs",
+      "Stevie",
+      "Geoff",
+      "Kev",
+      "Erm",
+      "Doby",
+      "Ryan",
+      "Dief"
+    ],
+    "picks": {
+      "Gibbs": [
+        "Scheffler",
+        "Hatton",
+        "Cantlay",
+        "Young",
+        "Harman",
+        "Block",
+        "82.0",
+        "TOTAL:",
+        "4"
+      ],
+      "Stevie": [
+        "McIlroy",
+        "Niemann",
+        "Reed",
+        "Berger",
+        "D. Johnson",
+        "77",
+        "3"
+      ],
+      "Geoff": [
+        "DeChambeau",
+        "Hovland",
+        "Koepka",
+        "Im",
+        "Zalatoris",
+        "89",
+        "5"
+      ],
+      "Kev": [
+        "Aberg",
+        "Conners",
+        "Day",
+        "Homa",
+        "Bradley",
+        "76",
+        "2"
+      ],
+      "Erm": [
+        "Morikawa",
+        "Fleetwood",
+        "Clark",
+        "Finau",
+        "Henley",
+        "110",
+        "6"
+      ],
+      "Doby": [
+        "Thomas",
+        "Spieth",
+        "Straka",
+        "Rose",
+        "Mitchell",
+        "228",
+        "8"
+      ],
+      "Ryan": [
+        "Schauffele",
+        "Rahm",
+        "MW Lee",
+        "Smith",
+        "Macintyre",
+        "72",
+        "1"
+      ],
+      "Dief": [
+        "Matsuyama",
+        "Lowry",
+        "Bhatia",
+        "Theegala",
+        "Noren",
+        "169",
+        "7"
+      ]
+    },
+    "picksPerUser": 9,
+    "hasScores": false
+  },
+  {
+    "id": "players-championship-2025",
+    "tournamentId": "players-championship",
+    "year": 2025,
+    "name": "The Players Championship",
+    "users": [
+      "Doby",
+      "Ryan",
+      "Kev",
+      "Gibbs",
+      "Dief",
+      "Erm"
+    ],
+    "picks": {
+      "Doby": [
+        "Scheffler",
+        "Bradley",
+        "Clark",
+        "T. Kim",
+        "Scott",
+        "82",
+        "TOTAL:",
+        "3"
+      ],
+      "Ryan": [
+        "Aberg",
+        "Henley",
+        "Straka",
+        "Burns",
+        "Fowler",
+        "115",
+        "4"
+      ],
+      "Kev": [
+        "Schauffele",
+        "Cantlay",
+        "Hoffman",
+        "Theegala",
+        "Rose",
+        "118",
+        "5"
+      ],
+      "Gibbs": [
+        "McIlroy",
+        "Fleetwood",
+        "Conners",
+        "Im",
+        "MacIntyre",
+        "-32",
+        "1"
+      ],
+      "Dief": [
+        "Thomas",
+        "Matsuyama",
+        "Finau",
+        "Speith",
+        "Horschel",
+        "134",
+        "6"
+      ],
+      "Erm": [
+        "Morikawa",
+        "Lowry",
+        "Hovland",
+        "Berger",
+        "MW Lee",
+        "39",
+        "2"
+      ]
+    },
+    "picksPerUser": 8,
+    "hasScores": false
+  },
+  {
+    "id": "the-open-2025",
+    "tournamentId": "the-open",
+    "year": 2025,
+    "name": "The Open Championship",
+    "users": [
+      "Ryan",
+      "Geoff",
+      "Dief",
+      "Doby",
+      "Stevie",
+      "Erm",
+      "Gibbs",
+      "Kev"
+    ],
+    "picks": {
+      "Ryan": [
+        "Scottie Scheffler",
+        "Joaqu\u00edn Niemann",
+        "Brooks Koepka",
+        "Ryan Fox",
+        "Patrick Reed"
+      ],
+      "Geoff": [
+        "Rory McIlroy",
+        "Sepp Straka",
+        "Russell Henley",
+        "Hideki Matsuyama",
+        "Harris English"
+      ],
+      "Dief": [
+        "Shane Lowry",
+        "Matt Fitzpatrick",
+        "Adam Scott",
+        "Wyndham Clark",
+        "Sahith Theegala"
+      ],
+      "Doby": [
+        "Jon Rahm",
+        "Robert Macintyre",
+        "Justin Rose",
+        "Patrick Cantlay",
+        "Aaron Rai"
+      ],
+      "Stevie": [
+        "Bryson DeChambeau",
+        "Justin Thomas",
+        "Jordan Spieth",
+        "J.J. Spaun",
+        "Si Woo Kim"
+      ],
+      "Erm": [
+        "Ludvig \u00c5berg",
+        "Collin Morikawa",
+        "Sam Burns",
+        "Cameron Young",
+        "Brian Harman"
+      ],
+      "Gibbs": [
+        "Xander Schauffele",
+        "Tyrrell Hatton",
+        "Corey Conners",
+        "Ben Griffin",
+        "Nicolai H\u00f8jgaard"
+      ],
+      "Kev": [
+        "Tommy Fleetwood",
+        "Viktor Hovland",
+        "Jason Day",
+        "Keegan Bradley",
+        "Rickie Fowler"
+      ]
+    },
+    "picksPerUser": 5,
+    "playerScores": {
+      "Geoff": {
+        "Rory McIlroy": 72,
+        "Hideki Matsuyama": 38
+      },
+      "Dief": {
+        "Shane Lowry": 72
+      },
+      "Kev": {
+        "Tommy Fleetwood": 49,
+        "Jason Day": 72,
+        "Keegan Bradley": 72
+      },
+      "Stevie": {
+        "Justin Thomas": 72,
+        "J.J. Spaun": 72
+      },
+      "Doby": {
+        "Robert Macintyre": 35,
+        "Justin Rose": 72,
+        "Patrick Cantlay": 72
+      },
+      "Erm": {
+        "Sam Burns": 72,
+        "Brian Harman": 50
+      },
+      "Gibbs": {
+        "Corey Conners": 30,
+        "Ben Griffin": 72
+      },
+      "Ryan": {
+        "Ryan Fox": 30
+      }
+    },
+    "hasScores": true
+  },
+  {
+    "id": "tour-championship-2025",
+    "tournamentId": "tour-championship",
+    "year": 2025,
+    "name": "Tour Championship",
+    "users": [
+      "Geoff",
+      "Gibbs",
+      "Dief",
+      "Doby",
+      "Stevie",
+      "Kev",
+      "Erm",
+      "Ryan"
+    ],
+    "picks": {
+      "Geoff": [
+        "Scottie Scheffler",
+        "Justin Rose",
+        "Harris English"
+      ],
+      "Gibbs": [
+        "Rory McIlroy",
+        "Ben Griffin",
+        "Sepp Straka"
+      ],
+      "Dief": [
+        "Tommy Fleetwood",
+        "Hideki Matsuyama",
+        "Shane Lowry"
+      ],
+      "Doby": [
+        "Ludvig \u00c5berg",
+        "Cameron Young",
+        "Keegan Bradley"
+      ],
+      "Stevie": [
+        "Russell Henley",
+        "Patrick Cantlay",
+        "Maverick Mcnealy"
+      ],
+      "Kev": [
+        "J.J. Spaun",
+        "Justin Thomas",
+        "Akshay Bhatia"
+      ],
+      "Erm": [
+        "Collin Morikawa",
+        "Viktor Hovland",
+        "Corey Conners"
+      ],
+      "Ryan": [
+        "Sam Burns",
+        "Robert MacIntyre",
+        "Chris Gotterup"
+      ]
+    },
+    "picksPerUser": 3,
+    "playerScores": {
+      "Gibbs": {
+        "Rory McIlroy": 72,
+        "Ben Griffin": 72
+      },
+      "Dief": {
+        "Tommy Fleetwood": 49,
+        "Hideki Matsuyama": 38,
+        "Shane Lowry": 72
+      },
+      "Kev": {
+        "J.J. Spaun": 72,
+        "Justin Thomas": 72
+      },
+      "Ryan": {
+        "Sam Burns": 72,
+        "Robert MacIntyre": 35
+      },
+      "Stevie": {
+        "Patrick Cantlay": 72
+      },
+      "Geoff": {
+        "Justin Rose": 72
+      },
+      "Doby": {
+        "Keegan Bradley": 72
+      },
+      "Erm": {
+        "Corey Conners": 30
+      }
+    },
+    "hasScores": true
+  },
+  {
+    "id": "us-open-2025",
+    "tournamentId": "us-open",
+    "year": 2025,
+    "name": "U.S. Open",
+    "users": [
+      "Ryan",
+      "Kev",
+      "Stevie",
+      "Gibbs",
+      "Geoff",
+      "Erm",
+      "Dief",
+      "Doby"
+    ],
+    "picks": {
+      "Ryan": [
+        "Scottie Scheffler",
+        "Tyrrell Hatton",
+        "Shane Lowry",
+        "Robert Macintyre",
+        "Akshay Bhatia"
+      ],
+      "Kev": [
+        "Bryson DeChambeau",
+        "Brooks Koepka",
+        "Patrick Cantlay",
+        "Wyndham Clark",
+        "Lucas Glover"
+      ],
+      "Stevie": [
+        "Rory McIlroy",
+        "Jordan Spieth",
+        "Justin Rose",
+        "Sungjae Im",
+        "Dustin Johnson"
+      ],
+      "Gibbs": [
+        "Collin Morikawa",
+        "Hideki Matsuyama",
+        "Corey Conners",
+        "Si Woo Kim",
+        "Brian Harman"
+      ],
+      "Geoff": [
+        "Jon Rahm",
+        "Joaqu\u00edn Niemann",
+        "Sam Burns",
+        "Adam Scott",
+        "Harris English"
+      ],
+      "Erm": [
+        "Ludvig \u00c5berg",
+        "Tommy Fleetwood",
+        "Russell Henley",
+        "Matt Fitzpatrick",
+        "Min Woo Lee"
+      ],
+      "Dief": [
+        "Xander Schauffele",
+        "Viktor Hovland",
+        "Jason Day",
+        "Tony Finau",
+        "Patrick Reed"
+      ],
+      "Doby": [
+        "Justin Thomas",
+        "Sepp Straka",
+        "Ben Griffin",
+        "Keegan Bradley",
+        "Andrew Novak"
+      ]
+    },
+    "picksPerUser": 5,
+    "playerScores": {
+      "Ryan": {
+        "Shane Lowry": 72,
+        "Robert Macintyre": 35
+      },
+      "Kev": {
+        "Patrick Cantlay": 72,
+        "Lucas Glover": 35
+      },
+      "Stevie": {
+        "Rory McIlroy": 72,
+        "Justin Rose": 72,
+        "Sungjae Im": 72
+      },
+      "Gibbs": {
+        "Hideki Matsuyama": 38,
+        "Corey Conners": 30,
+        "Brian Harman": 50
+      },
+      "Geoff": {
+        "Sam Burns": 72
+      },
+      "Erm": {
+        "Tommy Fleetwood": 49
+      },
+      "Dief": {
+        "Jason Day": 72
+      },
+      "Doby": {
+        "Justin Thomas": 72,
+        "Ben Griffin": 72,
+        "Keegan Bradley": 72,
+        "Andrew Novak": 38
+      }
+    },
+    "hasScores": true,
+    "sourceSheet": "US Open 2025 new"
+  }
+]
