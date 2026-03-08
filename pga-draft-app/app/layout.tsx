@@ -5,7 +5,7 @@ import { AuthProvider } from '@/lib/AuthContext';
 
 export const metadata: Metadata = {
   title: 'PGA Draft League',
-  description: 'Snake draft fantasy golf — The Players & all 4 Majors · 2025',
+  description: 'Snake draft fantasy golf — The Players & all 4 Majors',
 };
 
 export default function RootLayout(props: { children: React.ReactNode }) {

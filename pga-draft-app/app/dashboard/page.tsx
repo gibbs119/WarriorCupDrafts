@@ -75,7 +75,7 @@ export default function Dashboard() {
               </span>
             )}
           </h1>
-          <p className="text-slate-500 text-sm mt-1">2025 PGA Draft League · The Players + All 4 Majors</p>
+          <p className="text-slate-500 text-sm mt-1">PGA Draft League · The Players + All 4 Majors</p>
         </div>
 
         {/* Active tournament callout */}

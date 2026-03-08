@@ -37,7 +37,7 @@ export default function Navigation() {
           <WarriorsLogo size={32} />
           <div className="hidden sm:block leading-none">
             <span className="font-bebas text-xl tracking-widest text-white">PGA DRAFT</span>
-            <span className="font-bebas text-xs tracking-widest block" style={{ color: '#C9A227', marginTop: '-2px' }}>LEAGUE 2025</span>
+            <span className="font-bebas text-xs tracking-widest block" style={{ color: '#C9A227', marginTop: '-2px' }}>LEAGUE </span>
           </div>
         </Link>
 
