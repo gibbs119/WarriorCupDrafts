@@ -214,7 +214,7 @@ export default function DraftRoomPage() {
       }
     }
 
-    setMergedPlayers([...merged.values()]);
+    setMergedPlayers(Array.from(merged.values()));
   }, [oddsPlayers, espnPlayers]);
 
   // ─── Computed values ─────────────────────────────────────────────────────────
