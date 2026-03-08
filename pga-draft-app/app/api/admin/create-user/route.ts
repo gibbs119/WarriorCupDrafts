@@ -27,19 +27,27 @@ export async function POST(req: NextRequest) {
 
     const { auth, db } = getAdminServices();
 
-    // Create the Firebase Auth user server-side — admin stays logged in on client
-    const userRecord = await auth.createUser({ email, password, displayName: username });
+    let uid: string;
 
-    const appUser: AppUser = {
-      uid: userRecord.uid,
-      username,
-      email,
-      role: role ?? 'user',
-    };
+    try {
+      // Try to create new Auth user
+      const userRecord = await auth.createUser({ email, password, displayName: username });
+      uid = userRecord.uid;
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.includes('email-already-exists') || msg.includes('EMAIL_EXISTS')) {
+        // Auth account already exists — just look up the UID and rebuild the DB record
+        const existing = await auth.getUserByEmail(email);
+        uid = existing.uid;
+      } else {
+        throw e;
+      }
+    }
 
-    await db.ref(`users/${userRecord.uid}`).set(appUser);
+    const appUser: AppUser = { uid, username, email, role: role ?? 'user' };
+    await db.ref(`users/${uid}`).set(appUser);
 
-    return NextResponse.json({ success: true, uid: userRecord.uid, username });
+    return NextResponse.json({ success: true, uid, username });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     return NextResponse.json({ error: msg }, { status: 500 });
