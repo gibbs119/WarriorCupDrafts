@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { ESPN_FIELD_URL } from '@/lib/espn';
+
+function ESPN_FIELD_URL(eventId: string): string {
+  return `https://sports.core.api.espn.com/v2/sports/golf/leagues/pga/events/${eventId}/competitions/${eventId}/competitors?limit=200&lang=en&region=us`;
+}
 
 export async function GET(req: NextRequest) {
   const eventId = req.nextUrl.searchParams.get('eventId');
