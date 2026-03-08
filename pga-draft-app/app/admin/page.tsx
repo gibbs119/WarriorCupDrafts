@@ -1,25 +1,19 @@
 'use client';
 
 import Link from 'next/link';
-
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import Navigation from '@/components/Navigation';
 import {
-  getAllTournaments,
-  updateTournament,
-  initializeDraft,
-  getAllUsers,
-  getDraftState,
-  getDraftOrderFromResults,
-  saveRankedOrder,
+  getAllTournaments, updateTournament, initializeDraft,
+  getAllUsers, getDraftState, getDraftOrderFromResults, saveRankedOrder,
 } from '@/lib/db';
 import { buildSnakeDraftOrder, calculateLeaderboard } from '@/lib/scoring';
 import { parseLeaderboard } from '@/lib/espn';
 import { USERS, TOURNAMENTS } from '@/lib/constants';
 import type { Tournament, AppUser } from '@/lib/types';
-import { Settings, Users, Trophy, Plus, Shuffle } from 'lucide-react';
+import { Settings, Users, Trophy, Plus, Shuffle, Zap } from 'lucide-react';
 
 const TOURNAMENT_SEQUENCE = TOURNAMENTS.map((t) => t.id);
 
@@ -46,13 +40,13 @@ export default function AdminPage() {
   const [draftOrderInput, setDraftOrderInput] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
+  const [lockMsg, setLockMsg] = useState('');
+  const [seeding, setSeeding] = useState(false);
 
   const [newUsername, setNewUsername] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [userMsg, setUserMsg] = useState('');
-  const [lockMsg, setLockMsg] = useState('');
-  const [seeding, setSeeding] = useState(false);
 
   useEffect(() => {
     if (!loading) {
@@ -100,17 +94,14 @@ export default function AdminPage() {
     }
   }
 
-  // ── Randomize (The Players only) ──────────────────────────────────────────
-
   function randomizeDraftOrder() {
     if (users.length === 0) {
-      setMsg('⚠ No registered users found. Create accounts first.');
+      setMsg('⚠ No registered users found — create accounts first (Users tab).');
       return;
     }
     setDraftOrderInput(shuffleArray(users.map((u) => u.uid)));
+    setMsg('🎲 Draft order randomized! Click Save Changes to confirm.');
   }
-
-  // ── Load order from previous tournament results ───────────────────────────
 
   async function loadOrderFromPrevious(currentId: string) {
     const idx = TOURNAMENT_SEQUENCE.indexOf(currentId);
@@ -133,65 +124,37 @@ export default function AdminPage() {
     }
   }
 
-  // ── Mark Final: compute ranking → save → auto-set next tournament order ───
-
-  async function markFinal(t: Tournament) {
+  // ── ONE-CLICK LAUNCH for tonight's draft ─────────────────────────────────
+  async function quickLaunchDraft(t: Tournament) {
+    if (users.length === 0) {
+      setMsg('⚠ No users found. Go to the Users tab and click "Create All 8 Default Users" first.');
+      return;
+    }
     setSaving(true);
-    setMsg('Calculating final standings…');
+    setMsg('🚀 Launching draft…');
     try {
-      let rankedUids: string[] = [];
-
-      if (t.espnEventId) {
-        const res = await fetch(`/api/espn/leaderboard?eventId=${t.espnEventId}`);
-        if (res.ok) {
-          const data = await res.json();
-          const { players: playersMap, cutLine: espnCut } = parseLeaderboard(data);
-          const cutVal = espnCut ?? t.cutLine ?? 65;
-          const draftState = await getDraftState(t.id);
-          if (draftState && draftState.picks.length > 0) {
-            const allUsers = await getAllUsers();
-            const userPicksMap: Record<string, { username: string; picks: typeof draftState.picks }> = {};
-            for (const u of allUsers) {
-              const picks = draftState.picks.filter((p) => p.userId === u.uid);
-              if (picks.length > 0) userPicksMap[u.uid] = { username: u.username, picks };
-            }
-            const scores = calculateLeaderboard(userPicksMap, playersMap, cutVal);
-            rankedUids = scores.map((s) => s.userId); // rank 1 first
-          }
-        }
-      }
-
-      // Fallback to existing draft order if ESPN data unavailable
-      if (rankedUids.length === 0 && t.draftOrder?.length > 0) {
-        rankedUids = [...t.draftOrder];
-        setMsg('⚠ ESPN data unavailable — using draft order as fallback ranking.');
-      }
-
-      if (rankedUids.length > 0) await saveRankedOrder(t.id, rankedUids);
-
-      await updateTournament(t.id, { status: 'completed' });
-
-      // Auto-propagate to next tournament
-      const nextIdx = TOURNAMENT_SEQUENCE.indexOf(t.id) + 1;
-      if (nextIdx < TOURNAMENT_SEQUENCE.length && rankedUids.length > 0) {
-        const nextId = TOURNAMENT_SEQUENCE[nextIdx];
-        await updateTournament(nextId, { draftOrder: rankedUids });
-        const nextName = tournaments.find((x) => x.id === nextId)?.name ?? 'next tournament';
-        setTournaments((prev) =>
-          prev.map((x) => {
-            if (x.id === t.id) return { ...x, status: 'completed' };
-            if (x.id === nextId) return { ...x, draftOrder: rankedUids };
-            return x;
-          })
-        );
-        setMsg(`✅ ${t.name} marked Final. Draft order for ${nextName} auto-set from results (1st picks 1st).`);
-      } else {
-        setTournaments((prev) => prev.map((x) => (x.id === t.id ? { ...x, status: 'completed' } : x)));
-        setMsg(`✅ ${t.name} marked Final.`);
-      }
+      // 1. Randomize order
+      const randomOrder = shuffleArray(users.map((u) => u.uid));
+      // 2. Save ESPN ID + draft order
+      await updateTournament(t.id, {
+        espnEventId: t.espnEventId || '401811937',
+        draftOrder: randomOrder,
+        cutLine: t.cutLine || 65,
+      });
+      // 3. Initialize snake draft + open it
+      const totalPicks = (t.maxPicks || 5) * randomOrder.length;
+      const snakeOrder = buildSnakeDraftOrder(randomOrder, totalPicks);
+      await initializeDraft(t.id, snakeOrder);
+      await updateTournament(t.id, { status: 'drafting' });
+      setTournaments((prev) =>
+        prev.map((x) =>
+          x.id === t.id ? { ...x, status: 'drafting', draftOrder: randomOrder, espnEventId: t.espnEventId || '401811937' } : x
+        )
+      );
+      setMsg(`✅ Draft is OPEN for ${t.name}! Share the link with everyone now.`);
     } catch (e) {
       console.error(e);
-      setMsg('❌ Failed to mark Final.');
+      setMsg('❌ Launch failed — check console for details.');
     } finally {
       setSaving(false);
     }
@@ -199,12 +162,12 @@ export default function AdminPage() {
 
   async function openDraft(t: Tournament) {
     if (!t.draftOrder || t.draftOrder.length < 2) {
-      setMsg('⚠ Set the draft order first — use Randomize (The Players) or load from previous results.');
+      setMsg('⚠ Set draft order first — click Edit then Randomize.');
       return;
     }
     setSaving(true);
     try {
-      const totalPicks = t.maxPicks * t.draftOrder.length;
+      const totalPicks = (t.maxPicks || 5) * t.draftOrder.length;
       const snakeOrder = buildSnakeDraftOrder(t.draftOrder, totalPicks);
       await initializeDraft(t.id, snakeOrder);
       await updateTournament(t.id, { status: 'drafting' });
@@ -222,6 +185,85 @@ export default function AdminPage() {
     try {
       await updateTournament(t.id, { status });
       setTournaments((prev) => prev.map((x) => (x.id === t.id ? { ...x, status } : x)));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function markFinal(t: Tournament) {
+    setSaving(true);
+    setMsg('Calculating final standings…');
+    try {
+      let rankedUids: string[] = [];
+      if (t.espnEventId) {
+        const res = await fetch(`/api/espn/leaderboard?eventId=${t.espnEventId}`);
+        if (res.ok) {
+          const data = await res.json();
+          const { players: playersMap, cutLine: espnCut } = parseLeaderboard(data);
+          const cutVal = espnCut ?? t.cutLine ?? 65;
+          const draftState = await getDraftState(t.id);
+          if (draftState && draftState.picks.length > 0) {
+            const allUsers = await getAllUsers();
+            const userPicksMap: Record<string, { username: string; picks: typeof draftState.picks }> = {};
+            for (const u of allUsers) {
+              const picks = draftState.picks.filter((p) => p.userId === u.uid);
+              if (picks.length > 0) userPicksMap[u.uid] = { username: u.username, picks };
+            }
+            const scores = calculateLeaderboard(userPicksMap, playersMap, cutVal);
+            rankedUids = scores.map((s) => s.userId);
+          }
+        }
+      }
+      if (rankedUids.length === 0 && t.draftOrder?.length > 0) {
+        rankedUids = [...t.draftOrder];
+        setMsg('⚠ ESPN data unavailable — using draft order as fallback ranking.');
+      }
+      if (rankedUids.length > 0) await saveRankedOrder(t.id, rankedUids);
+      await updateTournament(t.id, { status: 'completed' });
+
+      const nextIdx = TOURNAMENT_SEQUENCE.indexOf(t.id) + 1;
+      if (nextIdx < TOURNAMENT_SEQUENCE.length && rankedUids.length > 0) {
+        const nextId = TOURNAMENT_SEQUENCE[nextIdx];
+        await updateTournament(nextId, { draftOrder: rankedUids });
+        const nextName = tournaments.find((x) => x.id === nextId)?.name ?? 'next tournament';
+        setTournaments((prev) =>
+          prev.map((x) => {
+            if (x.id === t.id) return { ...x, status: 'completed' };
+            if (x.id === nextId) return { ...x, draftOrder: rankedUids };
+            return x;
+          })
+        );
+        setMsg(`✅ ${t.name} marked Final. Draft order for ${nextName} set automatically.`);
+      } else {
+        setTournaments((prev) => prev.map((x) => (x.id === t.id ? { ...x, status: 'completed' } : x)));
+        setMsg(`✅ ${t.name} marked Final.`);
+      }
+    } catch (e) {
+      console.error(e);
+      setMsg('❌ Failed to mark Final.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function lockTournamentScores(t: Tournament) {
+    setSaving(true);
+    setLockMsg('Fetching final scores from ESPN…');
+    try {
+      const res = await fetch('/api/admin/lock-scores', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tournamentId: t.id, lockedBy: appUser?.username }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setLockMsg(`✅ Scores locked for ${t.name}! ${data.teamScores?.length ?? 0} teams recorded.`);
+        setTournaments((prev) => prev.map((x) => x.id === t.id ? { ...x, status: 'completed', scoreLocked: true } as typeof x : x));
+      } else {
+        setLockMsg(`❌ Lock failed: ${data.error}`);
+      }
+    } catch {
+      setLockMsg('❌ Network error during lock.');
     } finally {
       setSaving(false);
     }
@@ -247,7 +289,7 @@ export default function AdminPage() {
   }
 
   async function initAllUsers() {
-    setUserMsg('Creating default users via server…');
+    setUserMsg('Creating accounts…');
     let created = 0;
     for (const u of USERS) {
       try {
@@ -257,55 +299,24 @@ export default function AdminPage() {
           body: JSON.stringify({ email: u.email, password: 'changeme123', username: u.username, role: u.role }),
         });
         if (res.ok) created++;
-      } catch { /* already exists — skip */ }
+      } catch { /* already exists */ }
     }
     setUserMsg(`✅ Done! ${created} users created. Default password: changeme123`);
     setUsers(await getAllUsers());
   }
 
-  // ─── Lock scores manually ───────────────────────────────────────────────────
-  async function lockTournamentScores(t: Tournament) {
-    setSaving(true);
-    setLockMsg('Fetching final scores from ESPN…');
-    try {
-      const res = await fetch('/api/admin/lock-scores', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tournamentId: t.id, lockedBy: appUser?.username }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setLockMsg(`✅ Scores locked for ${t.name}! ${data.teamScores?.length ?? 0} teams recorded.`);
-        setTournaments((prev) => prev.map((x) => x.id === t.id ? { ...x, status: 'completed', scoreLocked: true } as typeof x : x));
-      } else {
-        setLockMsg(`❌ Lock failed: ${data.error}`);
-      }
-    } catch {
-      setLockMsg('❌ Network error during lock.');
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  // ─── Seed historical data ────────────────────────────────────────────────────
   async function seedHistoricalData() {
     setSeeding(true);
     setLockMsg('Importing historical data…');
     try {
       const res = await fetch('/api/admin/seed-history', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-admin-secret': process.env.NEXT_PUBLIC_CRON_SECRET ?? '',
-        },
+        headers: { 'Content-Type': 'application/json', 'x-admin-secret': process.env.NEXT_PUBLIC_CRON_SECRET ?? '' },
         body: JSON.stringify({ overwrite: false }),
       });
       const data = await res.json();
-      if (res.ok) {
-        setLockMsg(`✅ Imported ${data.imported} tournaments (${data.skipped} already existed).`);
-      } else {
-        setLockMsg(`❌ Seed failed: ${data.error}`);
-      }
+      if (res.ok) setLockMsg(`✅ Imported ${data.imported} tournaments (${data.skipped} already existed).`);
+      else setLockMsg(`❌ Seed failed: ${data.error}`);
     } catch {
       setLockMsg('❌ Network error during seed.');
     } finally {
@@ -316,10 +327,13 @@ export default function AdminPage() {
   if (loading || !appUser) {
     return (
       <div className="min-h-screen"><Navigation />
-        <div className="flex items-center justify-center h-64 font-bebas text-xl tracking-widest animate-pulse" style={{color:"#C9A227"}}>LOADING…</div>
+        <div className="flex items-center justify-center h-64 font-bebas text-xl tracking-widest animate-pulse" style={{ color: '#C9A227' }}>LOADING…</div>
       </div>
     );
   }
+
+  // Find the next upcoming tournament that needs a draft
+  const nextDraftTournament = tournaments.find((t) => t.status === 'upcoming');
 
   return (
     <div className="min-h-screen">
@@ -333,13 +347,46 @@ export default function AdminPage() {
           <p className="text-slate-400 text-sm mt-1">Manage tournaments, drafts, and user accounts</p>
         </div>
 
+        {/* ── QUICK LAUNCH BANNER ────────────────────────────────────────────── */}
+        {nextDraftTournament && nextDraftTournament.status === 'upcoming' && (
+          <div className="mb-6 rounded-2xl p-5 border-2" style={{ background: 'rgba(201,162,39,0.08)', borderColor: '#C9A227' }}>
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div>
+                <p className="font-bebas text-2xl tracking-wider text-white flex items-center gap-2">
+                  <Zap size={20} style={{ color: '#C9A227' }} />
+                  TONIGHT: {nextDraftTournament.name}
+                </p>
+                <p className="text-slate-300 text-sm mt-1">
+                  Tournament: <strong className="text-white">{nextDraftTournament.startDate}</strong>
+                  {' · '}Draft night: <strong className="text-white">{(nextDraftTournament as any).draftDate ?? 'Tonight'}</strong>
+                </p>
+                <p className="text-slate-400 text-xs mt-2">
+                  {users.length === 0
+                    ? '⚠ Step 1: Go to the Users tab and click "Create All 8 Default Users" first.'
+                    : `✅ ${users.length} users ready · ESPN ID: ${nextDraftTournament.espnEventId || '401811937'}`}
+                </p>
+              </div>
+              <button
+                onClick={() => quickLaunchDraft(nextDraftTournament)}
+                disabled={saving || users.length === 0}
+                className="font-bebas tracking-widest text-lg px-6 py-3 rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                style={{ background: '#C9A227', color: '#0D1F38' }}
+              >
+                {saving ? 'LAUNCHING…' : '🚀 LAUNCH DRAFT NOW'}
+              </button>
+            </div>
+            {msg && <p className="mt-3 text-sm font-semibold" style={{ color: msg.startsWith('✅') ? '#4ade80' : msg.startsWith('⚠') ? '#fbbf24' : '#f87171' }}>{msg}</p>}
+          </div>
+        )}
+
         {/* Tabs */}
         <div className="flex gap-2 mb-6">
           {(['tournaments', 'users'] as const).map((t) => (
             <button key={t} onClick={() => setTab(t)}
               className={`px-4 py-2 rounded-lg text-sm font-bold font-bebas tracking-wider uppercase transition-all ${
-                tab === t ? 'bg-green-700 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-              }`}>
+                tab === t ? 'text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+              }`}
+              style={tab === t ? { background: '#1B3A9E' } : {}}>
               {t === 'tournaments' ? <Trophy size={14} className="inline mr-1" /> : <Users size={14} className="inline mr-1" />}
               {t}
             </button>
@@ -349,75 +396,73 @@ export default function AdminPage() {
         {/* ── Tournaments Tab ── */}
         {tab === 'tournaments' && (
           <div className="space-y-4">
-            {msg && <p className="text-sm p-3 bg-slate-800 border border-slate-700 rounded-lg">{msg}</p>}
+            {msg && !nextDraftTournament && <p className="text-sm p-3 bg-slate-800 border border-slate-700 rounded-lg">{msg}</p>}
             {lockMsg && <p className="text-sm p-3 card-gold rounded-lg">{lockMsg}</p>}
 
             {tournaments.map((t) => {
               const seqIdx = TOURNAMENT_SEQUENCE.indexOf(t.id);
               const isFirst = seqIdx === 0;
               const prevTournament = seqIdx > 0 ? tournaments.find((x) => x.id === TOURNAMENT_SEQUENCE[seqIdx - 1]) : null;
+              const statusColor = t.status === 'active' ? '#4ade80' : t.status === 'drafting' ? '#C9A227' : t.status === 'completed' ? '#475569' : '#e2e8f0';
 
               return (
                 <div key={t.id} className="card">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <h3 className="font-bold text-white">{t.name}</h3>
-                      <p className="text-slate-400 text-xs mt-0.5">
-                        Status: <span className={
-                          t.status === 'active' ? 'text-green-400' :
-                          t.status === 'drafting' ? 'text-yellow-400' :
-                          t.status === 'completed' ? 'text-slate-500' : 'text-white'
-                        }>{t.status}</span>
-                        {' · '}ESPN ID: <span className="font-mono text-green-400">{t.espnEventId || '⚠ not set'}</span>
-                        {' · '}Cut: {t.cutLine}
-                        {' · '}Draft order: {t.draftOrder?.length ? `${t.draftOrder.length} users` : '⚠ not set'}
+                  <div className="flex items-start justify-between gap-2 flex-wrap">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="font-bold text-white">{t.name}</h3>
+                        <span className="text-xs px-2 py-0.5 rounded-full font-semibold" style={{ background: 'rgba(255,255,255,0.08)', color: statusColor }}>
+                          {t.status.toUpperCase()}
+                        </span>
+                      </div>
+                      <p className="text-slate-400 text-xs mt-1">
+                        📅 {t.startDate}
+                        {(t as any).draftDate && <span className="text-slate-500"> · Draft: {(t as any).draftDate}</span>}
                       </p>
-                      {t.status === 'upcoming' && (
-                        <p className="text-slate-500 text-xs mt-1 italic">
-                          {isFirst
-                            ? '🎲 The Players: open Edit and click Randomize to set the draft order'
-                            : prevTournament?.status === 'completed'
-                            ? `📋 Draft order auto-set from ${prevTournament.name} results`
-                            : `📋 Draft order will auto-populate when ${prevTournament?.name ?? 'previous tournament'} is marked Final`}
-                        </p>
-                      )}
+                      <p className="text-slate-500 text-xs mt-0.5">
+                        ESPN ID: <span className="font-mono" style={{ color: t.espnEventId ? '#4ade80' : '#f87171' }}>{t.espnEventId || '⚠ not set'}</span>
+                        {' · '}Cut: {t.cutLine}
+                        {' · '}Draft order: <span style={{ color: t.draftOrder?.length ? '#4ade80' : '#f87171' }}>{t.draftOrder?.length ? `${t.draftOrder.length} users ✓` : '⚠ not set'}</span>
+                      </p>
                     </div>
 
                     <div className="flex gap-2 flex-wrap justify-end shrink-0">
-                      <button onClick={() => startEdit(t)} className="btn-secondary text-xs py-1 px-2">Edit</button>
-                      {t.status === 'upcoming' && (
-                        <button onClick={() => openDraft(t)} disabled={saving || !t.draftOrder?.length}
-                          className="btn-gold text-xs py-1 px-2 disabled:opacity-40 disabled:cursor-not-allowed">
+                      {/* Edit is always available */}
+                      <button onClick={() => startEdit(t)} className="btn-secondary text-xs py-1.5 px-3">
+                        ✏️ Edit
+                      </button>
+
+                      {/* Open Draft — only when upcoming AND draft order set */}
+                      {t.status === 'upcoming' && t.draftOrder?.length > 0 && (
+                        <button onClick={() => openDraft(t)} disabled={saving}
+                          className="text-xs py-1.5 px-3 rounded-lg font-bold transition-all disabled:opacity-40"
+                          style={{ background: '#C9A227', color: '#0D1F38' }}>
                           Open Draft
                         </button>
                       )}
+
+                      {/* Status transitions */}
                       {t.status === 'drafting' && (
                         <button onClick={() => setTournamentStatus(t, 'active')} disabled={saving}
-                          className="btn-primary text-xs py-1 px-2">Set Live</button>
+                          className="btn-primary text-xs py-1.5 px-3">Set Live</button>
                       )}
                       {t.status === 'active' && (
                         <>
                           <button onClick={() => lockTournamentScores(t)} disabled={saving}
-                            className="btn-gold text-xs py-1 px-2 disabled:opacity-50"
-                            title="Snapshot ESPN scores to Firebase permanently">
+                            className="text-xs py-1.5 px-3 rounded-lg font-bold disabled:opacity-40"
+                            style={{ background: '#C9A227', color: '#0D1F38' }}>
                             🔒 Lock Scores
                           </button>
                           <button onClick={() => markFinal(t)} disabled={saving}
-                            className="btn-secondary text-xs py-1 px-2 disabled:opacity-50">
+                            className="btn-secondary text-xs py-1.5 px-3 disabled:opacity-50">
                             Mark Final
                           </button>
                         </>
                       )}
-                      <Link href={`/admin/rosters/${t.id}`}
-                        className="btn-secondary text-xs py-1 px-2">
+
+                      <Link href={`/admin/rosters/${t.id}`} className="btn-secondary text-xs py-1.5 px-3">
                         👥 Rosters
                       </Link>
-                      {(t as any).scoreLocked && (
-                        <span className="text-xs px-2 py-0.5 rounded font-semibold"
-                          style={{background:'rgba(201,162,39,0.15)',color:'#C9A227',border:'1px solid rgba(201,162,39,0.3)'}}>
-                          🔒 Locked
-                        </span>
-                      )}
                     </div>
                   </div>
 
@@ -426,43 +471,41 @@ export default function AdminPage() {
                     <div className="mt-4 border-t border-slate-700 pt-4 space-y-4">
                       <div>
                         <label className="text-xs text-slate-400 block mb-1">
-                          ESPN Event ID <span className="text-slate-500">(from espn.com/golf/leaderboard/_/tournamentId/<strong>XXXXX</strong>)</span>
+                          ESPN Event ID <span className="text-slate-500">(from espn.com URL — already filled for The Players)</span>
                         </label>
                         <input type="text" value={espnId} onChange={(e) => setEspnId(e.target.value)}
-                          placeholder="e.g. 401580349"
-                          className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white font-mono focus:outline-none focus:ring-2 focus:ring-green-600" />
+                          placeholder="e.g. 401811937"
+                          className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white font-mono focus:outline-none focus:ring-2 focus:ring-blue-600" />
                       </div>
 
                       <div>
-                        <label className="text-xs text-slate-400 block mb-1">Cut Line Position (e.g. 65)</label>
+                        <label className="text-xs text-slate-400 block mb-1">Cut Line Position</label>
                         <input type="number" value={cutLine} onChange={(e) => setCutLine(Number(e.target.value))}
-                          className="w-32 bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-600" />
+                          className="w-32 bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-600" />
                       </div>
 
                       <div>
                         <div className="flex items-center justify-between mb-2">
                           <label className="text-xs text-slate-400">
-                            Draft Order <span className="text-slate-500">(Round 1 — snake reverses each round automatically)</span>
+                            Draft Order <span className="text-slate-500">(snake reverses each round automatically)</span>
                           </label>
                           <div className="flex gap-2">
                             {isFirst && (
                               <button onClick={randomizeDraftOrder}
-                                className="flex items-center gap-1 bg-purple-700 hover:bg-purple-600 text-white text-xs py-1 px-2 rounded-lg transition-colors">
+                                className="flex items-center gap-1 text-white text-xs py-1 px-2 rounded-lg transition-colors"
+                                style={{ background: '#6d28d9' }}>
                                 <Shuffle size={12} /> Randomize
                               </button>
                             )}
                             {!isFirst && (
                               <button onClick={() => loadOrderFromPrevious(t.id)} disabled={saving}
-                                className="flex items-center gap-1 bg-blue-700 hover:bg-blue-600 text-white text-xs py-1 px-2 rounded-lg transition-colors disabled:opacity-50">
+                                className="flex items-center gap-1 btn-primary text-xs py-1 px-2 disabled:opacity-50">
                                 📋 Load from Previous
                               </button>
                             )}
                           </div>
                         </div>
-
                         <DraftOrderEditor userIds={draftOrderInput} users={users} onChange={setDraftOrderInput} />
-
-                        {/* Snake preview */}
                         {draftOrderInput.length > 0 && (
                           <details className="mt-2">
                             <summary className="text-xs text-slate-500 cursor-pointer hover:text-slate-300 select-none">
@@ -471,9 +514,8 @@ export default function AdminPage() {
                             <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-x-4 text-xs max-h-48 overflow-y-auto">
                               {buildSnakeDraftOrder(draftOrderInput, draftOrderInput.length * (t.maxPicks || 5)).map((uid, i) => {
                                 const u = users.find((x) => x.uid === uid);
-                                const isNewRound = i > 0 && i % draftOrderInput.length === 0;
                                 return (
-                                  <div key={i} className={`flex gap-1.5 py-0.5 ${isNewRound ? 'mt-1' : ''}`}>
+                                  <div key={i} className="flex gap-1.5 py-0.5">
                                     <span className="text-slate-600 w-5 text-right shrink-0">{i + 1}.</span>
                                     <span className="text-slate-300">{u?.username ?? uid.slice(0, 6)}</span>
                                   </div>
@@ -484,30 +526,44 @@ export default function AdminPage() {
                         )}
                       </div>
 
+                      {msg && <p className="text-sm" style={{ color: msg.startsWith('✅') ? '#4ade80' : '#fbbf24' }}>{msg}</p>}
+
                       <div className="flex gap-2">
                         <button onClick={saveTournament} disabled={saving} className="btn-primary text-sm">
                           {saving ? 'Saving…' : 'Save Changes'}
                         </button>
-                        <button onClick={() => setEditingId(null)} className="btn-secondary text-sm">Cancel</button>
+                        <button onClick={() => { setEditingId(null); setMsg(''); }} className="btn-secondary text-sm">Cancel</button>
                       </div>
                     </div>
                   )}
                 </div>
               );
             })}
+
+            {/* Lock scores / seed section */}
+            <div className="card mt-6">
+              <h3 className="font-bebas text-lg tracking-wider text-white mb-3">Historical Data</h3>
+              <p className="text-slate-400 text-sm mb-3">Import pick history from 2019–2025 for the History page.</p>
+              <button onClick={seedHistoricalData} disabled={seeding} className="btn-secondary text-sm disabled:opacity-50">
+                {seeding ? 'Importing…' : '📂 Import Historical Picks'}
+              </button>
+              {lockMsg && <p className="mt-2 text-sm">{lockMsg}</p>}
+            </div>
           </div>
         )}
 
         {/* ── Users Tab ── */}
         {tab === 'users' && (
           <div className="space-y-6">
-            <div className="card-gold">
+            <div className="rounded-2xl p-5 border-2" style={{ background: 'rgba(201,162,39,0.08)', borderColor: '#C9A227' }}>
               <h3 className="font-bebas text-xl tracking-wider text-white mb-1">Quick Setup</h3>
               <p className="text-slate-400 text-sm mb-3">
-                First-time setup — create all 8 default accounts at once. Default password:{' '}
-                <code className="text-yellow-300">changeme123</code>
+                Creates all 8 accounts. Default password: <code className="text-yellow-300">changeme123</code>
               </p>
-              <button onClick={initAllUsers} className="btn-gold text-sm">Create All 8 Default Users</button>
+              <button onClick={initAllUsers} className="font-bebas tracking-widest px-5 py-2.5 rounded-xl text-base"
+                style={{ background: '#C9A227', color: '#0D1F38' }}>
+                Create All 8 Default Users
+              </button>
               {userMsg && <p className="mt-2 text-sm">{userMsg}</p>}
             </div>
 
@@ -522,7 +578,6 @@ export default function AdminPage() {
                       <th className="text-left py-2">Username</th>
                       <th className="text-left py-2">Email</th>
                       <th className="text-left py-2">Role</th>
-                      <th className="text-left py-2 font-mono text-xs">UID</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -535,7 +590,6 @@ export default function AdminPage() {
                             {u.role}
                           </span>
                         </td>
-                        <td className="py-2 font-mono text-xs text-slate-500 max-w-xs truncate">{u.uid}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -546,12 +600,9 @@ export default function AdminPage() {
             <div className="card">
               <h3 className="font-bebas text-xl tracking-wider text-white mb-3">Create Individual Account</h3>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
-                <input value={newUsername} onChange={(e) => setNewUsername(e.target.value)} placeholder="Username"
-                  className="input" />
-                <input value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="Email" type="email"
-                  className="input" />
-                <input value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Password" type="password"
-                  className="input" />
+                <input value={newUsername} onChange={(e) => setNewUsername(e.target.value)} placeholder="Username" className="input" />
+                <input value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="Email" type="email" className="input" />
+                <input value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Password" type="password" className="input" />
               </div>
               <button onClick={handleCreateUser} className="btn-primary text-sm">
                 <Plus size={14} className="inline mr-1" /> Create Account
@@ -566,8 +617,8 @@ export default function AdminPage() {
 }
 
 function DraftOrderEditor({ userIds, users, onChange }: { userIds: string[]; users: AppUser[]; onChange: (ids: string[]) => void }) {
-  const unselected = users.filter((u) => !userIds.includes(u.uid));
   const selected = userIds.map((uid) => users.find((u) => u.uid === uid)).filter(Boolean) as AppUser[];
+  const unselected = users.filter((u) => !userIds.includes(u.uid));
 
   function move(index: number, dir: -1 | 1) {
     const n = [...userIds];
@@ -583,8 +634,8 @@ function DraftOrderEditor({ userIds, users, onChange }: { userIds: string[]; use
             <div key={u.uid} className="flex items-center gap-2 bg-slate-700 rounded-lg px-3 py-1.5 text-sm">
               <span className="text-slate-400 w-5">{i + 1}.</span>
               <span className="flex-1 text-white">{u.username}</span>
-              <button onClick={() => i > 0 && move(i, -1)} className="text-slate-400 hover:text-white px-1 disabled:opacity-30" disabled={i === 0}>▲</button>
-              <button onClick={() => i < userIds.length - 1 && move(i, 1)} className="text-slate-400 hover:text-white px-1 disabled:opacity-30" disabled={i === userIds.length - 1}>▼</button>
+              <button onClick={() => i > 0 && move(i, -1)} disabled={i === 0} className="text-slate-400 hover:text-white px-1 disabled:opacity-30">▲</button>
+              <button onClick={() => i < userIds.length - 1 && move(i, 1)} disabled={i === userIds.length - 1} className="text-slate-400 hover:text-white px-1 disabled:opacity-30">▼</button>
               <button onClick={() => onChange(userIds.filter((id) => id !== u.uid))} className="text-red-400 hover:text-red-300 px-1">✕</button>
             </div>
           ))}
