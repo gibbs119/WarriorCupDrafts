@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
     const url = ESPN_FIELD_URL(eventId);
     const res = await fetch(url, {
       headers: { 'User-Agent': 'Mozilla/5.0' },
-      next: { revalidate: 3600 }, // field doesn't change often
+      // cache: 'force-cache', // Note: 'next' revalidate not available in this context
     });
 
     if (!res.ok) {

@@ -92,7 +92,7 @@ export default function AdminRostersPage() {
     }))
     .filter((r) => r.picks.length > 0 || (draftState?.snakeDraftOrder ?? []).includes(r.user.uid));
 
-  const pendingRequests = Object.entries(wdRequests).filter(([, r]) => r.status === 'pending');
+  const pendingRequests = (Object.entries(wdRequests) as [string, WDReplacement][]).filter(([, r]) => r.status === 'pending');
   const editSearchLower = editSearch.toLowerCase();
   const filteredAvail = availablePlayers.filter((p) =>
     editSearch === '' || p.name.toLowerCase().includes(editSearchLower)
@@ -163,7 +163,7 @@ export default function AdminRostersPage() {
     finally { setSaving(false); }
   }
 
-  const sortedEdits = Object.entries(rosterEdits).sort(([,a],[,b]) => b.editedAt - a.editedAt);
+  const sortedEdits = (Object.entries(rosterEdits) as [string, RosterEdit][]).sort(([,a],[,b]) => b.editedAt - a.editedAt);
 
   return (
     <div className="min-h-screen">
@@ -327,12 +327,12 @@ export default function AdminRostersPage() {
                 <p className="text-slate-400 font-medium">No WD replacement requests yet.</p>
                 <p className="text-slate-500 text-sm mt-1">Users submit requests from the WD Replacement page on their dashboard.</p>
               </div>
-            ) : Object.entries(wdRequests)
-              .sort(([,a],[,b]) => {
+            ) : (Object.entries(wdRequests) as [string, WDReplacement][])
+              .sort(([, a], [, b]) => {
                 const order = { pending: 0, denied: 1, approved: 2 };
                 return (order[a.status] ?? 9) - (order[b.status] ?? 9);
               })
-              .map(([key, req]) => (
+              .map(([key, req]: [string, WDReplacement]) => (
                 <div key={key} className="card">
                   <div className="flex items-start justify-between gap-4 flex-wrap">
                     <div>

@@ -37,7 +37,7 @@ export default function LeaderboardPage() {
   const [isStale, setIsStale] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const consecutiveFailures = useRef(0);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasScoresRef = useRef(false); // avoids stale closure in refreshScores
 
   useEffect(() => {
@@ -139,9 +139,10 @@ export default function LeaderboardPage() {
 
   useEffect(() => {
     if (!tournament || users.length === 0) return;
+    const t = tournament; // non-null reference safe to use in callbacks
 
     // Initial fetch
-    refreshScores(tournament, users);
+    refreshScores(t, users);
 
     function scheduleNext() {
       const interval =
@@ -150,7 +151,7 @@ export default function LeaderboardPage() {
           : REFRESH_INTERVAL_NORMAL_MS;
 
       intervalRef.current = setTimeout(() => {
-        refreshScores(tournament, users).then(scheduleNext);
+        refreshScores(t, users).then(scheduleNext);
       }, interval);
     }
 

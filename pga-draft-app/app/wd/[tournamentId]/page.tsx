@@ -76,12 +76,12 @@ export default function WDReplacementPage() {
   }
 
   const myPicks = (draftState?.picks ?? []).filter((p) => p.userId === appUser.uid);
-  const pendingRequests = Object.values(myRequests).filter((r) => r.status === 'pending');
-  const approvedRequests = Object.values(myRequests).filter((r) => r.status === 'approved');
-  const deniedRequests = Object.values(myRequests).filter((r) => r.status === 'denied');
+  const pendingRequests = (Object.values(myRequests) as WDReplacement[]).filter((r) => r.status === 'pending');
+  const approvedRequests = (Object.values(myRequests) as WDReplacement[]).filter((r) => r.status === 'approved');
+  const deniedRequests = (Object.values(myRequests) as WDReplacement[]).filter((r) => r.status === 'denied');
 
   // Picks that are already being replaced (pending or approved)
-  const requestedDropIds = new Set(Object.values(myRequests).map((r) => r.droppedPlayerId));
+  const requestedDropIds = new Set((Object.values(myRequests) as WDReplacement[]).map((r) => r.droppedPlayerId));
 
   const filteredAvailable = availablePlayers.filter((p) =>
     searchTerm === '' || p.name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -149,7 +149,7 @@ export default function WDReplacementPage() {
           <div className="card mb-6">
             <h2 className="font-bebas text-xl tracking-wider text-white mb-3">My Requests</h2>
             <div className="space-y-2">
-              {[...pendingRequests, ...approvedRequests, ...deniedRequests].map((req, i) => (
+              {[...pendingRequests, ...approvedRequests, ...deniedRequests].map((req: WDReplacement, i: number) => (
                 <div key={i} className="flex items-center gap-3 text-sm p-3 rounded-lg"
                   style={{
                     background: req.status === 'approved' ? 'rgba(22,163,74,0.1)' :

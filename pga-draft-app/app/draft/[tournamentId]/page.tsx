@@ -161,7 +161,7 @@ export default function DraftRoomPage() {
   // ─── Merge odds + ESPN into unified player list ─────────────────────────────
 
   useEffect(() => {
-    const espnLookup = buildEspnLookup(Object.values(espnPlayers).map((p) => p.name));
+    const espnLookup = buildEspnLookup((Object.values(espnPlayers) as Player[]).map((p) => p.name));
     const merged = new Map<string, DraftPlayer>();
 
     // 1. Seed from odds (primary source for draft)
@@ -169,7 +169,7 @@ export default function DraftRoomPage() {
       const espnName = matchToEspnName(op.name, espnLookup);
       // Find ESPN player by matched name
       const espnEntry = espnName
-        ? Object.values(espnPlayers).find((p) => p.name === espnName) ?? null
+        ? (Object.values(espnPlayers) as Player[]).find((p) => p.name === espnName) ?? null
         : null;
 
       const key = op.id;
@@ -192,7 +192,7 @@ export default function DraftRoomPage() {
     }
 
     // 2. Add ESPN-only players not in odds (e.g. late additions to field)
-    for (const ep of Object.values(espnPlayers)) {
+    for (const ep of Object.values(espnPlayers) as Player[]) {
       const key = playerKey(ep.name);
       if (!merged.has(key)) {
         merged.set(key, {

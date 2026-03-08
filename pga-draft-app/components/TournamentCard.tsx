@@ -19,11 +19,7 @@ const STATUS_CONFIG: Record<string, { pill: string; label: string }> = {
   completed: { pill: 'pill-final',    label: 'Final'      },
 };
 
-interface Props {
-  tournament: Tournament;
-}
-
-export default function TournamentCard({ tournament }: Props) {
+export default function TournamentCard({ tournament }: { tournament: Tournament }) {
   const icon   = TOURNAMENT_ICONS[tournament.id] ?? '⛳';
   const config = STATUS_CONFIG[tournament.status];
 

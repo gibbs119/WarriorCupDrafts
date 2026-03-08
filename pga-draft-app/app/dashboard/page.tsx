@@ -8,6 +8,7 @@ import Navigation from '@/components/Navigation';
 import TournamentCard from '@/components/TournamentCard';
 import WarriorsLogo from '@/components/WarriorsLogo';
 import type { Tournament } from '@/lib/types';
+type TournamentItem = Tournament;
 import { TOURNAMENTS } from '@/lib/constants';
 
 export default function Dashboard() {
@@ -149,7 +150,7 @@ export default function Dashboard() {
           <div className="text-slate-500 text-sm animate-pulse text-center py-8">Loading tournaments…</div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2">
-            {tournaments.map((t) => (
+            {tournaments.map((t: Tournament) => (
               <TournamentCard key={t.id} tournament={t} />
             ))}
           </div>
