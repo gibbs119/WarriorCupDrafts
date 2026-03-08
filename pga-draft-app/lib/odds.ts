@@ -179,7 +179,7 @@ export function parseOddsApiResponse(events: OddsApiEvent[]): OddsPlayer[] {
     }
   }
 
-  return sortByOdds([...players.values()]);
+  return sortByOdds(Array.from(players.values()));
 }
 
 // ─── Parse DraftKings public API response ─────────────────────────────────────
@@ -248,7 +248,7 @@ export function parseDraftKingsResponse(data: DKCategory | { eventGroup?: DKCate
     }
   }
 
-  return sortByOdds([...deduped.values()]);
+  return sortByOdds(Array.from(deduped.values()));
 }
 
 // ─── Odds math helpers ────────────────────────────────────────────────────────
