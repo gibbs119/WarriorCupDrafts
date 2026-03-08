@@ -235,7 +235,15 @@ export default function AdminRostersPage() {
                     return (
                       <div key={pick.playerId}>
                         <div
-                          onClick={() => !isRemoved && if (!isEditing) { setEditingPick({ userId: user.uid, pick }); if (availablePlayers.length === 0) fetchAvailable(draftState); } else { setEditingPick(null); }}
+                          onClick={() => {
+                            if (isRemoved) return;
+                            if (!isEditing) {
+                              setEditingPick({ userId: user.uid, pick });
+                              if (availablePlayers.length === 0) fetchAvailable(draftState);
+                            } else {
+                              setEditingPick(null);
+                            }
+                          }}
                           className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm cursor-pointer transition-all"
                           style={{
                             background: isEditing   ? 'rgba(201,162,39,0.15)' :
