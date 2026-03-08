@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
   const skipped: string[] = [];
   const errors: string[] = [];
 
-  for (const record of HISTORICAL_DATA as HistoricalRecord[]) {
+  for (const record of HISTORICAL_DATA as unknown as HistoricalRecord[]) {
     const key = record.id;
     try {
       if (!overwrite) {
