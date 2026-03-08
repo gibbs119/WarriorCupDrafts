@@ -1,6 +1,4 @@
 // ─── Pre-loaded Users ────────────────────────────────────────────────────────
-// Emails follow pattern: username@pgadraft.com (set real emails after setup)
-
 export const USERS = [
   { username: 'Gibbs',  email: 'gibbs@pgadraft.com',  role: 'admin' as const },
   { username: 'Ryan',   email: 'ryan@pgadraft.com',   role: 'user'  as const },
@@ -13,16 +11,18 @@ export const USERS = [
 ];
 
 // ─── Tournaments ─────────────────────────────────────────────────────────────
-// espnEventId is left blank — Gibbs sets it in the Admin panel before each draft.
+// Draft night = Sunday before Thursday tee-off
+// espnEventId is pre-filled where known. Admin can override in settings.
 
 export const TOURNAMENTS = [
   {
     id: 'players-championship',
     name: 'The Players Championship',
     shortName: 'THE PLAYERS',
-    year: 2025,
-    startDate: 'March 13–16, 2025',
-    espnEventId: '',   // Admin sets this
+    year: 2026,
+    startDate: 'March 12–15, 2026',
+    draftDate: 'March 8, 2026',       // tonight!
+    espnEventId: '401811937',          // confirmed 2026 ESPN ID
     fieldSize: 0,
     maxPicks: 5,
     status: 'upcoming' as const,
@@ -34,8 +34,9 @@ export const TOURNAMENTS = [
     id: 'masters',
     name: 'The Masters',
     shortName: 'MASTERS',
-    year: 2025,
-    startDate: 'April 10–13, 2025',
+    year: 2026,
+    startDate: 'April 9–12, 2026',
+    draftDate: 'April 5, 2026',
     espnEventId: '',
     fieldSize: 0,
     maxPicks: 4,
@@ -48,8 +49,9 @@ export const TOURNAMENTS = [
     id: 'pga-championship',
     name: 'PGA Championship',
     shortName: 'PGA CHAMP.',
-    year: 2025,
-    startDate: 'May 15–18, 2025',
+    year: 2026,
+    startDate: 'May 14–17, 2026',
+    draftDate: 'May 10, 2026',
     espnEventId: '',
     fieldSize: 0,
     maxPicks: 5,
@@ -62,8 +64,9 @@ export const TOURNAMENTS = [
     id: 'us-open',
     name: 'U.S. Open',
     shortName: 'U.S. OPEN',
-    year: 2025,
-    startDate: 'June 12–15, 2025',
+    year: 2026,
+    startDate: 'June 18–21, 2026',
+    draftDate: 'June 14, 2026',
     espnEventId: '',
     fieldSize: 0,
     maxPicks: 5,
@@ -76,8 +79,9 @@ export const TOURNAMENTS = [
     id: 'the-open',
     name: 'The Open Championship',
     shortName: 'THE OPEN',
-    year: 2025,
-    startDate: 'July 17–20, 2025',
+    year: 2026,
+    startDate: 'July 16–19, 2026',
+    draftDate: 'July 12, 2026',
     espnEventId: '',
     fieldSize: 0,
     maxPicks: 5,
@@ -89,12 +93,6 @@ export const TOURNAMENTS = [
 ];
 
 // ─── Scoring ─────────────────────────────────────────────────────────────────
-
-// Top 10 bonuses (index 0 = 1st place, index 9 = 10th place)
 export const TOP_10_POINTS = [-25, -15, -10, -8, -6, -5, -4, -3, -2, -1];
-
-// Number of players whose scores count toward team total
 export const SCORING_PLAYERS = 3;
-
-// Default pick timer in seconds (0 = no timer)
 export const PICK_TIMER_SECONDS = 120;
