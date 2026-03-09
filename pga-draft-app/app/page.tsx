@@ -17,13 +17,13 @@ export default function LoginPage() {
   const [selectedUser, setSelectedUser] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!selectedUser) { setError('Please select your name.'); return; }
     setError('');
-    setLoading(true);
+    setSubmitting(true);
     try {
       // Look up email from selected username
       const user = USERS.find((u) => u.username === selectedUser);
@@ -33,7 +33,7 @@ export default function LoginPage() {
     } catch {
       setError('Wrong password. Contact Gibbs if you need a reset.');
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   }
 
@@ -125,10 +125,10 @@ export default function LoginPage() {
 
             <button
               type="submit"
-              disabled={loading || !selectedUser}
+              disabled={submitting || !selectedUser}
               className="btn-gold w-full py-3 font-bebas tracking-widest text-lg justify-center disabled:opacity-40"
             >
-              {loading ? 'SIGNING IN…' : selectedUser ? `SIGN IN AS ${selectedUser.toUpperCase()}` : 'SELECT YOUR NAME'}
+              {submitting ? 'SIGNING IN…' : selectedUser ? `SIGN IN AS ${selectedUser.toUpperCase()}` : 'SELECT YOUR NAME'}
             </button>
           </form>
         </div>
