@@ -335,7 +335,7 @@ export default function LeaderboardPage() {
 
   if (loading || !appUser) {
     return (
-      <div className="min-h-screen"><Navigation />
+      <div className="min-h-screen page"><Navigation />
         <div className="flex items-center justify-center h-64 font-bebas text-xl tracking-widest animate-pulse" style={{ color: '#C9A227' }}>LOADING…</div>
       </div>
     );
@@ -346,7 +346,7 @@ export default function LeaderboardPage() {
   const myTeam  = teamScores.find(t => t.userId === appUser.uid);
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen page">
       <Navigation />
       <main className="max-w-2xl mx-auto px-4 py-6">
 

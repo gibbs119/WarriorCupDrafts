@@ -54,7 +54,7 @@ export default function Dashboard() {
   );
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen page">
       <Navigation />
 
       {/* Page-level glow */}

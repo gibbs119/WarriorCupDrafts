@@ -43,7 +43,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   async function signIn(email: string, password: string) {
-    await signInWithEmailAndPassword(auth, email, password);
+    const cred = await signInWithEmailAndPassword(auth, email, password);
+    // Wait for the appUser record to load from the DB before resolving.
+    // Without this, router.push('/dashboard') fires before appUser is set,
+    // the dashboard sees null and redirects back to login — requiring a second attempt.
+    const user = await getUserByUid(cred.user.uid);
+    setFirebaseUser(cred.user);
+    setAppUser(user);
+    setLoading(false);
   }
 
   async function signOut() {

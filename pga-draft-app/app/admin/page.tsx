@@ -359,7 +359,7 @@ export default function AdminPage() {
 
   if (loading || !appUser) {
     return (
-      <div className="min-h-screen"><Navigation />
+      <div className="min-h-screen page"><Navigation />
         <div className="flex items-center justify-center h-64 font-bebas text-xl tracking-widest animate-pulse" style={{ color: '#C9A227' }}>LOADING…</div>
       </div>
     );
@@ -369,7 +369,7 @@ export default function AdminPage() {
   const nextDraftTournament = tournaments.find((t) => t.status === 'upcoming');
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen page">
       <Navigation />
       <main className="max-w-4xl mx-auto px-4 py-6">
 

@@ -21,14 +21,28 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-html { scroll-behavior: smooth; }
+html {
+  scroll-behavior: smooth;
+  /* iOS: prevent elastic overscroll on the html element */
+  height: 100%;
+  /* Prevent iOS font size inflation when rotating */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
 
 body {
   font-family: 'Inter', system-ui, sans-serif;
-  background: linear-gradient(160deg, #030912 0%, #0A1628 45%, #0D1F38 100%);
-  background-attachment: fixed;
+  /* background-attachment: fixed is broken on iOS — use a pseudo-element instead */
+  background: #030912;
   color: #F0F4FF;
-  min-height: 100vh;
+  min-height: 100%;
+  min-height: 100dvh; /* dynamic viewport height — accounts for iOS browser chrome */
+  /* Enable smooth momentum scrolling on iOS */
+  -webkit-overflow-scrolling: touch;
+  overflow-x: hidden;
+  overflow-y: auto;
+  /* Safe area padding for iPhone notch / home indicator */
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 /* ─── Scrollbar ──────────────────────────────────────────────────────────── */
@@ -43,23 +57,27 @@ body {
 .font-bebas { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.06em; }
 
 /* ─── Background decoration ──────────────────────────────────────────────── */
+/* Fixed gradient background via pseudo-element — works on iOS unlike background-attachment: fixed */
 .bg-warriors {
   position: relative;
-  overflow: hidden;
+  /* NO overflow: hidden — this was blocking all page scrolling */
 }
 .bg-warriors::before {
   content: '';
-  position: fixed;
+  position: fixed;    /* stays fixed while content scrolls */
   inset: 0;
-  background-image: repeating-linear-gradient(
-    135deg,
-    rgba(0,107,182,0.035) 0px,
-    rgba(0,107,182,0.035) 1px,
-    transparent 1px,
-    transparent 64px
-  );
+  background: linear-gradient(160deg, #030912 0%, #0A1628 45%, #0D1F38 100%);
+  background-image:
+    linear-gradient(160deg, #030912 0%, #0A1628 45%, #0D1F38 100%),
+    repeating-linear-gradient(
+      135deg,
+      rgba(0,107,182,0.035) 0px,
+      rgba(0,107,182,0.035) 1px,
+      transparent 1px,
+      transparent 64px
+    );
   pointer-events: none;
-  z-index: 0;
+  z-index: -1;  /* behind all content */
 }
 
 /* ─── Cards ──────────────────────────────────────────────────────────────── */
@@ -176,14 +194,39 @@ body {
   border-radius: 0.5rem;
   padding: 0.625rem 0.875rem;
   color: #f0f4ff;
-  font-size: 0.875rem;
+  /* 16px minimum prevents iOS Safari from zooming in when tapping an input */
+  font-size: 1rem;
   transition: border-color 0.15s, box-shadow 0.15s;
   outline: none;
+  /* Remove iOS default styling */
+  -webkit-appearance: none;
+  appearance: none;
 }
 .input::placeholder { color: rgba(148,163,184,0.6); }
 .input:focus {
   border-color: rgba(0,107,182,0.6);
   box-shadow: 0 0 0 3px rgba(0,107,182,0.15);
+}
+
+/* ─── Buttons — better touch targets for iOS ─────────────────────────────── */
+button, .btn-primary, .btn-gold, .btn-secondary, .btn-danger {
+  /* iOS: minimum 44px touch target recommended by Apple HIG */
+  min-height: 44px;
+  /* Prevent text selection on double-tap */
+  -webkit-user-select: none;
+  user-select: none;
+  /* Remove iOS button styling */
+  -webkit-appearance: none;
+  appearance: none;
+  touch-action: manipulation; /* removes 300ms tap delay */
+}
+
+/* ─── iOS safe area page wrapper ─────────────────────────────────────────── */
+/* Use class="page" on the main content wrapper of every page */
+.page {
+  padding-bottom: max(2rem, env(safe-area-inset-bottom));
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
 }
 
 /* ─── Rank badges ────────────────────────────────────────────────────────── */

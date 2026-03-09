@@ -7,8 +7,13 @@ import WarriorsLogo from '@/components/WarriorsLogo';
 import { USERS } from '@/lib/constants';
 
 export default function LoginPage() {
-  const { signIn } = useAuth();
+  const { signIn, appUser, loading } = useAuth();
   const router = useRouter();
+
+  // Already logged in — skip straight to dashboard
+  React.useEffect(() => {
+    if (!loading && appUser) router.replace('/dashboard');
+  }, [loading, appUser, router]);
   const [selectedUser, setSelectedUser] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -33,7 +38,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 py-12 relative overflow-hidden">
+    <div className="min-h-screen page flex items-center justify-center px-4 py-12 relative">
 
       {/* Background glows */}
       <div className="absolute -top-40 left-1/2 -translate-x-1/2 w-[700px] h-72 rounded-full pointer-events-none"

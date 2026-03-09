@@ -262,7 +262,7 @@ export default function DraftRoomPage() {
 
   if (!appUser || !tournament) {
     return (
-      <div className="min-h-screen"><Navigation />
+      <div className="min-h-screen page"><Navigation />
         <div className="flex items-center justify-center h-64 font-bebas text-xl tracking-widest animate-pulse" style={{color:"#C9A227"}}>LOADING draft room…</div>
       </div>
     );
@@ -347,7 +347,7 @@ export default function DraftRoomPage() {
   // ─── Render ──────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen page">
       <Navigation />
       <main className="max-w-6xl mx-auto px-4 py-6">
 

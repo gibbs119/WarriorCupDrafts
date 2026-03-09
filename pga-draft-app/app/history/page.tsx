@@ -98,7 +98,7 @@ export default function HistoryPage() {
   }, [appUser]);
 
   if (loading || !appUser) return (
-    <div className="min-h-screen"><Navigation />
+    <div className="min-h-screen page"><Navigation />
       <div className="flex items-center justify-center h-64">
         <p className="font-bebas text-xl tracking-widest animate-pulse" style={{color:'#C9A227'}}>LOADING…</p>
       </div>
@@ -106,7 +106,7 @@ export default function HistoryPage() {
   );
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen page">
       <Navigation />
       <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[900px] h-64 pointer-events-none"
         style={{background:'radial-gradient(ellipse, rgba(0,107,182,0.1) 0%, transparent 70%)'}} />

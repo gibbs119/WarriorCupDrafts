@@ -67,7 +67,7 @@ export default function WDReplacementPage() {
 
   if (loading || !appUser || !tournament) {
     return (
-      <div className="min-h-screen"><Navigation />
+      <div className="min-h-screen page"><Navigation />
         <div className="flex items-center justify-center h-64">
           <p className="font-bebas text-xl tracking-widest animate-pulse" style={{ color: '#C9A227' }}>LOADING…</p>
         </div>
@@ -114,7 +114,7 @@ export default function WDReplacementPage() {
   }
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen page">
       <Navigation />
 
       <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[700px] h-56 pointer-events-none"
