@@ -11,9 +11,6 @@ export const USERS = [
 ];
 
 // ─── Tournaments ─────────────────────────────────────────────────────────────
-// Draft night = Sunday before Thursday tee-off
-// espnEventId is pre-filled where known. Admin can override in settings.
-
 export const TOURNAMENTS = [
   {
     id: 'players-championship',
@@ -21,9 +18,9 @@ export const TOURNAMENTS = [
     shortName: 'THE PLAYERS',
     year: 2026,
     startDate: 'March 12–15, 2026',
-    draftDate: 'March 8, 2026',       // tonight!
-    espnEventId: '401811937',          // confirmed 2026 ESPN ID
-    fieldSize: 0,
+    draftDate: 'March 8, 2026',
+    espnEventId: '401811937',
+    fieldSize: 123,
     maxPicks: 5,
     status: 'upcoming' as const,
     draftOrder: [],
@@ -96,3 +93,44 @@ export const TOURNAMENTS = [
 export const TOP_10_POINTS = [-25, -15, -10, -8, -6, -5, -4, -3, -2, -1];
 export const SCORING_PLAYERS = 3;
 export const PICK_TIMER_SECONDS = 120;
+
+// ─── Static Field Fallbacks ───────────────────────────────────────────────────
+// Used when both ESPN and DraftKings APIs fail to return player data.
+// These are the confirmed fields for each tournament, scraped from official sources.
+// Names are in ESPN display format. No ESPN IDs yet — scoring uses name matching.
+
+export const STATIC_FIELDS: Record<string, string[]> = {
+  'players-championship': [
+    'Ludvig Aberg', 'Zach Bauchou', 'Daniel Berger', 'Christiaan Bezuidenhout',
+    'Akshay Bhatia', 'Keegan Bradley', 'Michael Brennan', 'Jacob Bridgeman',
+    'Sam Burns', 'Brian Campbell', 'Patrick Cantlay', 'Ricky Castillo',
+    'Bud Cauley', 'Wyndham Clark', 'Eric Cole', 'Corey Conners',
+    'Pierceson Coody', 'Joel Dahmen', 'Cam Davis', 'Jason Day',
+    'Zecheng Dou', 'Nico Echavarria', 'Harris English', 'A.J. Ewart',
+    'Tony Finau', 'Steven Fisk', 'Matt Fitzpatrick', 'Tommy Fleetwood',
+    'Rickie Fowler', 'Ryan Fox', 'Ryan Gerard', 'Lucas Glover',
+    'Chris Gotterup', 'Max Greyserman', 'Ben Griffin', 'Emiliano Grillo',
+    'Harry Hall', 'Brian Harman', 'Russell Henley', 'Garrick Higgo',
+    'Joe Highsmith', 'Ryo Hisatsune', 'Lee Hodges', 'Rico Hoey',
+    'Tom Hoge', 'Nicolai Hojgaard', 'Rasmus Hojgaard', 'Max Homa',
+    'Viktor Hovland', 'Mark Hubbard', 'Mackenzie Hughes', 'Sungjae Im',
+    'Stephan Jaeger', 'Takumi Kanaya', 'Johnny Keefer', 'Michael Kim',
+    'S.H. Kim', 'Si Woo Kim', 'Chris Kirk', 'Kurt Kitayama',
+    'Jake Knapp', 'Brooks Koepka', 'Min Woo Lee', 'Haotong Li',
+    'Shane Lowry', 'Robert MacIntyre', 'Hideki Matsuyama', 'Denny McCarthy',
+    'Matt McCarty', 'Max McGreevy', 'Rory McIlroy', 'Maverick McNealy',
+    'Mac Meissner', 'Keith Mitchell', 'Taylor Moore', 'Collin Morikawa',
+    'William Mouw', 'Alex Noren', 'Andrew Novak', 'Thorbjorn Olesen',
+    'Matthieu Pavon', 'Taylor Pendrith', 'Marco Penge', 'Chandler Phillips',
+    'J.T. Poston', 'Aldrich Potgieter', 'Andrew Putnam', 'Aaron Rai',
+    'Chad Ramey', 'Kristoffer Reitan', 'Davis Riley', 'Patrick Rodgers',
+    'Justin Rose', 'Kevin Roy', 'Xander Schauffele', 'Scottie Scheffler',
+    'Adam Schenk', 'Matti Schmid', 'Adam Scott', 'Alex Smalley',
+    'Jordan Smith', 'Austin Smotherman', 'J.J. Spaun', 'Jordan Spieth',
+    'Sam Stevens', 'Sepp Straka', 'Nick Taylor', 'Sahith Theegala',
+    'Justin Thomas', 'Davis Thompson', 'Michael Thorbjornsen', 'Sami Valimaki',
+    'Erik van Rooyen', 'Jhonattan Vegas', 'Karl Vilips', 'Danny Walker',
+    'Vince Whaley', 'Gary Woodland', 'Sudarshan Yellamaraju', 'Cameron Young',
+    'Kevin Yu',
+  ],
+};

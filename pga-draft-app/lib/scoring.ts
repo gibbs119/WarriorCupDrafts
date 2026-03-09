@@ -34,6 +34,27 @@ export function calculatePoints(
  * Build a PlayerScore object for each of a user's draft picks
  * against the current leaderboard players map.
  */
+/**
+ * Build a name-based reverse lookup for when picks were stored with name keys
+ * instead of ESPN numeric IDs (happens if ESPN wasn't loaded during draft).
+ */
+function buildNameLookup(playersMap: Record<string, Player>): Map<string, Player> {
+  const map = new Map<string, Player>();
+  for (const player of Object.values(playersMap)) {
+    // Store by normalized name so we can fuzzy match
+    const key = player.name
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\./g, '')
+      .replace(/[-–]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    map.set(key, player);
+  }
+  return map;
+}
+
 export function buildPlayerScores(
   picks: DraftPick[],
   playersMap: Record<string, Player>,
@@ -42,8 +63,49 @@ export function buildPlayerScores(
   // Filter out admin-removed slots (sentinel value) before scoring
   const activePicks = picks.filter((p) => p.playerId !== '__removed__');
 
+  // Build name lookup as fallback for picks stored without ESPN IDs
+  const nameLookup = buildNameLookup(playersMap);
+
   const scores: PlayerScore[] = activePicks.map((pick) => {
-    const player = playersMap[pick.playerId];
+    // Primary: look up by ESPN ID (numeric string like "4663")
+    let player = playersMap[pick.playerId];
+
+    // Fallback: match by normalized player name
+    // This handles picks made before ESPN field was loaded (stored as name keys)
+    if (!player && pick.playerName) {
+      const nameKey = pick.playerName
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\./g, '')
+        .replace(/[-–]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      player = nameLookup.get(nameKey);
+
+      // Also try the pick.playerId as a name key
+      if (!player) {
+        player = nameLookup.get(pick.playerId);
+      }
+
+      // Last resort: last-name match — ONLY if exactly one player has that last name
+      // (skipped if ambiguous, e.g. Hojgaard brothers, multiple Johnsons)
+      if (!player) {
+        const lastName = nameKey.split(' ').pop() ?? '';
+        if (lastName.length > 3) {
+          const lastNameMatches: Player[] = [];
+          for (const [key, p] of nameLookup) {
+            if (key.endsWith(' ' + lastName) || key === lastName) {
+              lastNameMatches.push(p);
+            }
+          }
+          if (lastNameMatches.length === 1) {
+            player = lastNameMatches[0]; // unambiguous — safe to use
+          }
+          // if 2+ matches, leave player undefined rather than guess wrong
+        }
+      }
+    }
 
     if (!player) {
       // Player not found in leaderboard yet (pre-tournament)

@@ -1,11 +1,11 @@
 // ─── Odds Sources ─────────────────────────────────────────────────────────────
 // Priority order:
 //  1. The Odds API  (free tier — 500 req/mo, needs NEXT_PUBLIC_ODDS_API_KEY)
-//  2. DraftKings    (public CDN endpoint, no key)
-//  3. ESPN BET      (public endpoint, no key)
+//  2. DraftKings    (multiple public CDN endpoint patterns)
+//  3. ESPN field    (guaranteed — used as last resort for player names only)
 
 export interface OddsPlayer {
-  id: string;               // normalized name used as stable key
+  id: string;               // normalized name key
   name: string;             // display name from odds source
   espnName: string | null;  // matched ESPN name (null until matched)
   americanOdds: number;     // e.g. +1200 or -110
@@ -14,90 +14,98 @@ export interface OddsPlayer {
   bookmaker: string;        // source label
 }
 
-// ─── The Odds API endpoints (free, ~500 req/mo, needs API key) ────────────────
-
+// ─── The Odds API ─────────────────────────────────────────────────────────────
 const ODDS_API_BASE = 'https://api.the-odds-api.com/v4';
 
 export function getOddsApiUrl(apiKey: string): string {
   return `${ODDS_API_BASE}/sports/golf_pga/odds/?apiKey=${apiKey}&regions=us&markets=outrights&oddsFormat=american&bookmakers=draftkings,fanduel,betmgm`;
 }
 
-// ─── DraftKings public CDN (no key) ──────────────────────────────────────────
-// The subcategory ID 4519 = "Tournament Winner" for PGA events.
-// We fetch the full golf category and filter to the current tournament.
+// ─── DraftKings public API endpoints ─────────────────────────────────────────
+// Multiple patterns tried in order — DK changes these periodically.
+// All are public, no API key required.
+// League 2 = PGA Tour golf in DraftKings internal system.
 
-export const DRAFTKINGS_GOLF_URL =
-  'https://sportsbook-nash.draftkings.com/api/odds/v1/leagues/2/categories/583/subcategories/4519';
+export const DRAFTKINGS_URLS = [
+  // Primary: tournament winner outright market
+  'https://sportsbook-nash.draftkings.com/api/odds/v1/leagues/2/categories/583/subcategories/4519',
+  // Alternate subcategory IDs DK has used
+  'https://sportsbook-nash.draftkings.com/api/odds/v1/leagues/2/categories/583/subcategories/4520',
+  // Full category (includes all markets, we filter to winner)
+  'https://sportsbook-nash.draftkings.com/api/odds/v1/leagues/2/categories/583',
+  // Alt domain
+  'https://sportsbook.draftkings.com/api/odds/v1/leagues/2/categories/583/subcategories/4519',
+];
 
-// Fallback: DK alternate endpoint
-export const DRAFTKINGS_ALT_URL =
-  'https://sportsbook.draftkings.com/api/odds/v1/leagues/2/categories/583';
+// Keep legacy exports so existing route.ts doesn't break
+export const DRAFTKINGS_GOLF_URL = DRAFTKINGS_URLS[0];
+export const DRAFTKINGS_ALT_URL = DRAFTKINGS_URLS[2];
+
+// ─── Tournament slug → DraftKings URL mapping ─────────────────────────────────
+// Used to help identify the right event when DK returns multiple tournaments.
+export const TOURNAMENT_SLUGS: Record<string, string[]> = {
+  'players-championship': ['players championship', 'the players', 'players'],
+  'masters': ['masters', 'the masters', 'augusta'],
+  'pga-championship': ['pga championship', 'pga champ'],
+  'us-open': ['u.s. open', 'us open', 'united states open'],
+  'the-open': ['the open', 'open championship', 'british open'],
+};
 
 // ─── Name Normalization ───────────────────────────────────────────────────────
-// Odds sources often differ from ESPN in:
-//   - Accent characters:  "Sébastien Hebert" → "Sebastien Hebert"
-//   - Suffixes:           "Tom Kim" (ESPN) vs "Kim Tom" (some books use last, first)
-//   - Nicknames:          "Cam Davis" vs "Cameron Davis"
-//   - Hyphens:            "Si Woo Kim" vs "Si-Woo Kim"
-//   - Dots:               "C.T. Pan" vs "CT Pan"
+// Handles all common differences between DraftKings and ESPN name formats:
+//   - Accents:   "Séb Hebert"  → "seb hebert"
+//   - Hyphens:   "Si-Woo Kim"  → "si woo kim"
+//   - Dots:      "C.T. Pan"    → "ct pan"
+//   - Nicknames: "Cam Davis"   → "cameron davis"
+//   - Suffixes:  "Tom Kim Jr"  → "tom kim"
 
 const NICKNAME_MAP: Record<string, string> = {
+  // Cameras
   'cam davis': 'cameron davis',
   'cam smith': 'cameron smith',
   'cam young': 'cameron young',
-  'max homa': 'max homa',
+  // Common nicknames / ESPN vs DK variations
   'ricky fowler': 'rickie fowler',
   'tj kim': 'tom kim',
+  // Korean name variations
   'si woo kim': 'si woo kim',
   'si-woo kim': 'si woo kim',
   'byeong hun an': 'byeong hun an',
   'byeong-hun an': 'byeong hun an',
+  'sungjae im': 'sungjae im',
+  // Korean initials → full name
   'k.h. lee': 'kyoung-hoon lee',
   'kh lee': 'kyoung-hoon lee',
   'kyounghoon lee': 'kyoung-hoon lee',
-  'sungjae im': 'sungjae im',
+  'kyoung hoon lee': 'kyoung-hoon lee',
   's.h. kim': 'sung-hyun kim',
+  // European name normalization
   'ludvig aberg': 'ludvig aberg',
   'ct pan': 'c.t. pan',
+  // DK sometimes uses "Last, First" format for non-English names
 };
 
-/**
- * Strip accents, punctuation, normalize whitespace and casing.
- * Returns a canonical key for fuzzy matching.
- */
 export function normalizeName(name: string): string {
   return name
     .toLowerCase()
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')  // strip accent marks
-    .replace(/\./g, '')                // remove dots: C.T. → CT
-    .replace(/[-–]/g, ' ')            // hyphens to spaces
-    .replace(/\s+/g, ' ')             // collapse whitespace
+    .replace(/[\u0300-\u036f]/g, '')   // strip accents
+    .replace(/\./g, '')                 // remove dots: C.T. → CT
+    .replace(/[-–]/g, ' ')             // hyphens to spaces
+    .replace(/\s+/g, ' ')              // collapse whitespace
     .replace(/\b(jr|sr|ii|iii|iv)\b/g, '') // strip suffixes
     .trim();
 }
 
-/**
- * Apply known nickname overrides after normalization.
- */
 function applyNicknameMap(normalized: string): string {
   return NICKNAME_MAP[normalized] ?? normalized;
 }
 
-/**
- * Canonical key used for matching between odds and ESPN.
- */
 export function playerKey(name: string): string {
   return applyNicknameMap(normalizeName(name));
 }
 
-/**
- * Build a lookup map from canonical key → ESPN display name.
- * Pass in ESPN player names to pre-build the reverse lookup.
- */
-export function buildEspnLookup(
-  espnNames: string[]
-): Map<string, string> {
+export function buildEspnLookup(espnNames: string[]): Map<string, string> {
   const map = new Map<string, string>();
   for (const name of espnNames) {
     map.set(playerKey(name), name);
@@ -105,10 +113,6 @@ export function buildEspnLookup(
   return map;
 }
 
-/**
- * Attempt to find the ESPN display name for an odds-source name.
- * Returns null if no match found.
- */
 export function matchToEspnName(
   oddsName: string,
   espnLookup: Map<string, string>
@@ -116,21 +120,23 @@ export function matchToEspnName(
   const key = playerKey(oddsName);
   if (espnLookup.has(key)) return espnLookup.get(key)!;
 
-  // Last-name-only fallback: find ESPN name whose last word matches
+  // Last-name fallback — only if exactly one ESPN player has that last name
+  // Skipped if ambiguous (e.g. Nicolai vs Rasmus Hojgaard, multiple Johnsons)
   const lastName = key.split(' ').pop() ?? '';
   if (lastName.length > 3) {
+    const matches: string[] = [];
     for (const [espnKey, espnName] of espnLookup) {
       if (espnKey.endsWith(' ' + lastName) || espnKey === lastName) {
-        return espnName;
+        matches.push(espnName);
       }
     }
+    if (matches.length === 1) return matches[0]; // unambiguous
   }
 
   return null;
 }
 
-// ─── Parse The Odds API response ─────────────────────────────────────────────
-
+// ─── Parse The Odds API response ──────────────────────────────────────────────
 interface OddsApiEvent {
   id: string;
   sport_key: string;
@@ -147,10 +153,9 @@ interface OddsApiEvent {
 }
 
 export function parseOddsApiResponse(events: OddsApiEvent[]): OddsPlayer[] {
-  // Find the soonest upcoming golf event
   const now = Date.now();
   const upcoming = events
-    .filter((e) => new Date(e.commence_time).getTime() > now - 86400000) // within past day
+    .filter((e) => new Date(e.commence_time).getTime() > now - 86400000)
     .sort((a, b) => new Date(a.commence_time).getTime() - new Date(b.commence_time).getTime());
 
   if (upcoming.length === 0) return [];
@@ -164,7 +169,6 @@ export function parseOddsApiResponse(events: OddsApiEvent[]): OddsPlayer[] {
       for (const outcome of market.outcomes ?? []) {
         const key = playerKey(outcome.name);
         if (!players.has(key) || Math.abs(outcome.price) < Math.abs(players.get(key)!.americanOdds)) {
-          // Use the best (shortest) odds across bookmakers
           players.set(key, {
             id: key,
             name: outcome.name,
@@ -183,7 +187,6 @@ export function parseOddsApiResponse(events: OddsApiEvent[]): OddsPlayer[] {
 }
 
 // ─── Parse DraftKings public API response ─────────────────────────────────────
-
 interface DKCategory {
   eventGroupName?: string;
   offerCategories?: {
@@ -207,22 +210,35 @@ interface DKCategory {
   }[];
 }
 
-export function parseDraftKingsResponse(data: DKCategory | { eventGroup?: DKCategory }): OddsPlayer[] {
+export function parseDraftKingsResponse(
+  data: DKCategory | { eventGroup?: DKCategory },
+  tournamentId?: string
+): OddsPlayer[] {
   const group = (data as { eventGroup?: DKCategory }).eventGroup ?? (data as DKCategory);
   const players: OddsPlayer[] = [];
 
+  // If we have multiple event groups, try to find the right tournament
+  const eventName = group.eventGroupName?.toLowerCase() ?? '';
+  const slugs = tournamentId ? (TOURNAMENT_SLUGS[tournamentId] ?? []) : [];
+  const isRightEvent = slugs.length === 0 || slugs.some((s) => eventName.includes(s));
+
+  if (!isRightEvent && slugs.length > 0) {
+    // This DK response is for a different tournament - skip
+    return [];
+  }
+
   for (const cat of group.offerCategories ?? []) {
     for (const sub of cat.offerSubcategoryDescriptors ?? []) {
-      if (!sub.name?.toLowerCase().includes('winner') &&
-          !sub.name?.toLowerCase().includes('outright')) continue;
+      const subName = sub.name?.toLowerCase() ?? '';
+      if (!subName.includes('winner') && !subName.includes('outright') && !subName.includes('to win')) continue;
 
       for (const offer of sub.offerSubcategory?.offers ?? []) {
         for (const outcome of offer.outcomes ?? []) {
           const name = outcome.participant ?? outcome.label ?? '';
-          if (!name) continue;
+          if (!name || name.toLowerCase().includes('field')) continue;
 
           const american = parseInt(outcome.oddsAmerican ?? '9999', 10);
-          if (isNaN(american)) continue;
+          if (isNaN(american) || american === 9999) continue;
 
           const key = playerKey(name);
           players.push({
@@ -239,7 +255,7 @@ export function parseDraftKingsResponse(data: DKCategory | { eventGroup?: DKCate
     }
   }
 
-  // Deduplicate by key (keep best odds)
+  // Deduplicate — keep best odds per player
   const deduped = new Map<string, OddsPlayer>();
   for (const p of players) {
     const existing = deduped.get(p.id);
@@ -251,8 +267,7 @@ export function parseDraftKingsResponse(data: DKCategory | { eventGroup?: DKCate
   return sortByOdds(Array.from(deduped.values()));
 }
 
-// ─── Odds math helpers ────────────────────────────────────────────────────────
-
+// ─── Odds math ────────────────────────────────────────────────────────────────
 export function americanToImplied(american: number): number {
   if (american > 0) return (100 / (american + 100)) * 100;
   return (Math.abs(american) / (Math.abs(american) + 100)) * 100;
@@ -263,6 +278,5 @@ export function formatAmericanOdds(american: number): string {
 }
 
 function sortByOdds(players: OddsPlayer[]): OddsPlayer[] {
-  // Lower implied prob = higher odds = longer shot → sort favorites first (highest implied prob)
   return players.sort((a, b) => b.impliedProb - a.impliedProb);
 }

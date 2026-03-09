@@ -1,32 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
   getOddsApiUrl,
-  DRAFTKINGS_GOLF_URL,
-  DRAFTKINGS_ALT_URL,
+  DRAFTKINGS_URLS,
   parseOddsApiResponse,
   parseDraftKingsResponse,
   type OddsPlayer,
 } from '@/lib/odds';
+import { fetchLeaderboardRaw, parseLeaderboard } from '@/lib/espn';
+import { TOURNAMENTS, STATIC_FIELDS } from '@/lib/constants';
 
-// ─── Server-side cache (survives across requests in same Vercel instance) ─────
+// ─── Server-side cache ────────────────────────────────────────────────────────
 interface CacheEntry { players: OddsPlayer[]; fetchedAt: number; source: string }
 const oddsCache = new Map<string, CacheEntry>();
-const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes — odds don't move that fast
-
-// ─── Fetch helpers ────────────────────────────────────────────────────────────
+const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
 async function tryFetch(url: string, label: string): Promise<{ data: unknown; source: string } | null> {
   try {
     const res = await fetch(url, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-        Accept: 'application/json',
-        Referer: 'https://sportsbook.draftkings.com/',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept': 'application/json',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Referer': 'https://sportsbook.draftkings.com/',
+        'Origin': 'https://sportsbook.draftkings.com',
       },
       cache: 'no-store',
     });
     if (!res.ok) {
-      console.warn(`[Odds] ${label} → ${res.status}`);
+      console.warn(`[Odds] ${label} → HTTP ${res.status}`);
       return null;
     }
     const data = await res.json();
@@ -37,16 +38,13 @@ async function tryFetch(url: string, label: string): Promise<{ data: unknown; so
   }
 }
 
-// ─── Route handler ────────────────────────────────────────────────────────────
-
 export async function GET(req: NextRequest) {
-  const tournamentName = req.nextUrl.searchParams.get('tournament') ?? 'pga';
+  const tournamentId = req.nextUrl.searchParams.get('tournament') ?? 'players-championship';
   const bust = req.nextUrl.searchParams.get('bust') === '1';
-  const cacheKey = tournamentName;
 
-  // Serve from cache if fresh
+  // Serve fresh cache
   if (!bust) {
-    const cached = oddsCache.get(cacheKey);
+    const cached = oddsCache.get(tournamentId);
     if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
       return NextResponse.json(
         { players: cached.players, source: cached.source, cached: true },
@@ -59,57 +57,86 @@ export async function GET(req: NextRequest) {
   let players: OddsPlayer[] = [];
   let source = '';
 
-  // ── Source 1: The Odds API (most reliable, free 500 req/mo) ──────────────
+  // ── Source 1: The Odds API (needs key, most reliable) ────────────────────
   if (apiKey) {
     const result = await tryFetch(getOddsApiUrl(apiKey), 'The Odds API');
     if (result) {
       try {
         const parsed = parseOddsApiResponse(result.data as Parameters<typeof parseOddsApiResponse>[0]);
-        if (parsed.length > 5) {
-          players = parsed;
-          source = 'The Odds API';
-        }
-      } catch (e) {
-        console.warn('[Odds] Odds API parse error:', e);
+        if (parsed.length > 5) { players = parsed; source = 'The Odds API'; }
+      } catch (e) { console.warn('[Odds] Odds API parse error:', e); }
+    }
+  }
+
+  // ── Source 2: DraftKings — try all known URL patterns ────────────────────
+  if (players.length === 0) {
+    for (const url of DRAFTKINGS_URLS) {
+      const result = await tryFetch(url, `DraftKings (${url.split('/').slice(-2).join('/')})`);
+      if (result) {
+        try {
+          const parsed = parseDraftKingsResponse(
+            result.data as Parameters<typeof parseDraftKingsResponse>[0],
+            tournamentId
+          );
+          if (parsed.length > 5) {
+            players = parsed;
+            source = 'DraftKings';
+            break;
+          }
+        } catch (e) { console.warn('[Odds] DK parse error:', e); }
       }
     }
   }
 
-  // ── Source 2: DraftKings public CDN ──────────────────────────────────────
+  // ── Source 3: ESPN field — guaranteed player list, no odds ────────────────
+  // This runs if ALL odds sources fail. Gives player names for draft even without odds.
   if (players.length === 0) {
-    const result = await tryFetch(DRAFTKINGS_GOLF_URL, 'DraftKings');
-    if (result) {
+    const tournament = TOURNAMENTS.find((t) => t.id === tournamentId);
+    const espnEventId = tournament?.espnEventId;
+    if (espnEventId) {
       try {
-        const parsed = parseDraftKingsResponse(result.data as Parameters<typeof parseDraftKingsResponse>[0]);
-        if (parsed.length > 5) {
-          players = parsed;
-          source = 'DraftKings';
+        const result = await fetchLeaderboardRaw(espnEventId);
+        if (result) {
+          const { players: espnPlayers } = parseLeaderboard(result.data as never);
+          const espnList = Object.values(espnPlayers);
+          if (espnList.length > 5) {
+            // Convert ESPN players to OddsPlayer format (no odds, just names)
+            players = espnList.map((p) => ({
+              id: p.id,
+              name: p.name,
+              espnName: p.name,
+              americanOdds: 9999,
+              impliedProb: 0,
+              oddsDisplay: 'N/A',
+              bookmaker: 'ESPN',
+            }));
+            source = 'ESPN Field (no odds available)';
+          }
         }
-      } catch (e) {
-        console.warn('[Odds] DraftKings parse error:', e);
-      }
+      } catch (e) { console.warn('[Odds] ESPN field fallback error:', e); }
     }
   }
 
-  // ── Source 3: DraftKings alternate endpoint ───────────────────────────────
+  // ── Source 4: Hardcoded static field (guaranteed — confirmed from official sources) ──
   if (players.length === 0) {
-    const result = await tryFetch(DRAFTKINGS_ALT_URL, 'DraftKings (alt)');
-    if (result) {
-      try {
-        const parsed = parseDraftKingsResponse(result.data as Parameters<typeof parseDraftKingsResponse>[0]);
-        if (parsed.length > 5) {
-          players = parsed;
-          source = 'DraftKings (alt)';
-        }
-      } catch (e) {
-        console.warn('[Odds] DraftKings alt parse error:', e);
-      }
+    const staticField = STATIC_FIELDS[tournamentId];
+    if (staticField && staticField.length > 0) {
+      players = staticField.map((name) => ({
+        id: name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+        name,
+        espnName: name,
+        americanOdds: 9999,
+        impliedProb: 0,
+        oddsDisplay: 'N/A',
+        bookmaker: 'Field List',
+      }));
+      source = 'Static Field (no odds — APIs unavailable)';
     }
   }
 
-  // ── Stale cache fallback ──────────────────────────────────────────────────
+  // ── Stale cache ────────────────────────────────────────────────────────────
   if (players.length === 0) {
-    const stale = oddsCache.get(cacheKey);
+    const stale = oddsCache.get(tournamentId);
     if (stale) {
       return NextResponse.json(
         { players: stale.players, source: stale.source, cached: true, stale: true },
@@ -117,13 +144,12 @@ export async function GET(req: NextRequest) {
       );
     }
     return NextResponse.json(
-      { error: 'No odds data available from any source.', players: [] },
+      { error: 'No player data available from any source', players: [] },
       { status: 503 }
     );
   }
 
-  // Cache and return
-  oddsCache.set(cacheKey, { players, fetchedAt: Date.now(), source });
+  oddsCache.set(tournamentId, { players, fetchedAt: Date.now(), source });
   return NextResponse.json(
     { players, source, cached: false },
     { headers: { 'X-Cache': 'MISS', 'X-Source': source } }

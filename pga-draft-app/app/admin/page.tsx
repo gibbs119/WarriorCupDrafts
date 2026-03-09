@@ -8,6 +8,7 @@ import Navigation from '@/components/Navigation';
 import {
   getAllTournaments, updateTournament, initializeDraft,
   getAllUsers, getDraftState, getDraftOrderFromResults, saveRankedOrder,
+  resetDraft, clearDraftPicks,
 } from '@/lib/db';
 import { buildSnakeDraftOrder, calculateLeaderboard } from '@/lib/scoring';
 import { parseLeaderboard } from '@/lib/espn';
@@ -119,6 +120,38 @@ export default function AdminPage() {
       }
     } catch {
       setMsg('❌ Failed to load previous results.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+
+  // ── Reset entire draft (wipes all picks + sets back to upcoming) ──────────
+  async function handleResetDraft(t: Tournament) {
+    if (!confirm(`⚠️ RESET ENTIRE DRAFT for ${t.name}?\n\nThis will DELETE all picks and set the tournament back to Upcoming. This cannot be undone.`)) return;
+    setSaving(true);
+    setMsg('Resetting draft…');
+    try {
+      await resetDraft(t.id);
+      setTournaments((prev) => prev.map((x) => x.id === t.id ? { ...x, status: 'upcoming', draftComplete: false } : x));
+      setMsg(`✅ Draft reset for ${t.name}. You can now re-launch.`);
+    } catch {
+      setMsg('❌ Reset failed.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // ── Clear picks only (keeps draft room open, resets to pick #1) ───────────
+  async function handleClearPicks(t: Tournament) {
+    if (!confirm(`Clear all picks for ${t.name}?\n\nThe draft room stays open but everyone starts over from pick #1.`)) return;
+    setSaving(true);
+    setMsg('Clearing picks…');
+    try {
+      await clearDraftPicks(t.id);
+      setMsg(`✅ All picks cleared for ${t.name}. Draft room is still open — pick #1 is up.`);
+    } catch {
+      setMsg('❌ Clear picks failed.');
     } finally {
       setSaving(false);
     }
@@ -463,6 +496,22 @@ export default function AdminPage() {
                       <Link href={`/admin/rosters/${t.id}`} className="btn-secondary text-xs py-1.5 px-3">
                         👥 Rosters
                       </Link>
+
+                      {/* Reset controls — always visible */}
+                      {(t.status === 'drafting' || t.status === 'active') && (
+                        <button onClick={() => handleClearPicks(t)} disabled={saving}
+                          className="text-xs py-1.5 px-3 rounded-lg font-bold transition-all disabled:opacity-40"
+                          style={{ background: 'rgba(251,191,36,0.15)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.3)' }}>
+                          ↺ Clear Picks
+                        </button>
+                      )}
+                      {t.status !== 'upcoming' && (
+                        <button onClick={() => handleResetDraft(t)} disabled={saving}
+                          className="text-xs py-1.5 px-3 rounded-lg font-bold transition-all disabled:opacity-40"
+                          style={{ background: 'rgba(239,68,68,0.15)', color: '#f87171', border: '1px solid rgba(239,68,68,0.3)' }}>
+                          🗑 Full Reset
+                        </button>
+                      )}
                     </div>
                   </div>
 

@@ -346,3 +346,33 @@ export function subscribeRosterEdits(
   onValue(r, (snap) => callback(snap.exists() ? snap.val() : {}));
   return () => off(r);
 }
+
+// ─── Draft Reset (Admin) ──────────────────────────────────────────────────────
+
+/**
+ * Completely resets a draft — deletes picks, resets status to upcoming.
+ * Admin only. Allows re-opening the draft room from scratch.
+ */
+export async function resetDraft(tournamentId: string): Promise<void> {
+  const updates: Record<string, unknown> = {};
+  updates[`drafts/${tournamentId}`] = null;           // wipe all picks
+  updates[`tournaments/${tournamentId}/status`] = 'upcoming';
+  updates[`tournaments/${tournamentId}/draftComplete`] = false;
+  updates[`wdRequests/${tournamentId}`] = null;        // clear WD requests
+  updates[`rosterEdits/${tournamentId}`] = null;       // clear edit log
+  await update(ref(db), updates);
+}
+
+/**
+ * Resets only the picks but keeps the draft room open — useful to undo a bad pick.
+ */
+export async function clearDraftPicks(tournamentId: string): Promise<void> {
+  const snap = await get(ref(db, `drafts/${tournamentId}`));
+  if (!snap.exists()) return;
+  await update(ref(db, `drafts/${tournamentId}`), {
+    picks: [],
+    currentPickIndex: 0,
+    status: 'open',
+  });
+  await updateTournament(tournamentId, { draftComplete: false });
+}

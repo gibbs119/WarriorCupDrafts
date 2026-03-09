@@ -15,6 +15,7 @@ import {
   updateTournament,
 } from '@/lib/db';
 import { buildSnakeDraftOrder, getCurrentPicker } from '@/lib/scoring';
+import { STATIC_FIELDS } from '@/lib/constants';
 import { parseLeaderboard } from '@/lib/espn';
 import {
   buildEspnLookup,
@@ -123,40 +124,80 @@ export default function DraftRoomPage() {
 
   const fetchEspn = useCallback(async (espnEventId: string, bust = false) => {
     if (!espnEventId) return;
-    try {
-      const url = `/api/espn/leaderboard?eventId=${espnEventId}${bust ? '&bust=1' : ''}`;
-      const res = await fetch(url);
-      if (!res.ok) return;
-      const data = await res.json();
-      const { players: parsed, fieldSize, cutLine } = parseLeaderboard(data);
-      if (Object.keys(parsed).length > 0) {
-        setEspnPlayers(parsed);
-        setEspnSource(res.headers.get('X-Cache-Source') ?? 'ESPN');
-        if (tournament && fieldSize > 0 && fieldSize !== tournament.fieldSize) {
-          const maxPicks = fieldSize >= 100 ? 5 : 4;
-          await updateTournament(tournamentId, { fieldSize, maxPicks, cutLine });
-          setTournament((prev) => prev ? { ...prev, fieldSize, maxPicks, cutLine } : prev);
+
+    // Try leaderboard first (has scores), fall back to field endpoint (pre-tournament)
+    const urls = [
+      `/api/espn/leaderboard?eventId=${espnEventId}${bust ? '&bust=1' : ''}`,
+      `/api/espn/field?eventId=${espnEventId}`,
+    ];
+
+    for (const url of urls) {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) continue;
+        const data = await res.json();
+        const { players: parsed, fieldSize, cutLine } = parseLeaderboard(data);
+        if (Object.keys(parsed).length > 0) {
+          setEspnPlayers(parsed);
+          setEspnSource(url.includes('leaderboard') ? 'ESPN Leaderboard' : 'ESPN Field');
+          if (tournament && fieldSize > 0 && fieldSize !== tournament.fieldSize) {
+            const maxPicks = fieldSize >= 100 ? 5 : 4;
+            await updateTournament(tournamentId, { fieldSize, maxPicks, cutLine });
+            setTournament((prev) => prev ? { ...prev, fieldSize, maxPicks, cutLine } : prev);
+          }
+          await savePlayers(tournamentId, parsed);
+          return; // success — stop trying
         }
-        await savePlayers(tournamentId, parsed);
+      } catch (e) {
+        console.warn('[DraftRoom] ESPN fetch attempt failed:', url, e);
       }
-    } catch (e) {
-      console.error('[DraftRoom] ESPN fetch failed:', e);
     }
+    console.error('[DraftRoom] All ESPN fetch attempts failed for eventId:', espnEventId);
   }, [tournament, tournamentId]);
 
-  // Polling
+  // Immediately seed player list from static field so draft room is never empty.
+  // APIs will overwrite this with real odds/ESPN data as they load.
   useEffect(() => {
-    fetchOdds();
-    const i = setInterval(() => fetchOdds(), ODDS_REFRESH_MS);
-    return () => clearInterval(i);
-  }, [fetchOdds]);
+    const staticPlayers = STATIC_FIELDS[tournamentId];
+    if (!staticPlayers || staticPlayers.length === 0) return;
+    // Only seed if we don't already have real data
+    setMergedPlayers((prev) => {
+      if (prev.length > 0) return prev;
+      return staticPlayers.map((name) => ({
+        id: name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+        displayName: name,
+        espnId: null,
+        espnName: name,
+        oddsDisplay: null,
+        americanOdds: null,
+        impliedProb: null,
+        oddsSource: null,
+        position: null,
+        positionDisplay: '-',
+        score: '-',
+        thru: '-',
+        status: 'active' as const,
+        source: 'odds' as const,
+      }));
+    });
+  }, [tournamentId]);
 
+  // Polling — ESPN field loads FIRST (ensures ESPN IDs are ready for picks)
+  // This is critical: if ESPN loads before odds, picks get saved with ESPN numeric IDs
+  // which guarantees scoring works correctly during the tournament.
   useEffect(() => {
     if (!tournament?.espnEventId) return;
-    fetchEspn(tournament.espnEventId);
+    fetchEspn(tournament.espnEventId); // immediate
     const i = setInterval(() => fetchEspn(tournament.espnEventId), ESPN_REFRESH_MS);
     return () => clearInterval(i);
   }, [tournament?.espnEventId, fetchEspn]);
+
+  useEffect(() => {
+    // Slight delay so ESPN has a chance to load first
+    const t = setTimeout(() => fetchOdds(), 500);
+    const i = setInterval(() => fetchOdds(), ODDS_REFRESH_MS);
+    return () => { clearTimeout(t); clearInterval(i); };
+  }, [fetchOdds]);
 
   // ─── Merge odds + ESPN into unified player list ─────────────────────────────
 
@@ -226,6 +267,9 @@ export default function DraftRoomPage() {
       </div>
     );
   }
+
+  // Show a clear warning if player pool is empty (API issues)
+  const playerPoolEmpty = mergedPlayers.length === 0;
 
   const snakeOrder = draftState?.snakeDraftOrder ??
     buildSnakeDraftOrder(tournament.draftOrder, tournament.maxPicks * tournament.draftOrder.length);
@@ -437,9 +481,16 @@ export default function DraftRoomPage() {
           <div className="lg:col-span-2">
             <div className="card">
               <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-                <h2 className="font-bold text-white">
+                <h2 className="font-bold text-white flex items-center gap-2">
                   Available Players
-                  <span className="text-slate-500 font-normal text-sm ml-2">({available.length})</span>
+                  <span className="text-slate-500 font-normal text-sm">({available.length})</span>
+                  <button
+                    onClick={() => { fetchOdds(true); if (tournament.espnEventId) fetchEspn(tournament.espnEventId, true); }}
+                    title="Refresh player pool"
+                    className="text-slate-500 hover:text-white text-xs px-1.5 py-0.5 rounded transition-colors"
+                    style={{ background: 'rgba(255,255,255,0.06)' }}>
+                    🔄
+                  </button>
                 </h2>
 
                 {/* Sort tabs */}
@@ -464,23 +515,38 @@ export default function DraftRoomPage() {
                 placeholder="Search players…"
                 className="input mb-3" />
 
-              {/* Name match warning if ESPN field not yet loaded */}
+              {/* Data source status banner */}
               {hasOdds && !hasEspnField && (
-                <div className="mb-3 text-xs text-yellow-600/80 bg-yellow-900/20 border border-yellow-800/40 rounded-lg px-3 py-2">
-                  ⚠ ESPN field not yet available — picks will be matched to ESPN names automatically once the field is confirmed. Odds-based names are displayed for now.
+                <div className="mb-3 text-xs bg-yellow-900/20 border border-yellow-800/40 rounded-lg px-3 py-2 flex items-center justify-between gap-2">
+                  <span className="text-yellow-400">⚠ ESPN field loading — picks may use name keys instead of ESPN IDs. Scoring will still work via name matching.</span>
+                  <button onClick={() => tournament?.espnEventId && fetchEspn(tournament.espnEventId, true)}
+                    className="shrink-0 text-yellow-300 underline">Retry ESPN</button>
+                </div>
+              )}
+              {hasEspnField && (
+                <div className="mb-2 text-xs text-green-600/70 flex items-center gap-1">
+                  ✓ ESPN field loaded — picks linked to ESPN IDs (scoring guaranteed)
+                  {oddsSource && <span className="text-slate-600 ml-1">· Odds: {oddsSource}</span>}
                 </div>
               )}
 
               {/* Empty state */}
               {!hasOdds && !hasEspnField ? (
-                <div className="text-center py-12 text-slate-500">
-                  <p className="text-2xl mb-2">⛳</p>
-                  <p className="font-medium text-slate-400">Loading player data…</p>
-                  <p className="text-xs mt-1">
-                    {tournament.espnEventId
-                      ? 'Fetching from ESPN + betting odds sources'
-                      : 'Fetching betting odds — set ESPN Event ID in Admin when available'}
-                  </p>
+                <div className="text-center py-8 text-slate-500">
+                  <p className="text-3xl mb-3">⛳</p>
+                  <p className="font-semibold text-slate-300 text-base mb-1">Player pool loading…</p>
+                  {tournament.espnEventId ? (
+                    <p className="text-xs text-slate-400 mb-4">ESPN ID: <span className="font-mono text-green-400">{tournament.espnEventId}</span> — fetching field from ESPN</p>
+                  ) : (
+                    <p className="text-xs text-red-400 mb-4">⚠ No ESPN Event ID set — ask Gibbs to set it in Admin</p>
+                  )}
+                  <button
+                    onClick={() => { fetchOdds(true); if (tournament.espnEventId) fetchEspn(tournament.espnEventId, true); }}
+                    className="px-4 py-2 rounded-lg text-sm font-bold"
+                    style={{ background: '#1B3A9E', color: 'white' }}>
+                    🔄 Retry Loading Players
+                  </button>
+                  <p className="text-xs text-slate-600 mt-3">If this keeps failing, Gibbs can reload the page</p>
                 </div>
               ) : (
                 <div className="overflow-y-auto max-h-[30rem] pr-1">
