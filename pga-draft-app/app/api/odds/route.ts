@@ -7,7 +7,7 @@ import {
   type OddsPlayer,
 } from '@/lib/odds';
 import { fetchLeaderboardRaw, parseLeaderboard } from '@/lib/espn';
-import { TOURNAMENTS, STATIC_FIELDS } from '@/lib/constants';
+import { TOURNAMENTS, STATIC_FIELDS, STATIC_ODDS } from '@/lib/constants';
 
 // ─── Server-side cache ────────────────────────────────────────────────────────
 interface CacheEntry { players: OddsPlayer[]; fetchedAt: number; source: string }
@@ -56,6 +56,28 @@ export async function GET(req: NextRequest) {
   const apiKey = process.env.NEXT_PUBLIC_ODDS_API_KEY ?? process.env.ODDS_API_KEY ?? '';
   let players: OddsPlayer[] = [];
   let source = '';
+
+  // ── Source 0: Hardcoded static odds (instant, no API needed) ─────────────
+  // Always seeds the cache with real odds so draft room is never empty.
+  // Live API sources below will overwrite this if they succeed.
+  const staticOddsData = STATIC_ODDS[tournamentId];
+  if (staticOddsData && staticOddsData.length > 0) {
+    players = staticOddsData.map(([name, americanOdds]) => {
+      const impliedProb = americanOdds > 0
+        ? parseFloat((100 / (americanOdds + 100) * 100).toFixed(1))
+        : parseFloat((Math.abs(americanOdds) / (Math.abs(americanOdds) + 100) * 100).toFixed(1));
+      return {
+        id: name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+        name,
+        espnName: name,
+        americanOdds,
+        impliedProb,
+        oddsDisplay: americanOdds > 0 ? `+${americanOdds}` : `${americanOdds}`,
+        bookmaker: 'DraftKings (static)',
+      };
+    });
+    source = 'DraftKings (static)';
+  }
 
   // ── Source 1: The Odds API (needs key, most reliable) ────────────────────
   if (apiKey) {
