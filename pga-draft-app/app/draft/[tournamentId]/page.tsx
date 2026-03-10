@@ -101,6 +101,7 @@ export default function DraftRoomPage() {
   const [statusMsg, setStatusMsg] = useState('');
   const [myTurnAlert, setMyTurnAlert] = useState(false);   // in-tab banner
   const prevPickerUidRef = useRef<string | null>(null);     // track picker changes
+  const snakeOrderRef = useRef<string[]>([]);                  // always-current snake order
 
   // Auth guard
   useEffect(() => {
@@ -208,8 +209,9 @@ export default function DraftRoomPage() {
 
   // ── In-tab alert + push trigger when it becomes your turn ────────────────
   useEffect(() => {
-    if (!draftState || !appUser || !snakeOrder) return;
-    const currentUid = getCurrentPicker(snakeOrder, draftState.currentPickIndex);
+    const order = snakeOrderRef.current;
+    if (!draftState || !appUser || order.length === 0) return;
+    const currentUid = getCurrentPicker(order, draftState.currentPickIndex);
     const prevUid = prevPickerUidRef.current;
 
     // Only fire when picker actually changes (not on first load)
@@ -220,8 +222,7 @@ export default function DraftRoomPage() {
         // Play a chime using Web Audio API (no file needed)
         playChime();
         // Page title flash
-        document.title = "⛳ YOUR PICK! — PGA Draft";
-        setTimeout(() => { document.title = "PGA Draft League"; }, 8000);
+        try { document.title = "⛳ YOUR PICK! — PGA Draft"; setTimeout(() => { document.title = "PGA Draft League"; }, 8000); } catch {}
       } else {
         setMyTurnAlert(false);
       }
@@ -322,6 +323,8 @@ export default function DraftRoomPage() {
 
   const snakeOrder = draftState?.snakeDraftOrder ??
     buildSnakeDraftOrder(tournament.draftOrder, tournament.maxPicks * tournament.draftOrder.length);
+  // Keep ref in sync so the useEffect always has the latest value without stale closure
+  snakeOrderRef.current = snakeOrder;
   const currentPickerUid = draftState ? getCurrentPicker(snakeOrder, draftState.currentPickIndex) : null;
   const isMyTurn = currentPickerUid === appUser.uid;
   const draftComplete = draftState?.status === 'complete' || tournament.draftComplete;
