@@ -246,3 +246,9 @@ button, .btn-primary, .btn-gold, .btn-secondary, .btn-danger {
 /* ─── Glow effects ───────────────────────────────────────────────────────── */
 .glow-gold  { box-shadow: 0 0 40px rgba(201,162,39,0.25), 0 4px 24px rgba(0,0,0,0.5); }
 .glow-royal { box-shadow: 0 0 24px rgba(0,107,182,0.35), 0 2px 12px rgba(0,0,0,0.4); }
+
+/* ─── Your-turn alert pulse ──────────────────────────────────────────────── */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.82; }
+}

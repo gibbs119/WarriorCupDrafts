@@ -57,6 +57,27 @@ interface DraftPlayer {
 
 type SortMode = 'odds' | 'position' | 'name';
 
+// Play a short chime using Web Audio API — no audio file needed
+function playChime() {
+  try {
+    const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+    const notes = [523.25, 659.25, 783.99]; // C5, E5, G5
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0, ctx.currentTime + i * 0.18);
+      gain.gain.linearRampToValueAtTime(0.3, ctx.currentTime + i * 0.18 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.18 + 0.4);
+      osc.start(ctx.currentTime + i * 0.18);
+      osc.stop(ctx.currentTime + i * 0.18 + 0.45);
+    });
+  } catch {}
+}
+
 export default function DraftRoomPage() {
   const { tournamentId } = useParams<{ tournamentId: string }>();
   const { appUser, loading } = useAuth();
@@ -78,11 +99,14 @@ export default function DraftRoomPage() {
   const [sortMode, setSortMode] = useState<SortMode>('odds');
   const [pickLoading, setPickLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
+  const [myTurnAlert, setMyTurnAlert] = useState(false);   // in-tab banner
+  const prevPickerUidRef = useRef<string | null>(null);     // track picker changes
 
   // Auth guard
   useEffect(() => {
     if (!loading && !appUser) router.push('/');
   }, [loading, appUser, router]);
+
 
   // Load tournament + users
   useEffect(() => {
@@ -181,6 +205,31 @@ export default function DraftRoomPage() {
       }));
     });
   }, [tournamentId]);
+
+  // ── In-tab alert + push trigger when it becomes your turn ────────────────
+  useEffect(() => {
+    if (!draftState || !appUser || !snakeOrder) return;
+    const currentUid = getCurrentPicker(snakeOrder, draftState.currentPickIndex);
+    const prevUid = prevPickerUidRef.current;
+
+    // Only fire when picker actually changes (not on first load)
+    if (prevUid !== null && currentUid !== prevUid) {
+      if (currentUid === appUser.uid) {
+        // ── It's MY turn ──
+        setMyTurnAlert(true);
+        // Play a chime using Web Audio API (no file needed)
+        playChime();
+        // Page title flash
+        document.title = "⛳ YOUR PICK! — PGA Draft";
+        setTimeout(() => { document.title = "PGA Draft League"; }, 8000);
+      } else {
+        setMyTurnAlert(false);
+      }
+    }
+
+    prevPickerUidRef.current = currentUid;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftState?.currentPickIndex]);
 
   // Polling — ESPN field loads FIRST (ensures ESPN IDs are ready for picks)
   // This is critical: if ESPN loads before odds, picks get saved with ESPN numeric IDs
@@ -349,6 +398,19 @@ export default function DraftRoomPage() {
   return (
     <div className="min-h-screen page">
       <Navigation />
+
+      {/* ── "Your turn" alert banner — pulses gold, tap to dismiss ── */}
+      {myTurnAlert && (
+        <div
+          className="sticky top-0 z-40 flex items-center justify-between gap-3 px-4 py-3 text-sm font-bold cursor-pointer"
+          style={{ background: 'linear-gradient(90deg, #A07A14, #C9A227, #D4B040, #C9A227, #A07A14)', color: '#030912', animation: 'pulse 1.5s ease-in-out infinite' }}
+          onClick={() => setMyTurnAlert(false)}
+        >
+          <span>⛳ &nbsp;IT'S YOUR PICK — You're on the clock!</span>
+          <span className="text-base opacity-70">✕</span>
+        </div>
+      )}
+
       <main className="max-w-6xl mx-auto px-4 py-6">
 
         {/* Header */}
