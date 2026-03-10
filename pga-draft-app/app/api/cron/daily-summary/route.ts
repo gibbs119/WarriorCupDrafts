@@ -1,0 +1,217 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { ref, get, set } from 'firebase/database';
+import { db } from '@/lib/firebase';
+import { TOP_10_POINTS } from '@/lib/constants';
+
+// Cron: runs at 8 PM ET every day (0 0 * * * = midnight UTC = 8 PM ET)
+// Generates a daily AI summary of tournament activity and stores it in Firebase.
+// Users see it as a modal the next time they open the app.
+
+export async function GET(req: NextRequest) {
+  // Verify cron secret
+  const auth = req.headers.get('authorization');
+  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  return generateSummary();
+}
+
+// Also allow admin to trigger manually
+export async function POST(req: NextRequest) {
+  const { secret, tournamentId } = await req.json();
+  if (secret !== process.env.CRON_SECRET && secret !== process.env.NEXT_PUBLIC_ADMIN_SEED_SECRET) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  return generateSummary(tournamentId);
+}
+
+async function generateSummary(forceTournamentId?: string) {
+  try {
+    // Find the currently active tournament
+    const tournamentsSnap = await get(ref(db, 'tournaments'));
+    if (!tournamentsSnap.exists()) return NextResponse.json({ error: 'No tournaments' });
+
+    const tournaments = Object.values(tournamentsSnap.val()) as Array<{
+      id: string; name: string; status: string; cutLine: number; maxPicks: number;
+    }>;
+
+    const activeTournament = forceTournamentId
+      ? tournaments.find((t) => t.id === forceTournamentId)
+      : tournaments.find((t) => t.status === 'active');
+
+    if (!activeTournament) {
+      return NextResponse.json({ skipped: true, reason: 'No active tournament' });
+    }
+
+    const tournamentId = activeTournament.id;
+    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+
+    // Check if we already generated today's summary
+    const existingSnap = await get(ref(db, `dailySummaries/${tournamentId}/${today}`));
+    if (existingSnap.exists() && !forceTournamentId) {
+      return NextResponse.json({ skipped: true, reason: 'Already generated today' });
+    }
+
+    // Load all the data we need
+    const [draftSnap, usersSnap, playersSnap] = await Promise.all([
+      get(ref(db, `drafts/${tournamentId}`)),
+      get(ref(db, 'users')),
+      get(ref(db, `players/${tournamentId}`)),
+    ]);
+
+    if (!draftSnap.exists()) return NextResponse.json({ error: 'No draft' });
+
+    const draftState = draftSnap.val();
+    const users = usersSnap.exists()
+      ? (Object.values(usersSnap.val()) as Array<{ uid: string; username: string }>)
+      : [];
+    const playersMap = playersSnap.exists() ? playersSnap.val() : {};
+
+    const picks = draftState.picks ?? [];
+    const cutLine = activeTournament.cutLine;
+
+    // Build team summaries with live scores
+    interface PlayerEntry {
+      name: string;
+      position: string;
+      score: string;
+      thru: string;
+      status: string;
+      points: number;
+    }
+
+    interface TeamEntry {
+      username: string;
+      players: PlayerEntry[];
+      top3Score: number;
+      rank: number;
+    }
+
+    const teams: TeamEntry[] = [];
+
+    for (const user of users) {
+      const myPicks = picks.filter((p: { userId: string }) => p.userId === user.uid);
+      if (myPicks.length === 0) continue;
+
+      const players: PlayerEntry[] = myPicks.map((p: { playerName: string; playerId: string }) => {
+        const pd = playersMap[p.playerId] ?? playersMap[p.playerName] ?? {};
+        const position = typeof pd.position === 'number' ? pd.position : null;
+        const status = pd.status ?? 'active';
+
+        let points = 9999;
+        if (status === 'cut' || status === 'wd' || status === 'dq') {
+          points = cutLine + 1;
+        } else if (position !== null && position > 0) {
+          points = position <= 10 ? TOP_10_POINTS[position - 1] : position;
+        }
+
+        return {
+          name: p.playerName,
+          position: pd.positionDisplay ?? '-',
+          score: pd.score ?? '-',
+          thru: pd.thru ?? '-',
+          status,
+          points,
+        };
+      });
+
+      const sorted = [...players].sort((a, b) => a.points - b.points);
+      const top3 = sorted.slice(0, 3);
+      const top3Score = top3.reduce((sum, p) => sum + (p.points < 9000 ? p.points : 0), 0);
+
+      teams.push({ username: user.username, players, top3Score, rank: 0 });
+    }
+
+    // Rank teams
+    teams.sort((a, b) => a.top3Score - b.top3Score);
+    teams.forEach((t, i) => { t.rank = i + 1; });
+
+    const totalTeams = teams.length;
+    const teamsBlock = teams.map((t) => {
+      const playerLines = t.players.map((p) => {
+        const pts = p.points >= 9000 ? 'NS' : (p.points > 0 ? `+${p.points}` : `${p.points}`);
+        return `    ${p.name}: Pos ${p.position}, Score ${p.score}, Thru ${p.thru}${p.status !== 'active' ? ` [${p.status.toUpperCase()}]` : ''}, Pts: ${pts}`;
+      }).join('\n');
+      return `#${t.rank} ${t.username} (Team Score: ${t.top3Score > 0 ? '+' : ''}${t.top3Score}):\n${playerLines}`;
+    }).join('\n\n');
+
+    const dayNum = Math.ceil((Date.now() - new Date('2026-03-12').getTime()) / 86400000);
+    const dayLabel = dayNum <= 1 ? 'Round 1' : dayNum <= 2 ? 'Round 2' : dayNum <= 3 ? 'Round 3' : 'Final Round';
+
+    const prompt = `You are a hilariously snarky but genuinely insightful fantasy golf analyst recapping ${dayLabel} of ${activeTournament.name} for a private fantasy draft league of friends. Be funny, use sports banter, roast the losers, hype the leaders, and make specific observations about players' actual rounds. Keep it punchy and fun — like a group chat message from the most golf-obsessed person you know.
+
+The league has ${totalTeams} teams. Best 3 of ${activeTournament.maxPicks} drafted players count toward team score. Lower score is better (golf scoring). Top 10 point bonuses: ${TOP_10_POINTS.map((p, i) => `${i + 1}: ${p}`).join(', ')}. Position 11+: points = position number. Cut/WD = cut line + 1.
+
+Here are the current standings after ${dayLabel}:
+
+${teamsBlock}
+
+Write a daily summary with THREE sections:
+
+1. **STANDINGS BREAKDOWN** (~3-4 sentences): Roast the cellar dwellers, hype the leaders, and give specific commentary about what happened today — whose picks came alive, who got burned.
+
+2. **HERO & ZERO OF THE DAY** (2 sentences each): Name the single best-performing drafted player across all teams ("Hero") and the biggest disappointment ("Zero"). Be dramatic about it.
+
+3. **TOURNAMENT OUTLOOK** (~2-3 sentences): Based on where things stand, who's got a realistic path to win and who should start planning their concession speech. Make it fun.
+
+Use actual player names and usernames from the data. Be creative, be funny, don't hold back on the roasting. But make it feel genuine — real analysis wrapped in a joke.
+
+Respond ONLY with valid JSON — no markdown, no backticks:
+{
+  "dayLabel": "${dayLabel}",
+  "standingsBreakdown": "...",
+  "heroName": "...",
+  "heroTeam": "...",
+  "heroSummary": "...",
+  "zeroName": "...",
+  "zeroTeam": "...",
+  "zeroSummary": "...",
+  "outlook": "..."
+}`;
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1500,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
+
+    if (!response.ok) {
+      const err = await response.text();
+      console.error('[daily-summary] Claude API error:', err);
+      return NextResponse.json({ error: 'AI generation failed' }, { status: 500 });
+    }
+
+    const aiData = await response.json();
+    const text = aiData.content?.[0]?.text ?? '';
+
+    let summaryContent: Record<string, string>;
+    try {
+      const clean = text.replace(/```json|```/g, '').trim();
+      summaryContent = JSON.parse(clean);
+    } catch {
+      console.error('[daily-summary] JSON parse failed:', text);
+      return NextResponse.json({ error: 'AI returned invalid JSON' }, { status: 500 });
+    }
+
+    const summary = {
+      ...summaryContent,
+      tournamentId,
+      tournamentName: activeTournament.name,
+      date: today,
+      generatedAt: Date.now(),
+      seen: {},  // tracks which users have dismissed it
+    };
+
+    await set(ref(db, `dailySummaries/${tournamentId}/${today}`), summary);
+
+    return NextResponse.json({ ok: true, date: today, summary });
+  } catch (err) {
+    console.error('[daily-summary]', err);
+    return NextResponse.json({ error: 'Internal error' }, { status: 500 });
+  }
+}

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { getAllTournaments } from '@/lib/db';
 import Navigation from '@/components/Navigation';
+import DailySummaryModal from '@/components/DailySummaryModal';
 import TournamentCard from '@/components/TournamentCard';
 import WarriorsLogo from '@/components/WarriorsLogo';
 import type { Tournament } from '@/lib/types';
@@ -56,6 +57,7 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen page">
       <Navigation />
+      <DailySummaryModal tournamentId={activeTournament?.id ?? null} />
 
       {/* Page-level glow */}
       <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[900px] h-64 pointer-events-none"

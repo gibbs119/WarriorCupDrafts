@@ -10,9 +10,8 @@ import {
   subscribeMyWDRequests,
   submitWDRequest,
 } from '@/lib/db';
-import { playerKey } from '@/lib/odds';
+import { playerKey, type OddsPlayer } from '@/lib/odds';
 import type { Tournament, DraftState, DraftPick, WDReplacement } from '@/lib/types';
-import type { OddsPlayer } from '@/lib/odds';
 import { AlertTriangle, CheckCircle, Clock, XCircle, ArrowRight, RefreshCw } from 'lucide-react';
 
 export default function WDReplacementPage() {
