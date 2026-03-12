@@ -461,6 +461,35 @@ export default function AdminPage() {
 
                     <div className="flex gap-2 flex-wrap justify-end shrink-0">
                       {/* Edit is always available */}
+                      <button onClick={() => startEdit(t)} className="btn-secondary text-xs py-1.5 px-3">
+                        ✏️ Edit
+                      </button>
+
+                      {/* Open Draft — only when upcoming AND draft order set */}
+                      {t.status === 'upcoming' && t.draftOrder?.length > 0 && (
+                        <button onClick={() => openDraft(t)} disabled={saving}
+                          className="text-xs py-1.5 px-3 rounded-lg font-bold transition-all disabled:opacity-40"
+                          style={{ background: '#C9A227', color: '#0D1F38' }}>
+                          Open Draft
+                        </button>
+                      )}
+
+                      {/* Status transitions */}
+                      {t.status === 'drafting' && (
+                        <button onClick={() => setTournamentStatus(t, 'active')} disabled={saving}
+                          className="btn-primary text-xs py-1.5 px-3">Set Live</button>
+                      )}
+                      {t.status === 'active' && (
+                        <>
+                          <button onClick={() => lockTournamentScores(t)} disabled={saving}
+                            className="text-xs py-1.5 px-3 rounded-lg font-bold disabled:opacity-40"
+                            style={{ background: '#C9A227', color: '#0D1F38' }}>
+                            🔒 Lock Scores
+                          </button>
+                          <button onClick={() => markFinal(t)} disabled={saving}
+                            className="btn-secondary text-xs py-1.5 px-3 disabled:opacity-50">
+                            Mark Final
+                          </button>
                         </>
                       )}
 
