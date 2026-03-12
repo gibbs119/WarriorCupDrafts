@@ -9,6 +9,8 @@ import {
   getDraftState,
   getAllUsers,
   savePlayers,
+  saveRoundPositionSnapshot,
+  getRoundPositionSnapshot,
 } from '@/lib/db';
 import { calculateLeaderboard } from '@/lib/scoring';
 import { parseLeaderboard } from '@/lib/espn';
@@ -90,6 +92,15 @@ function ScoreRow({
                   <span className="font-bold" style={{ color: ptsColor(p.points) }}>
                     {p.positionDisplay !== '-' ? p.positionDisplay : '—'}
                   </span>
+                  {/* tiny position change indicator in board view */}
+                  {p.positionChange !== null && p.currentRound > 1 && (
+                    <span style={{
+                      color: p.positionChange > 0 ? '#34d399' : p.positionChange < 0 ? '#f87171' : '#64748b',
+                      fontSize: '9px',
+                    }}>
+                      {p.positionChange > 0 ? '▲' : p.positionChange < 0 ? '▼' : ''}
+                    </span>
+                  )}
                   <span className="text-slate-500">{p.playerName.split(' ').pop()}</span>
                   {i < top3.length - 1 && <span className="text-slate-700">·</span>}
                 </span>
@@ -174,14 +185,28 @@ function DetailPanel({ team, isMe, cutLine }: { team: TeamScore; isMe: boolean; 
               </div>
             )}
 
-            {/* Position */}
-            <div className="text-right shrink-0 w-12">
-              <div className="text-sm font-bold" style={{ color: posColor }}>
-                {pending ? '—'
-                  : p.status === 'cut' ? 'CUT'
-                  : p.status === 'wd' ? 'WD'
-                  : p.status === 'dq' ? 'DQ'
-                  : p.positionDisplay || '—'}
+            {/* Position + change arrow */}
+            <div className="text-right shrink-0 w-16">
+              <div className="flex items-center justify-end gap-1">
+                <div className="text-sm font-bold" style={{ color: posColor }}>
+                  {pending ? '—'
+                    : p.status === 'cut' ? 'CUT'
+                    : p.status === 'wd' ? 'WD'
+                    : p.status === 'dq' ? 'DQ'
+                    : p.positionDisplay || '—'}
+                </div>
+                {/* Position change arrow — only show in round 2+ when we have data */}
+                {!pending && p.positionChange !== null && p.currentRound > 1 && (
+                  <span className="text-xs font-bold" style={{
+                    color: p.positionChange > 0 ? '#34d399'   // green = moved up
+                         : p.positionChange < 0 ? '#f87171'   // red = moved down
+                         : '#64748b',                          // grey = same
+                  }}>
+                    {p.positionChange > 0 ? `▲${p.positionChange}`
+                   : p.positionChange < 0 ? `▼${Math.abs(p.positionChange)}`
+                   : '—'}
+                  </span>
+                )}
               </div>
               <div className="text-xs text-slate-600">pos</div>
             </div>
@@ -232,6 +257,9 @@ export default function LeaderboardPage() {
   const consecutiveFailures = useRef(0);
   const intervalRef         = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasScoresRef        = useRef(false);
+  const lastGoodUpdateRef   = useRef<Date | null>(null);
+  const [prevRoundPositions, setPrevRoundPositions] = useState<Record<string, number | null> | null>(null);
+  const detectedRoundRef    = useRef(1); // track highest round we've seen so far
 
   useEffect(() => {
     if (!loading && !appUser) router.push('/');
@@ -261,9 +289,14 @@ export default function LeaderboardPage() {
 
         if (!res.ok) {
           consecutiveFailures.current++;
-          const body = await res.json().catch(() => ({}));
-          setFetchError(body.error ?? 'Scores temporarily unavailable. Retrying automatically.');
-          setIsStale(teamScores.length > 0);
+          // Keep existing scores — just mark stale with the last good time
+          if (hasScoresRef.current) {
+            setIsStale(true);
+            setFetchError(null); // don't show error if we have data to show
+          } else {
+            const body = await res.json().catch(() => ({}));
+            setFetchError(body.error ?? 'Scores temporarily unavailable. Retrying…');
+          }
           return;
         }
 
@@ -272,8 +305,13 @@ export default function LeaderboardPage() {
 
         if (Object.keys(parsed).length === 0) {
           consecutiveFailures.current++;
-          setFetchError("No scores yet — tournament hasn't started.");
-          setIsStale(hasScoresRef.current);
+          if (hasScoresRef.current) {
+            // We have good data already — stay stale, keep showing last scores
+            setIsStale(true);
+            setFetchError(null);
+          } else {
+            setFetchError("No scores yet — tournament hasn't started.");
+          }
           return;
         }
 
@@ -303,16 +341,49 @@ export default function LeaderboardPage() {
           mergedMap[nameKey] = player;
         }
 
-        const scores = calculateLeaderboard(userPicksMap, mergedMap, cutLine ?? t.cutLine ?? 65);
+        // ── Round-change detection: auto-save R1 positions when R2 starts ──
+        // Look at all parsed players — find the highest current round number
+        const allPlayers = Object.values(parsed);
+        const maxRound = allPlayers.reduce((m, p) => Math.max(m, p.currentRound ?? 1), 1);
+
+        let currentPrevPositions = prevRoundPositions;
+
+        if (maxRound > detectedRoundRef.current) {
+          // A new round has started — save end-of-previous-round positions to Firebase
+          const prevRound = maxRound - 1;
+          const snapshot: Record<string, number | null> = {};
+          for (const [id, player] of Object.entries(parsed)) {
+            snapshot[id] = player.position;
+          }
+          await saveRoundPositionSnapshot(tournamentId, prevRound, snapshot);
+          detectedRoundRef.current = maxRound;
+          setPrevRoundPositions(snapshot);
+          currentPrevPositions = snapshot;
+        } else if (maxRound > 1 && currentPrevPositions === null) {
+          // Round 2+ but we don't have the snapshot in memory yet — fetch from Firebase
+          const snap = await getRoundPositionSnapshot(tournamentId, maxRound - 1);
+          if (snap) {
+            setPrevRoundPositions(snap);
+            currentPrevPositions = snap;
+          }
+        }
+
+        const scores = calculateLeaderboard(userPicksMap, mergedMap, cutLine ?? t.cutLine ?? 65, currentPrevPositions);
         setTeamScores(scores);
         hasScoresRef.current = true;
-        setLastUpdated(new Date());
+        const now = new Date();
+        setLastUpdated(now);
+        lastGoodUpdateRef.current = now;
         if (cacheAge && parseInt(cacheAge, 10) > 180) setIsStale(true);
       } catch (e) {
         consecutiveFailures.current++;
         console.error('Leaderboard refresh error:', e);
-        setFetchError('Network error. Retrying automatically.');
-        setIsStale(teamScores.length > 0);
+        if (hasScoresRef.current) {
+          setIsStale(true);
+          setFetchError(null);
+        } else {
+          setFetchError('Network error. Retrying automatically.');
+        }
       } finally {
         setRefreshing(false);
       }
@@ -392,7 +463,13 @@ export default function LeaderboardPage() {
         {/* Status banners */}
         {isStale && !fetchError && (
           <div className="mb-4 flex items-center gap-2 rounded-lg px-3 py-2 text-xs" style={{ background: 'rgba(234,179,8,0.07)', border: '1px solid rgba(234,179,8,0.18)', color: '#ca8a04' }}>
-            <AlertTriangle size={11} /> Showing last known scores — live data temporarily unavailable
+            <AlertTriangle size={11} />
+            Showing last known scores
+            {lastGoodUpdateRef.current && (
+              <span style={{ color: '#a16207' }}>
+                · last updated {lastGoodUpdateRef.current.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            )}
           </div>
         )}
         {fetchError && (

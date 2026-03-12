@@ -376,3 +376,30 @@ export async function clearDraftPicks(tournamentId: string): Promise<void> {
   });
   await updateTournament(tournamentId, { draftComplete: false });
 }
+
+// ─── Round Position Snapshots (for position change arrows in round 2+) ────────
+
+/**
+ * Save the end-of-round positions for all players.
+ * Called automatically when we detect a new round has begun.
+ * Stored at: roundPositions/{tournamentId}/round{N}  →  { playerId: position }
+ */
+export async function saveRoundPositionSnapshot(
+  tournamentId: string,
+  round: number,
+  positions: Record<string, number | null>
+): Promise<void> {
+  await set(ref(db, `roundPositions/${tournamentId}/round${round}`), positions);
+}
+
+/**
+ * Get the saved end-of-round positions for a given round.
+ * Returns null if no snapshot exists yet.
+ */
+export async function getRoundPositionSnapshot(
+  tournamentId: string,
+  round: number
+): Promise<Record<string, number | null> | null> {
+  const snap = await get(ref(db, `roundPositions/${tournamentId}/round${round}`));
+  return snap.exists() ? (snap.val() as Record<string, number | null>) : null;
+}

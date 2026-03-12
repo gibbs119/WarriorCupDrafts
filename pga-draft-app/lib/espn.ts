@@ -6,17 +6,18 @@ import type { Player } from './types';
 
 export function getLeaderboardEndpoints(eventId: string): string[] {
   return [
-    // ESPN Site API (primary — same domain your Excel sheet uses)
+    // ESPN Site API (primary)
     `https://site.api.espn.com/apis/site/v2/sports/golf/leaderboard?league=pga&event=${eventId}`,
-    // ESPN Web API (alternate domain — mirrors same data, different rate limit bucket)
+    // ESPN Web API (alternate domain — same data, different rate limit bucket)
     `https://site.web.api.espn.com/apis/site/v2/sports/golf/leaderboard?league=pga&event=${eventId}`,
-    // ESPN Core API (different path structure — used by ESPN app internals)
-    `https://sports.core.api.espn.com/v2/sports/golf/leagues/pga/events/${eventId}/competitions/${eventId}/competitors?limit=200&lang=en&region=us`,
-    // ESPN CDN scores endpoint (used by ESPN widget embeds — different infra)
+    // ESPN CDN scores endpoint (widget embeds — different infra)
     `https://cdn.espn.com/apis/site/v2/sports/golf/leaderboard?league=pga&event=${eventId}`,
     // ESPN fantasy/stats API (tertiary fallback)
     `https://site.api.espn.com/apis/fantasy/v2/games/flgolf/games?eventId=${eventId}&scoreSystemId=0`,
   ];
+  // NOTE: The ESPN Core API endpoint (sports.core.api.espn.com) is intentionally
+  // excluded — it returns only a field list with no scores/positions, causing
+  // all players to show as "Unknown / Not yet started" if the rotation lands on it.
 }
 
 // ─── Rotating fetch with retry + exponential backoff ─────────────────────────
@@ -59,14 +60,9 @@ export async function fetchLeaderboardRaw(eventId: string): Promise<{
 } | null> {
   const endpoints = getLeaderboardEndpoints(eventId);
 
-  // Rotate starting endpoint based on current minute so requests spread across sources
-  const rotationOffset = Math.floor(Date.now() / 60_000) % endpoints.length;
-  const rotated = [
-    ...endpoints.slice(rotationOffset),
-    ...endpoints.slice(0, rotationOffset),
-  ];
-
-  for (const url of rotated) {
+  // Always try primary endpoint first — only fall back if it actually fails.
+  // Rotating start points caused bad endpoints to be tried first and cached.
+  for (const url of endpoints) {
     // Try up to 2 quick attempts per endpoint before moving on
     for (let attempt = 0; attempt < 2; attempt++) {
       const res = await fetchWithRetry(url, attempt);
@@ -89,15 +85,16 @@ export async function fetchLeaderboardRaw(eventId: string): Promise<{
   return null;
 }
 
-/** Quick sanity check — does the response look like leaderboard data? */
+/** Quick sanity check — does the response look like real leaderboard data with players? */
 function isUsableLeaderboardData(data: unknown): boolean {
   if (!data || typeof data !== 'object') return false;
   const d = data as Record<string, unknown>;
-  // Standard ESPN leaderboard shape
-  if (Array.isArray(d.events) && (d.events as unknown[]).length > 0) return true;
-  // Core API competitor list shape
-  if (Array.isArray(d.items) && (d.items as unknown[]).length > 0) return true;
-  return false;
+  // Must be standard ESPN leaderboard shape with at least one competitor
+  if (!Array.isArray(d.events) || (d.events as unknown[]).length === 0) return false;
+  const events = d.events as Record<string, unknown>[];
+  const comp = (events[0]?.competitions as unknown[])?.[0] as Record<string, unknown> | undefined;
+  const competitors = comp?.competitors as unknown[] | undefined;
+  return Array.isArray(competitors) && competitors.length > 0;
 }
 
 // ─── Parse Leaderboard Response ──────────────────────────────────────────────
@@ -168,6 +165,9 @@ export function parseLeaderboard(data: ESPNLeaderboardResponse): {
       '-';
     const thruDisplay = thruRaw === '18' ? 'F' : (thruRaw === '0' || thruRaw === '' ? '-' : thruRaw);
 
+    // Current round number (ESPN period field: 1=R1, 2=R2, etc.)
+    const currentRound = typeof comp.status?.period === 'number' ? comp.status.period : 1;
+
     if (id) {
       players[id] = {
         id,
@@ -177,6 +177,7 @@ export function parseLeaderboard(data: ESPNLeaderboardResponse): {
         score: scoreVal,
         status,
         thru: thruDisplay,
+        currentRound,
       };
     }
   }

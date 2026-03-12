@@ -58,7 +58,8 @@ function buildNameLookup(playersMap: Record<string, Player>): Map<string, Player
 export function buildPlayerScores(
   picks: DraftPick[],
   playersMap: Record<string, Player>,
-  cutLine: number
+  cutLine: number,
+  prevRoundPositions: Record<string, number | null> | null = null
 ): PlayerScore[] {
   // Filter out admin-removed slots (sentinel value) before scoring
   const activePicks = picks.filter((p) => p.playerId !== '__removed__');
@@ -108,7 +109,6 @@ export function buildPlayerScores(
     }
 
     if (!player) {
-      // Player not found in leaderboard yet (pre-tournament)
       return {
         playerId: pick.playerId,
         playerName: pick.playerName,
@@ -118,10 +118,22 @@ export function buildPlayerScores(
         status: 'active' as const,
         countsInTop3: false,
         thru: '-',
+        positionChange: null,
+        currentRound: 1,
       };
     }
 
     const points = calculatePoints(player.position, player.status, cutLine);
+
+    // Position change vs end of previous round
+    let positionChange: number | null = null;
+    if (prevRoundPositions !== null && player.position !== null) {
+      const prevPos = prevRoundPositions[player.id] ?? prevRoundPositions[pick.playerId] ?? null;
+      if (prevPos !== null) {
+        // positive = improved (lower number = better position)
+        positionChange = prevPos - player.position;
+      }
+    }
 
     return {
       playerId: player.id,
@@ -132,6 +144,8 @@ export function buildPlayerScores(
       status: player.status,
       countsInTop3: false, // set below
       thru: player.thru,
+      positionChange,
+      currentRound: player.currentRound ?? 1,
     };
   });
 
@@ -151,11 +165,12 @@ export function buildPlayerScores(
 export function calculateLeaderboard(
   userPicksMap: Record<string, { username: string; picks: DraftPick[] }>,
   playersMap: Record<string, Player>,
-  cutLine: number
+  cutLine: number,
+  prevRoundPositions: Record<string, number | null> | null = null
 ): TeamScore[] {
   const teams: TeamScore[] = Object.entries(userPicksMap).map(
     ([userId, { username, picks }]) => {
-      const playerScores = buildPlayerScores(picks, playersMap, cutLine);
+      const playerScores = buildPlayerScores(picks, playersMap, cutLine, prevRoundPositions);
 
       const sorted = [...playerScores].sort((a, b) => a.points - b.points);
       const top3 = sorted.slice(0, SCORING_PLAYERS);

@@ -69,6 +69,8 @@ export interface PlayerScore {
   status: PlayerStatus;
   countsInTop3: boolean;
   thru: string;
+  positionChange: number | null;  // positive = moved up (better), negative = moved down, null = no data
+  currentRound: number;           // which round ESPN says they're in
 }
 
 export interface TeamScore {
