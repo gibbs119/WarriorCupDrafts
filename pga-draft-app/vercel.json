@@ -3,10 +3,6 @@
     {
       "path": "/api/cron/lock-scores",
       "schedule": "0 0 * * 2"
-    },
-    {
-      "path": "/api/cron/daily-summary",
-      "schedule": "0 0 * * *"
     }
   ]
 }

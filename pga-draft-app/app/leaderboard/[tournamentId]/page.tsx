@@ -14,8 +14,6 @@ import { calculateLeaderboard } from '@/lib/scoring';
 import { parseLeaderboard } from '@/lib/espn';
 import type { Tournament, TeamScore, AppUser, Player } from '@/lib/types';
 import { RefreshCw, Wifi, WifiOff, AlertTriangle, BarChart2, List } from 'lucide-react';
-import DraftGradesPanel from '@/components/DraftGradesPanel';
-import DailySummaryModal from '@/components/DailySummaryModal';
 
 const REFRESH_INTERVAL_NORMAL_MS = 60_000;
 const REFRESH_INTERVAL_BACKOFF_MS = 90_000;
@@ -350,7 +348,6 @@ export default function LeaderboardPage() {
   return (
     <div className="min-h-screen page">
       <Navigation />
-      <DailySummaryModal tournamentId={tournament?.id ?? null} />
       <main className="max-w-2xl mx-auto px-4 py-6">
 
         {/* ── Header ── */}
@@ -405,8 +402,6 @@ export default function LeaderboardPage() {
         )}
 
         {/* Draft grades panel */}
-        <DraftGradesPanel tournamentId={tournamentId} draftComplete={!!tournament?.draftComplete} />
-
         {/* ── My position callout ── */}
         {hasLiveScores && myTeam && (
           <div className="mb-5 rounded-xl px-5 py-4 flex items-center justify-between"

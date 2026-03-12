@@ -376,34 +376,3 @@ export async function clearDraftPicks(tournamentId: string): Promise<void> {
   });
   await updateTournament(tournamentId, { draftComplete: false });
 }
-
-// ─── Daily Summaries ─────────────────────────────────────────────────────────
-
-export async function getLatestDailySummary(
-  tournamentId: string
-): Promise<Record<string, unknown> | null> {
-  const snap = await get(ref(db, `dailySummaries/${tournamentId}`));
-  if (!snap.exists()) return null;
-  const all = snap.val() as Record<string, Record<string, unknown>>;
-  // Return the most recent date's summary
-  const dates = Object.keys(all).sort();
-  return all[dates[dates.length - 1]] ?? null;
-}
-
-export async function markSummarySeen(
-  tournamentId: string,
-  date: string,
-  uid: string
-): Promise<void> {
-  await set(ref(db, `dailySummaries/${tournamentId}/${date}/seen/${uid}`), true);
-}
-
-// ─── Draft Grades ────────────────────────────────────────────────────────────
-
-export async function getDraftGrades(
-  tournamentId: string
-): Promise<Record<string, unknown>[] | null> {
-  const snap = await get(ref(db, `draftGrades/${tournamentId}`));
-  if (!snap.exists()) return null;
-  return Object.values(snap.val());
-}

@@ -143,26 +143,6 @@ export default function AdminPage() {
   }
 
   // ── Clear picks only (keeps draft room open, resets to pick #1) ───────────
-  async function handleGenerateSummary(t: Tournament) {
-    if (!window.confirm(`Generate daily summary for ${t.name}? This will trigger the AI recap.`)) return;
-    setSaving(true);
-    try {
-      const res = await fetch('/api/cron/daily-summary', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ secret: process.env.NEXT_PUBLIC_ADMIN_SEED_SECRET ?? 'pgadraft2025secret', tournamentId: t.id }),
-      });
-      const data = await res.json();
-      if (data.ok) alert('✅ Daily summary generated! Users will see it next time they open the app.');
-      else if (data.skipped) alert(`Skipped: ${data.reason}`);
-      else alert(`Error: ${data.error ?? 'Unknown'}`);
-    } catch {
-      alert('Failed to generate summary');
-    } finally {
-      setSaving(false);
-    }
-  }
-
   async function handleClearPicks(t: Tournament) {
     if (!confirm(`Clear all picks for ${t.name}?\n\nThe draft room stays open but everyone starts over from pick #1.`)) return;
     setSaving(true);
@@ -481,40 +461,6 @@ export default function AdminPage() {
 
                     <div className="flex gap-2 flex-wrap justify-end shrink-0">
                       {/* Edit is always available */}
-                      <button onClick={() => startEdit(t)} className="btn-secondary text-xs py-1.5 px-3">
-                        ✏️ Edit
-                      </button>
-
-                      {/* Open Draft — only when upcoming AND draft order set */}
-                      {t.status === 'upcoming' && t.draftOrder?.length > 0 && (
-                        <button onClick={() => openDraft(t)} disabled={saving}
-                          className="text-xs py-1.5 px-3 rounded-lg font-bold transition-all disabled:opacity-40"
-                          style={{ background: '#C9A227', color: '#0D1F38' }}>
-                          Open Draft
-                        </button>
-                      )}
-
-                      {/* Status transitions */}
-                      {t.status === 'drafting' && (
-                        <button onClick={() => setTournamentStatus(t, 'active')} disabled={saving}
-                          className="btn-primary text-xs py-1.5 px-3">Set Live</button>
-                      )}
-                      {t.status === 'active' && (
-                        <>
-                          <button onClick={() => lockTournamentScores(t)} disabled={saving}
-                            className="text-xs py-1.5 px-3 rounded-lg font-bold disabled:opacity-40"
-                            style={{ background: '#C9A227', color: '#0D1F38' }}>
-                            🔒 Lock Scores
-                          </button>
-                          <button onClick={() => markFinal(t)} disabled={saving}
-                            className="btn-secondary text-xs py-1.5 px-3 disabled:opacity-50">
-                            Mark Final
-                          </button>
-                          <button onClick={() => handleGenerateSummary(t)} disabled={saving}
-                            className="text-xs py-1.5 px-3 rounded-lg font-bold transition-all disabled:opacity-40"
-                            style={{ background: 'rgba(139,92,246,0.15)', color: '#a78bfa', border: '1px solid rgba(139,92,246,0.3)' }}>
-                            🤖 Daily Summary
-                          </button>
                         </>
                       )}
 

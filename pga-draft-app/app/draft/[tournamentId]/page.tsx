@@ -334,14 +334,30 @@ export default function DraftRoomPage() {
   const currentPickerName = currentPickerUid ? usernameMap[currentPickerUid] : '—';
   const myPicks = (draftState?.picks ?? []).filter((p) => p.userId === appUser.uid);
   const pickedIds = new Set((draftState?.picks ?? []).map((p) => p.playerId));
+  // Also track picked player names (normalized) so we can remove ghost duplicates —
+  // e.g. a player picked as ESPN ID "4663" would still show as odds-key "dustin-johnson"
+  // without this second check.
+  const pickedNames = new Set(
+    (draftState?.picks ?? []).map((p) =>
+      p.playerName.toLowerCase().normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '').replace(/\./g, '')
+        .replace(/[-–]/g, ' ').replace(/\s+/g, ' ').trim()
+    )
+  );
   const hasEspnField = Object.keys(espnPlayers).length > 0;
   const hasOdds = oddsPlayers.length > 0;
 
   // Available players — not yet picked, filtered, sorted
   const available = mergedPlayers
     .filter((p) => {
-      // Filter out picked players — check both id and espnId
+      // Filter out picked players — check id, espnId, AND normalized name
+      // The name check catches ghost duplicates where the same player appears
+      // as both an ESPN-matched entry AND an unmatched odds-only entry.
       if (pickedIds.has(p.id) || (p.espnId && pickedIds.has(p.espnId))) return false;
+      const normName = p.displayName.toLowerCase().normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '').replace(/\./g, '')
+        .replace(/[-–]/g, ' ').replace(/\s+/g, ' ').trim();
+      if (pickedNames.has(normName)) return false;
       if (searchTerm === '') return true;
       return p.displayName.toLowerCase().includes(searchTerm.toLowerCase());
     })
