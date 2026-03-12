@@ -323,7 +323,7 @@ function TrendChart({ snapshots, teams, myUserId }: {
   // toY: maps a score to SVG Y. Returns null for sentinel values.
   const toY = (score: number): number | null => {
     if (score >= 9000) return null;
-    return PAD.top + plotH - ((score - yMin) / yRange) * plotH;
+    return PAD.top + ((score - yMin) / yRange) * plotH;
   };
 
   // ── Grid lines ─────────────────────────────────────────────────────────────
