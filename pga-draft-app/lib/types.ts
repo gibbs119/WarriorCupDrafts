@@ -71,6 +71,7 @@ export interface PlayerScore {
   thru: string;
   positionChange: number | null;  // positive = moved up (better), negative = moved down, null = no data
   currentRound: number;           // which round ESPN says they're in
+  score: string;                  // golf score-to-par display e.g. "-3", "E", "+2"
 }
 
 export interface TeamScore {

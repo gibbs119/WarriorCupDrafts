@@ -120,6 +120,7 @@ export function buildPlayerScores(
         thru: '-',
         positionChange: null,
         currentRound: 1,
+        score: '—',
       };
     }
 
@@ -146,6 +147,7 @@ export function buildPlayerScores(
       thru: player.thru,
       positionChange,
       currentRound: player.currentRound ?? 1,
+      score: player.score ?? '—',
     };
   });
 

@@ -403,3 +403,33 @@ export async function getRoundPositionSnapshot(
   const snap = await get(ref(db, `roundPositions/${tournamentId}/round${round}`));
   return snap.exists() ? (snap.val() as Record<string, number | null>) : null;
 }
+
+// ─── Hourly Score Snapshots (for Trend graph) ─────────────────────────────────
+
+export interface TrendSnapshot {
+  timestamp: number;          // Unix ms
+  hour: string;               // "Thu 8AM", "Thu 9AM" etc for display
+  scores: Record<string, number>; // userId → top3Score (9999 = not yet playing)
+}
+
+/**
+ * Save one hourly snapshot. Key = ISO hour string e.g. "2026-03-12T14" (UTC)
+ * Only saves if at least one team has a live score (not all 9999).
+ */
+export async function saveTrendSnapshot(
+  tournamentId: string,
+  snapshot: TrendSnapshot
+): Promise<void> {
+  const key = new Date(snapshot.timestamp).toISOString().slice(0, 13); // "2026-03-12T14"
+  await set(ref(db, `trendSnapshots/${tournamentId}/${key}`), snapshot);
+}
+
+/**
+ * Load all trend snapshots for a tournament, sorted chronologically.
+ */
+export async function getTrendSnapshots(tournamentId: string): Promise<TrendSnapshot[]> {
+  const snap = await get(ref(db, `trendSnapshots/${tournamentId}`));
+  if (!snap.exists()) return [];
+  const raw = snap.val() as Record<string, TrendSnapshot>;
+  return Object.values(raw).sort((a, b) => a.timestamp - b.timestamp);
+}
