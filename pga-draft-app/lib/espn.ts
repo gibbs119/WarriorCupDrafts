@@ -134,18 +134,10 @@ export function parseLeaderboard(data: ESPNLeaderboardResponse): {
     const name =
       athlete.displayName ?? `${athlete.firstName ?? ''} ${athlete.lastName ?? ''}`.trim();
 
-    // Position — only trust ESPN position if player has started (thru > 0)
-    // Before the tournament ESPN returns sortOrder/tee-time order as position,
-    // which would show garbage standings like T1/T5 before anyone tees off.
-    const thruRawCheck =
-      comp.status?.thru?.toString() ??
-      comp.status?.period?.toString() ??
-      '0';
-    const hasStarted = thruRawCheck !== '0' && thruRawCheck !== '' && thruRawCheck !== '-';
-
-    const posStr = hasStarted
-      ? (comp.status?.position?.displayValue ?? '')
-      : '';
+    // Position — use ESPN's actual position field only (NOT sortOrder).
+    // sortOrder is ESPN's tee-time/alphabetical sort and shows fake pre-tournament
+    // standings. The real position only populates once players have teed off.
+    const posStr = comp.status?.position?.displayValue ?? '';
     let positionDisplay = posStr || '-';
     let position: number | null = null;
 
