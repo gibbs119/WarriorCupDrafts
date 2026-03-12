@@ -18,7 +18,7 @@ import {
 import { calculateLeaderboard } from '@/lib/scoring';
 import { parseLeaderboard } from '@/lib/espn';
 import type { Tournament, TeamScore, AppUser, Player } from '@/lib/types';
-import { RefreshCw, Wifi, WifiOff, AlertTriangle, BarChart2, List, TrendingUp } from 'lucide-react';
+import { RefreshCw, Wifi, WifiOff, AlertTriangle, BarChart2, List, TrendingUp, Activity } from 'lucide-react';
 
 const REFRESH_INTERVAL_NORMAL_MS  = 60_000;
 const REFRESH_INTERVAL_BACKOFF_MS = 90_000;
@@ -56,9 +56,9 @@ function StatusPill({ status }: { status: string }) {
 // ─── Simple scoreboard row ────────────────────────────────────────────────────
 
 function ScoreRow({
-  team, isMe, hasScores, expanded, onToggle,
+  team, isMe, hasScores, expanded, onToggle, cutLine,
 }: {
-  team: TeamScore; isMe: boolean; hasScores: boolean; expanded: boolean; onToggle: () => void;
+  team: TeamScore; isMe: boolean; hasScores: boolean; expanded: boolean; onToggle: () => void; cutLine: number;
 }) {
   const top3 = team.players.filter(p => p.countsInTop3).sort((a, b) => a.points - b.points);
 
@@ -101,6 +101,7 @@ function ScoreRow({
                       {p.positionChange > 0 ? '▲' : p.positionChange < 0 ? '▼' : ''}
                     </span>
                   )}
+                  <CutBubble position={p.position} cutLine={cutLine} status={p.status} thru={p.thru} />
                   <span className="text-slate-500">{p.playerName.split(' ').pop()}</span>
                   {i < top3.length - 1 && <span className="text-slate-700">·</span>}
                 </span>
@@ -183,6 +184,7 @@ function DetailPanel({ team, isMe, cutLine, standalone }: {
               <div className="flex items-center gap-1.5 flex-wrap">
                 <span className="text-sm font-medium text-white">{p.playerName}</span>
                 <StatusPill status={p.status} />
+                <CutBubble position={p.position} cutLine={cutLine} status={p.status} thru={p.thru} />
                 {isCounting && <span className="text-xs" style={{ color: 'rgba(212,175,55,0.65)' }}>★</span>}
               </div>
               <div className="text-xs text-slate-600 mt-0.5">
@@ -464,6 +466,134 @@ function TrendChart({ snapshots, teams, myUserId }: {
   );
 }
 
+
+// ─── Cut Bubble Badge ─────────────────────────────────────────────────────────
+
+function CutBubble({ position, cutLine, status, thru }: {
+  position: number | null; cutLine: number; status: string; thru: string;
+}) {
+  if (status !== 'active') return null;
+  if (thru === '-') return null;
+  if (position === null) return null;
+  const danger  = position > cutLine;                        // already outside
+  const bubble  = position >= cutLine - 4 && position <= cutLine; // within 5 of cut
+  if (!danger && !bubble) return null;
+  return (
+    <span className="text-xs font-bold px-1.5 py-0.5 rounded" style={{
+      background: danger ? 'rgba(239,68,68,0.15)' : 'rgba(234,179,8,0.12)',
+      color:      danger ? '#f87171'              : '#ca8a04',
+      fontSize:   '10px',
+    }}>
+      {danger ? 'DANGER' : 'BUBBLE'}
+    </span>
+  );
+}
+
+// ─── Today's Movers Panel ─────────────────────────────────────────────────────
+
+function MoversPanel({
+  teams, baseline, myUserId,
+}: {
+  teams: TeamScore[];
+  baseline: Record<string, { score: number; rank: number }> | null;
+  myUserId: string;
+}) {
+  if (teams.length === 0) {
+    return (
+      <div className="text-center py-16 text-slate-600 text-sm">
+        No scores yet — check back once the round starts.
+      </div>
+    );
+  }
+
+  // Sort by biggest positive rank improvement (moved up most = first)
+  const rows = teams.map(t => {
+    const base      = baseline?.[t.userId];
+    const rankDelta = base ? base.rank - t.rank : 0;   // positive = moved UP
+    const scoreDelta= base ? base.score - t.top3Score : 0; // positive = improved (lower score)
+    return { team: t, rankDelta, scoreDelta };
+  }).sort((a, b) => b.rankDelta - a.rankDelta || b.scoreDelta - a.scoreDelta);
+
+  return (
+    <div className="rounded-xl overflow-hidden" style={{
+      border: '1px solid rgba(255,255,255,0.07)',
+      background: 'rgba(255,255,255,0.02)',
+    }}>
+      {/* Header */}
+      <div className="px-4 pt-4 pb-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+        <div className="font-bebas text-lg tracking-wider text-white mb-0.5">Today's Movers</div>
+        <div className="text-xs text-slate-600">Position change & score delta since round start</div>
+      </div>
+
+      {/* Column headers */}
+      <div className="grid px-4 py-2 text-xs text-slate-600 font-medium"
+        style={{ gridTemplateColumns: '1fr 80px 80px 80px' }}>
+        <span>Team</span>
+        <span className="text-center">Now</span>
+        <span className="text-center">Position</span>
+        <span className="text-center">Score</span>
+      </div>
+
+      {rows.map(({ team, rankDelta, scoreDelta }, idx) => {
+        const isMe = team.userId === myUserId;
+        const rankColor  = rankDelta > 0 ? '#34d399' : rankDelta < 0 ? '#f87171' : '#475569';
+        const scoreColor = scoreDelta > 0 ? '#34d399' : scoreDelta < 0 ? '#f87171' : '#475569';
+        const rankLabel  = rankDelta === 0 ? '—'
+          : rankDelta > 0 ? `▲${rankDelta}` : `▼${Math.abs(rankDelta)}`;
+        const scoreLabel = scoreDelta === 0 ? '—'
+          : scoreDelta > 0 ? `▲${scoreDelta}` : `▼${Math.abs(scoreDelta)}`;
+
+        return (
+          <div key={team.userId}
+            className="grid items-center px-4 py-3"
+            style={{
+              gridTemplateColumns: '1fr 80px 80px 80px',
+              borderBottom: idx < rows.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none',
+              background: isMe ? 'rgba(212,175,55,0.04)' : 'transparent',
+            }}>
+            {/* Name + rank */}
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="flex items-center justify-center w-7 h-7 rounded-full shrink-0 font-bebas text-base"
+                style={{
+                  background: team.rank === 1 ? '#D4AF37' : team.rank === 2 ? '#C0C0C0' : team.rank === 3 ? '#CD7F32' : 'rgba(255,255,255,0.06)',
+                  color: team.rank <= 3 ? '#0a0f1e' : '#64748b',
+                }}>
+                {team.rank}
+              </div>
+              <span className="font-bebas text-base tracking-wide truncate"
+                style={{ color: isMe ? '#D4AF37' : 'white' }}>
+                {team.username}
+              </span>
+              {isMe && <span className="text-xs font-bold px-1 py-0.5 rounded shrink-0"
+                style={{ background: 'rgba(212,175,55,0.15)', color: '#D4AF37', fontSize: '10px' }}>YOU</span>}
+            </div>
+
+            {/* Current score */}
+            <div className="text-center font-mono font-bold text-sm" style={{ color: team.top3Score < 0 ? '#34d399' : '#cbd5e1' }}>
+              {team.top3Score === 0 ? 'E' : team.top3Score > 0 ? `+${team.top3Score}` : `${team.top3Score}`}
+            </div>
+
+            {/* Rank delta */}
+            <div className="text-center font-bold text-sm" style={{ color: rankColor }}>
+              {rankLabel}
+            </div>
+
+            {/* Score delta */}
+            <div className="text-center font-bold text-sm font-mono" style={{ color: scoreColor }}>
+              {scoreLabel}
+            </div>
+          </div>
+        );
+      })}
+
+      <div className="px-4 py-2.5 text-xs text-slate-600"
+        style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+        Position ▲ = moved up · Score ▲ = improved · Compared to round start
+      </div>
+    </div>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function LeaderboardPage() {
@@ -476,7 +606,8 @@ export default function LeaderboardPage() {
   const [users,              setUsers]              = useState<AppUser[]>([]);
   const [lastUpdated,        setLastUpdated]        = useState<Date | null>(null);
   const [refreshing,         setRefreshing]         = useState(false);
-  const [view,               setView]               = useState<'simple' | 'detailed' | 'trend'>('simple');
+  const [view,               setView]               = useState<'simple' | 'detailed' | 'trend' | 'movers'>('simple');
+  const [roundStartScores,   setRoundStartScores]   = useState<Record<string, { score: number; rank: number }> | null>(null);
   const [trendSnapshots,     setTrendSnapshots]     = useState<TrendSnapshot[]>([]);
   const [expandedTeam,       setExpandedTeam]       = useState<string | null>(null);
   const [dataSource,         setDataSource]         = useState('');
@@ -590,6 +721,13 @@ export default function LeaderboardPage() {
 
         const scores = calculateLeaderboard(userPicksMap, mergedMap, cutLine ?? t.cutLine ?? 65, currentPrevPositions);
         setTeamScores(scores);
+        // Capture round-start baseline the first time we get real scores
+        setRoundStartScores(prev => {
+          if (prev !== null) return prev;
+          const baseline: Record<string, { score: number; rank: number }> = {};
+          scores.forEach(t => { baseline[t.userId] = { score: t.top3Score, rank: t.rank }; });
+          return baseline;
+        });
         hasScoresRef.current = true;
         const now = new Date();
         setLastUpdated(now);
@@ -691,7 +829,7 @@ export default function LeaderboardPage() {
 
           <div className="flex items-center gap-2 shrink-0">
             <div className="flex rounded-lg overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.09)' }}>
-              {([['simple','Board'], ['detailed','Detail'], ['trend','Trend']] as const).map(([v, label]) => (
+              {([['simple','Board'], ['detailed','Detail'], ['trend','Trend'], ['movers','Movers']] as const).map(([v, label]) => (
                 <button key={v} onClick={() => setView(v)}
                   className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium transition-all"
                   style={{
@@ -702,6 +840,7 @@ export default function LeaderboardPage() {
                   {v === 'simple'   && <List       size={11} />}
                   {v === 'detailed' && <BarChart2  size={11} />}
                   {v === 'trend'    && <TrendingUp size={11} />}
+                  {v === 'movers'   && <Activity   size={11} />}
                   {label}
                 </button>
               ))}
@@ -782,7 +921,7 @@ export default function LeaderboardPage() {
                   <div key={team.userId}>
                     <ScoreRow
                       team={team} isMe={isMe} hasScores={hasLiveScores}
-                      expanded={isExp}
+                      expanded={isExp} cutLine={cutLine}
                       onToggle={() => setExpandedTeam(isExp ? null : team.userId)}
                     />
                     {isExp && <DetailPanel team={team} isMe={isMe} cutLine={cutLine} />}
@@ -816,6 +955,15 @@ export default function LeaderboardPage() {
               <span>Cut/WD/DQ: +{cutLine+1} pts</span>
             </div>
           </>
+        )}
+
+        {/* MOVERS view */}
+        {view === 'movers' && (
+          <MoversPanel
+            teams={teamScores}
+            baseline={roundStartScores}
+            myUserId={appUser.uid}
+          />
         )}
 
         {/* TREND view */}
