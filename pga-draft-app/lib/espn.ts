@@ -137,7 +137,7 @@ export function parseLeaderboard(data: ESPNLeaderboardResponse): {
     // Position — use ESPN's actual position field only (NOT sortOrder).
     // sortOrder is ESPN's tee-time/alphabetical sort and shows fake pre-tournament
     // standings. The real position only populates once players have teed off.
-    const posStr = comp.status?.position?.displayValue ?? '';
+    const posStr = comp.status?.position?.displayName ?? comp.status?.position?.displayValue ?? '';
     let positionDisplay = posStr || '-';
     let position: number | null = null;
 
@@ -166,7 +166,7 @@ export function parseLeaderboard(data: ESPNLeaderboardResponse): {
       comp.status?.thru?.toString() ??
       comp.status?.period?.toString() ??
       '-';
-    const thruDisplay = thruRaw === '18' ? 'F' : thruRaw;
+    const thruDisplay = thruRaw === '18' ? 'F' : (thruRaw === '0' || thruRaw === '' ? '-' : thruRaw);
 
     if (id) {
       players[id] = {
@@ -249,7 +249,7 @@ interface ESPNCompetitor {
     displayValue?: string;
     thru?: number | string;
     period?: number;
-    position?: { displayValue?: string };
+    position?: { id?: string; displayName?: string; displayValue?: string; isTie?: boolean };
     type?: { name?: string; detail?: string };
   };
 }
