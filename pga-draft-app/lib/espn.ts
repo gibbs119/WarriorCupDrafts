@@ -151,11 +151,23 @@ export function parseLeaderboard(data: ESPNLeaderboardResponse): {
     else if (statusName.includes('wd') || statusDisplay.includes('withdrew') || statusDisplay === 'wd') status = 'wd';
     else if (statusName.includes('dq') || statusDisplay === 'dq') status = 'dq';
 
-    // Score vs par
+    // Total score to par (cumulative tournament, not just today's round).
+    // ESPN puts the overall total in statistics as 'scoreToPar' / 'TOT'.
+    // comp.score is the current-round score — only use as last resort.
+    // Debug: log stats for first player so we can verify field names in Vercel logs
+    if (Object.keys(players).length === 0 && comp.statistics?.length) {
+      console.log('[ESPN debug] competitor stats fields:', JSON.stringify(comp.statistics.map(s => ({ name: s.name, abbr: s.abbreviation, val: s.displayValue }))));
+      console.log('[ESPN debug] comp.score:', comp.score?.displayValue);
+    }
     const scoreVal =
-      comp.score?.displayValue ??
+      comp.statistics?.find((s) =>
+        s.name === 'scoreToPar' ||
+        s.abbreviation === 'TOT' ||
+        s.name === 'topar' ||
+        s.name === 'totalScore'
+      )?.displayValue ??
       comp.statistics?.find((s) => s.name === 'score' || s.abbreviation === 'SC')?.displayValue ??
-      comp.statistics?.[0]?.displayValue ??
+      comp.score?.displayValue ??
       'E';
 
     // Thru
