@@ -18,7 +18,7 @@ import {
 import { calculateLeaderboard } from '@/lib/scoring';
 import { parseLeaderboard } from '@/lib/espn';
 import type { Tournament, TeamScore, AppUser, Player } from '@/lib/types';
-import { RefreshCw, Wifi, WifiOff, AlertTriangle, BarChart2, List, TrendingUp, Activity } from 'lucide-react';
+import { RefreshCw, Wifi, WifiOff, AlertTriangle, BarChart2, List, TrendingUp, Activity, Globe } from 'lucide-react';
 
 const REFRESH_INTERVAL_NORMAL_MS  = 60_000;
 const REFRESH_INTERVAL_BACKOFF_MS = 90_000;
@@ -594,6 +594,145 @@ function MoversPanel({
   );
 }
 
+
+// ─── Full Field Leaderboard ───────────────────────────────────────────────────
+
+function FieldLeaderboard({
+  players, draftedMap, cutLine,
+}: {
+  players: Record<string, Player>;
+  draftedMap: Record<string, string>;
+  cutLine: number;
+}) {
+  const [showCut, setShowCut] = React.useState(false);
+
+  if (Object.keys(players).length === 0) {
+    return (
+      <div className="text-center py-16 text-slate-600 text-sm">
+        Awaiting tee-off — check back once the round starts.
+      </div>
+    );
+  }
+
+  // Sort by position, put null/WD/DQ last
+  const sorted = Object.values(players).sort((a, b) => {
+    if (a.status === 'wd' || a.status === 'dq') return 1;
+    if (b.status === 'wd' || b.status === 'dq') return -1;
+    if (a.position === null) return 1;
+    if (b.position === null) return -1;
+    return a.position - b.position;
+  });
+
+  const active = sorted.filter(p => p.status !== 'cut' && p.status !== 'wd' && p.status !== 'dq');
+  const cut    = sorted.filter(p => p.status === 'cut' || p.status === 'wd' || p.status === 'dq');
+
+  const normName = (n: string) =>
+    n.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\./g,'').replace(/[-\u2013]/g,' ').replace(/\s+/g,' ').trim();
+
+  function PlayerRow({ p, idx, total }: { p: Player; idx: number; total: number }) {
+    const owner = draftedMap[normName(p.name)];
+    const isDrafted = !!owner;
+    const scoreColor = !p.score || p.score === '—' || p.score === '-' ? '#475569'
+      : p.score === 'E' ? '#64748b'
+      : p.score.startsWith('-') ? '#34d399'
+      : '#f87171';
+    const isCut = p.status === 'cut';
+    const isWdDq = p.status === 'wd' || p.status === 'dq';
+
+    return (
+      <div
+        className="flex items-center px-3 py-2 gap-2"
+        style={{
+          borderBottom: idx < total - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none',
+          background: isDrafted
+            ? 'rgba(212,175,55,0.06)'
+            : 'transparent',
+        }}
+      >
+        {/* Position */}
+        <div className="text-xs font-bold shrink-0 w-9 text-right"
+          style={{ color: isDrafted ? '#D4AF37' : '#475569' }}>
+          {isCut ? 'CUT' : isWdDq ? p.status.toUpperCase() : (p.positionDisplay || '—')}
+        </div>
+
+        {/* Name + owner tag */}
+        <div className="flex-1 min-w-0 flex items-center gap-1.5 flex-wrap">
+          <span className="text-sm truncate" style={{
+            color: isDrafted ? 'white' : '#94a3b8',
+            fontWeight: isDrafted ? 600 : 400,
+          }}>
+            {p.name}
+          </span>
+          {isDrafted && (
+            <span className="text-xs shrink-0 font-bold px-1.5 py-0.5 rounded"
+              style={{ background: 'rgba(212,175,55,0.15)', color: '#D4AF37', fontSize: '10px' }}>
+              {owner}
+            </span>
+          )}
+        </div>
+
+        {/* Thru */}
+        <div className="text-xs shrink-0 w-7 text-right" style={{ color: '#475569' }}>
+          {isCut || isWdDq ? '—' : (p.thru !== '-' ? p.thru : '—')}
+        </div>
+
+        {/* Score */}
+        <div className="text-sm font-bold font-mono shrink-0 w-9 text-right" style={{ color: scoreColor }}>
+          {isCut || isWdDq ? '—' : (p.score || '—')}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl overflow-hidden" style={{
+      border: '1px solid rgba(255,255,255,0.07)',
+      background: 'rgba(255,255,255,0.02)',
+    }}>
+      {/* Column headers */}
+      <div className="flex items-center px-3 py-2 gap-2 text-xs font-medium"
+        style={{ color: '#475569', borderBottom: '1px solid rgba(255,255,255,0.07)', background: 'rgba(0,0,0,0.2)' }}>
+        <div className="w-9 text-right shrink-0">Pos</div>
+        <div className="flex-1">Player</div>
+        <div className="w-7 text-right shrink-0">Thru</div>
+        <div className="w-9 text-right shrink-0">Score</div>
+      </div>
+
+      {/* Active players */}
+      {active.map((p, i) => (
+        <PlayerRow key={p.id} p={p} idx={i} total={active.length} />
+      ))}
+
+      {/* Cut line divider + toggle */}
+      {cut.length > 0 && (
+        <>
+          <button
+            onClick={() => setShowCut(c => !c)}
+            className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium"
+            style={{
+              background: 'rgba(251,146,60,0.07)',
+              borderTop: '1px solid rgba(251,146,60,0.2)',
+              borderBottom: showCut ? '1px solid rgba(251,146,60,0.1)' : 'none',
+              color: '#fb923c',
+            }}>
+            <span>✂ CUT / WD / DQ — {cut.length} players</span>
+            <span>{showCut ? '▲ hide' : '▼ show'}</span>
+          </button>
+          {showCut && cut.map((p, i) => (
+            <PlayerRow key={p.id} p={p} idx={i} total={cut.length} />
+          ))}
+        </>
+      )}
+
+      <div className="px-3 py-2 text-xs flex items-center gap-2"
+        style={{ borderTop: '1px solid rgba(255,255,255,0.05)', color: '#475569' }}>
+        <span className="w-3 h-3 rounded-sm inline-block shrink-0" style={{ background: 'rgba(212,175,55,0.15)' }} />
+        Highlighted = drafted player · name in badge = owner
+      </div>
+    </div>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function LeaderboardPage() {
@@ -606,8 +745,10 @@ export default function LeaderboardPage() {
   const [users,              setUsers]              = useState<AppUser[]>([]);
   const [lastUpdated,        setLastUpdated]        = useState<Date | null>(null);
   const [refreshing,         setRefreshing]         = useState(false);
-  const [view,               setView]               = useState<'simple' | 'detailed' | 'trend' | 'movers'>('simple');
+  const [view,               setView]               = useState<'simple' | 'detailed' | 'trend' | 'movers' | 'field'>('simple');
   const [roundStartScores,   setRoundStartScores]   = useState<Record<string, { score: number; rank: number }> | null>(null);
+  const [fieldPlayers,       setFieldPlayers]       = useState<Record<string, Player>>({});
+  const [draftedMap,         setDraftedMap]         = useState<Record<string, string>>({});  // playerName.lower → username
   const [trendSnapshots,     setTrendSnapshots]     = useState<TrendSnapshot[]>([]);
   const [expandedTeam,       setExpandedTeam]       = useState<string | null>(null);
   const [dataSource,         setDataSource]         = useState('');
@@ -721,6 +862,16 @@ export default function LeaderboardPage() {
 
         const scores = calculateLeaderboard(userPicksMap, mergedMap, cutLine ?? t.cutLine ?? 65, currentPrevPositions);
         setTeamScores(scores);
+        // Store full field for Field tab
+        setFieldPlayers(mergedMap);
+        // Build name→username map from draft picks
+        const dm: Record<string, string> = {};
+        for (const [, { username, picks }] of Object.entries(userPicksMap)) {
+          for (const pick of picks) {
+            dm[pick.playerName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\./g,'').replace(/[-\u2013]/g,' ').replace(/\s+/g,' ').trim()] = username;
+          }
+        }
+        setDraftedMap(dm);
         // Capture round-start baseline the first time we get real scores
         setRoundStartScores(prev => {
           if (prev !== null) return prev;
@@ -812,46 +963,48 @@ export default function LeaderboardPage() {
       <Navigation />
       <main className="max-w-2xl mx-auto px-4 py-6">
 
-        {/* Header */}
-        <div className="flex items-start justify-between mb-5">
-          <div>
-            <h1 className="font-bebas text-3xl tracking-wider text-white leading-none">
-              {tournament?.shortName ?? tournament?.name ?? 'Leaderboard'}
-            </h1>
-            <div className="flex items-center gap-2 mt-1 flex-wrap text-xs text-slate-500">
-              <span>{tournament?.startDate}</span>
-              {lastUpdated && <span>· {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>}
-              {dataSource && !fetchError && (
-                <span className="flex items-center gap-1"><Wifi size={9} className="text-green-500" />live</span>
-              )}
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            <div className="flex rounded-lg overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.09)' }}>
-              {([['simple','Board'], ['detailed','Detail'], ['trend','Trend'], ['movers','Movers']] as const).map(([v, label]) => (
-                <button key={v} onClick={() => setView(v)}
-                  className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium transition-all"
-                  style={{
-                    background:  view === v ? 'rgba(212,175,55,0.18)' : 'transparent',
-                    color:       view === v ? '#D4AF37' : '#64748b',
-                    borderLeft:  v !== 'simple' ? '1px solid rgba(255,255,255,0.09)' : 'none',
-                  }}>
-                  {v === 'simple'   && <List       size={11} />}
-                  {v === 'detailed' && <BarChart2  size={11} />}
-                  {v === 'trend'    && <TrendingUp size={11} />}
-                  {v === 'movers'   && <Activity   size={11} />}
-                  {label}
-                </button>
-              ))}
+        {/* Header — stacked layout for mobile/landscape */}
+        <div className="mb-4">
+          {/* Title row */}
+          <div className="flex items-start justify-between mb-3">
+            <div className="min-w-0 mr-2">
+              <h1 className="font-bebas text-2xl tracking-wider text-white leading-none truncate">
+                {tournament?.shortName ?? tournament?.name ?? 'Leaderboard'}
+              </h1>
+              <div className="flex items-center gap-2 mt-0.5 flex-wrap text-xs text-slate-500">
+                <span>{tournament?.startDate}</span>
+                {lastUpdated && <span>· {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>}
+                {dataSource && !fetchError && (
+                  <span className="flex items-center gap-1"><Wifi size={9} className="text-green-500" />live</span>
+                )}
+              </div>
             </div>
             <button
               onClick={() => tournament && users.length > 0 && refreshScores(tournament, users, true)}
               disabled={refreshing}
-              className="p-2 rounded-lg transition-colors"
+              className="p-2 rounded-lg shrink-0 transition-colors"
               style={{ background: 'rgba(255,255,255,0.05)', color: refreshing ? '#D4AF37' : '#475569' }}>
               <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} />
             </button>
+          </div>
+          {/* Tab row — scrollable so it never wraps or clips on narrow screens */}
+          <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
+            <div className="flex rounded-lg min-w-max" style={{ border: '1px solid rgba(255,255,255,0.09)' }}>
+              {([['simple','Board',<List size={11}/>], ['detailed','Detail',<BarChart2 size={11}/>], ['trend','Trend',<TrendingUp size={11}/>], ['movers','Movers',<Activity size={11}/>], ['field','Field',<Globe size={11}/>]] as const).map(([v, label, icon]) => (
+                <button key={v} onClick={() => setView(v as any)}
+                  className="flex items-center gap-1 px-3 py-2 text-xs font-medium transition-all whitespace-nowrap flex-1"
+                  style={{
+                    background:  view === v ? 'rgba(212,175,55,0.18)' : 'transparent',
+                    color:       view === v ? '#D4AF37' : '#64748b',
+                    borderLeft:  v !== 'simple' ? '1px solid rgba(255,255,255,0.09)' : 'none',
+                    minWidth: '56px',
+                    justifyContent: 'center',
+                  }}>
+                  {icon}
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -955,6 +1108,15 @@ export default function LeaderboardPage() {
               <span>Cut/WD/DQ: +{cutLine+1} pts</span>
             </div>
           </>
+        )}
+
+        {/* FIELD view */}
+        {view === 'field' && (
+          <FieldLeaderboard
+            players={fieldPlayers}
+            draftedMap={draftedMap}
+            cutLine={cutLine}
+          />
         )}
 
         {/* MOVERS view */}
