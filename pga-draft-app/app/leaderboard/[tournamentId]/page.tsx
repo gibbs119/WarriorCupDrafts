@@ -11,6 +11,8 @@ import {
   savePlayers,
   saveRoundPositionSnapshot,
   getRoundPositionSnapshot,
+  saveRoundStartBaseline,
+  getRoundStartBaseline,
   saveTrendSnapshot,
   getTrendSnapshots,
   type TrendSnapshot,
@@ -786,6 +788,23 @@ export default function LeaderboardPage() {
       setTournament(t);
       setUsers(allUsers);
       if (snaps.length > 0) setTrendSnapshots(snaps);
+
+      // Load persisted round baselines so Movers + arrows work on fresh page load.
+      // Try rounds 1-4 to find the latest saved round and its snapshot.
+      for (let r = 4; r >= 1; r--) {
+        const [baseline, posSnap] = await Promise.all([
+          getRoundStartBaseline(tournamentId, r),
+          getRoundPositionSnapshot(tournamentId, r),
+        ]);
+        if (baseline) {
+          setRoundStartScores(baseline);
+          detectedRoundRef.current = r + 1; // we're in round after this one
+        }
+        if (posSnap && Object.keys(posSnap).length > 0) {
+          setPrevRoundPositions(posSnap);
+          break; // found the latest saved round, stop
+        }
+      }
     }
     load();
   }, [appUser, tournamentId]);
@@ -863,6 +882,8 @@ export default function LeaderboardPage() {
           detectedRoundRef.current = maxRound;
           setPrevRoundPositions(posSnap);
           currentPrevPositions = posSnap;
+          // New round started — clear the in-memory baseline so Firebase writes a fresh one
+          setRoundStartScores(null);
         } else if (maxRound > 1 && currentPrevPositions === null) {
           const fetched = await getRoundPositionSnapshot(tournamentId, maxRound - 1);
           if (fetched) { setPrevRoundPositions(fetched); currentPrevPositions = fetched; }
@@ -880,13 +901,19 @@ export default function LeaderboardPage() {
           }
         }
         setDraftedMap(dm);
-        // Capture round-start baseline the first time we get real scores
-        setRoundStartScores(prev => {
-          if (prev !== null) return prev;
-          const baseline: Record<string, { score: number; rank: number }> = {};
-          scores.forEach(t => { baseline[t.userId] = { score: t.top3Score, rank: t.rank }; });
-          return baseline;
-        });
+        // Save round-start baseline to Firebase (only if not already saved for this round)
+        const currentRoundNum = detectedRoundRef.current;
+        getRoundStartBaseline(tournamentId, currentRoundNum).then(existing => {
+          if (!existing) {
+            const baseline: Record<string, { score: number; rank: number }> = {};
+            scores.forEach(t => { baseline[t.userId] = { score: t.top3Score, rank: t.rank }; });
+            saveRoundStartBaseline(tournamentId, currentRoundNum, baseline).then(() => {
+              setRoundStartScores(baseline);
+            }).catch(() => {});
+          } else {
+            setRoundStartScores(existing);
+          }
+        }).catch(() => {});
         hasScoresRef.current = true;
         const now = new Date();
         setLastUpdated(now);
