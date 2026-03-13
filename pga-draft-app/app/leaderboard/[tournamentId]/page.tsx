@@ -614,8 +614,16 @@ function FieldLeaderboard({
     );
   }
 
+  // Deduplicate — mergedMap contains both id-keyed and name-keyed entries for same player
+  const seen = new Set<string>();
+  const unique = Object.values(players).filter(p => {
+    if (seen.has(p.id)) return false;
+    seen.add(p.id);
+    return true;
+  });
+
   // Sort by position, put null/WD/DQ last
-  const sorted = Object.values(players).sort((a, b) => {
+  const sorted = unique.sort((a, b) => {
     if (a.status === 'wd' || a.status === 'dq') return 1;
     if (b.status === 'wd' || b.status === 'dq') return -1;
     if (a.position === null) return 1;
