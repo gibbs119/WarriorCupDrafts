@@ -433,23 +433,3 @@ export async function getTrendSnapshots(tournamentId: string): Promise<TrendSnap
   const raw = snap.val() as Record<string, TrendSnapshot>;
   return Object.values(raw).sort((a, b) => a.timestamp - b.timestamp);
 }
-
-// ─── Round-start team score baseline (for Today's Movers) ────────────────────
-// Stored at: roundStartBaseline/{tournamentId}/round{N}
-// Shape: { userId: { score: number; rank: number } }
-
-export async function saveRoundStartBaseline(
-  tournamentId: string,
-  round: number,
-  baseline: Record<string, { score: number; rank: number }>
-): Promise<void> {
-  await set(ref(db, `roundStartBaseline/${tournamentId}/round${round}`), baseline);
-}
-
-export async function getRoundStartBaseline(
-  tournamentId: string,
-  round: number
-): Promise<Record<string, { score: number; rank: number }> | null> {
-  const snap = await get(ref(db, `roundStartBaseline/${tournamentId}/round${round}`));
-  return snap.exists() ? (snap.val() as Record<string, { score: number; rank: number }>) : null;
-}
