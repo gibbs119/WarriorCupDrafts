@@ -64,6 +64,27 @@ export function buildPlayerScores(
   // Filter out admin-removed slots (sentinel value) before scoring
   const activePicks = picks.filter((p) => p.playerId !== '__removed__');
 
+  // Compute effective cut line so cut/WD/DQ players always score *worse* than
+  // every active player.
+  //
+  // We use the COUNT of active survivors rather than their max position because
+  // ties at the cut bubble cause ESPN to report the same position number for
+  // multiple players (e.g. five players all at T65 = position 65), making
+  // maxPosition an unreliable sentinel.  Counting survivors gives the true
+  // field depth (70 survivors → cut score ≥ 71) and remains stable through
+  // rounds 3-4 since the survivor count doesn't change with leaderboard movement.
+  //
+  // We only override cutLine once the cut has actually been made (status='cut'
+  // players exist); before that everyone is active and the default suffices.
+  const cutHasBeenMade = Object.values(playersMap).some((p) => p.status === 'cut');
+  let effectiveCutLine = cutLine;
+  if (cutHasBeenMade) {
+    const survivorCount = Object.values(playersMap).filter(
+      (p) => p.status === 'active' && p.position !== null
+    ).length;
+    effectiveCutLine = Math.max(cutLine, survivorCount);
+  }
+
   // Build name lookup as fallback for picks stored without ESPN IDs
   const nameLookup = buildNameLookup(playersMap);
 
@@ -124,7 +145,7 @@ export function buildPlayerScores(
       };
     }
 
-    const points = calculatePoints(player.position, player.status, cutLine);
+    const points = calculatePoints(player.position, player.status, effectiveCutLine);
 
     // Position change vs end of previous round
     let positionChange: number | null = null;
