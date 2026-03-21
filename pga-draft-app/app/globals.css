@@ -252,3 +252,152 @@ button, .btn-primary, .btn-gold, .btn-secondary, .btn-danger {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0.82; }
 }
+
+/* ─── Score change flash animations ─────────────────────────────────────── */
+@keyframes score-flash-green {
+  0%   { background: rgba(74,222,128,0.35); border-color: rgba(74,222,128,0.6); }
+  60%  { background: rgba(74,222,128,0.15); border-color: rgba(74,222,128,0.3); }
+  100% { background: transparent; border-color: transparent; }
+}
+@keyframes score-flash-red {
+  0%   { background: rgba(248,113,113,0.35); border-color: rgba(248,113,113,0.6); }
+  60%  { background: rgba(248,113,113,0.15); border-color: rgba(248,113,113,0.3); }
+  100% { background: transparent; border-color: transparent; }
+}
+.score-improved { animation: score-flash-green 1.4s ease-out forwards; }
+.score-worsened  { animation: score-flash-red  1.4s ease-out forwards; }
+
+/* ─── Skeleton shimmer ───────────────────────────────────────────────────── */
+@keyframes skeleton-shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position:  400px 0; }
+}
+.skeleton {
+  border-radius: 0.5rem;
+  background: linear-gradient(
+    90deg,
+    rgba(255,255,255,0.04) 25%,
+    rgba(255,255,255,0.09) 50%,
+    rgba(255,255,255,0.04) 75%
+  );
+  background-size: 800px 100%;
+  animation: skeleton-shimmer 1.6s ease-in-out infinite;
+}
+
+/* ─── Slide-up entrance ──────────────────────────────────────────────────── */
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.slide-up { animation: slide-up 0.35s ease-out forwards; }
+
+/* ─── Odds bar fill animation ────────────────────────────────────────────── */
+@keyframes bar-fill {
+  from { width: 0; }
+}
+.odds-bar { animation: bar-fill 0.7s cubic-bezier(0.25, 0.46, 0.45, 0.94) both; }
+
+/* ─── Live dot pulse ─────────────────────────────────────────────────────── */
+@keyframes live-dot {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(74,222,128,0.7); }
+  70%       { box-shadow: 0 0 0 6px rgba(74,222,128,0); }
+}
+.live-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: #4ade80;
+  animation: live-dot 1.8s ease-out infinite;
+  display: inline-block;
+}
+
+/* ─── Position change pills ──────────────────────────────────────────────── */
+.arrow-up {
+  display: inline-flex; align-items: center; gap: 2px;
+  background: rgba(74,222,128,0.18);
+  color: #4ade80;
+  border: 1px solid rgba(74,222,128,0.35);
+  border-radius: 9999px;
+  padding: 2px 8px;
+  font-size: 0.7rem; font-weight: 800;
+  letter-spacing: 0.03em;
+}
+.arrow-down {
+  display: inline-flex; align-items: center; gap: 2px;
+  background: rgba(248,113,113,0.18);
+  color: #f87171;
+  border: 1px solid rgba(248,113,113,0.35);
+  border-radius: 9999px;
+  padding: 2px 8px;
+  font-size: 0.7rem; font-weight: 800;
+  letter-spacing: 0.03em;
+}
+
+/* ─── Elevated "Your Position" callout ───────────────────────────────────── */
+.callout-my-team {
+  background: linear-gradient(135deg, rgba(201,162,39,0.18) 0%, rgba(0,107,182,0.15) 100%);
+  border: 1px solid rgba(201,162,39,0.45);
+  border-radius: 1rem;
+  box-shadow: 0 0 32px rgba(201,162,39,0.2), 0 4px 24px rgba(0,0,0,0.6), inset 0 1px 0 rgba(201,162,39,0.15);
+  padding: 1.25rem;
+  position: relative;
+  overflow: hidden;
+}
+.callout-my-team::before {
+  content: '';
+  position: absolute;
+  top: -50%; left: -50%;
+  width: 200%; height: 200%;
+  background: radial-gradient(ellipse at 60% 30%, rgba(201,162,39,0.08) 0%, transparent 60%);
+  pointer-events: none;
+}
+
+/* ─── Tab bar pill style ─────────────────────────────────────────────────── */
+.tab-active {
+  background: rgba(0,107,182,0.25);
+  color: #60a5fa;
+  border: 1px solid rgba(0,107,182,0.45);
+  border-radius: 9999px;
+}
+.tab-inactive {
+  color: #64748b;
+  border: 1px solid transparent;
+  border-radius: 9999px;
+}
+.tab-inactive:hover { color: #94a3b8; background: rgba(255,255,255,0.04); }
+
+/* ─── Mobile bottom tab bar ──────────────────────────────────────────────── */
+.bottom-nav {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  z-index: 50;
+  background: rgba(3,9,18,0.92);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid rgba(255,255,255,0.08);
+  padding-bottom: env(safe-area-inset-bottom);
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  height: calc(60px + env(safe-area-inset-bottom));
+}
+/* Push page content above bottom nav on mobile */
+@media (max-width: 767px) {
+  .page { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
+}
+
+/* ─── Consistent card depth ──────────────────────────────────────────────── */
+.card {
+  background: rgba(255,255,255,0.04);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 1rem;
+  padding: 1.25rem;
+  box-shadow: 0 2px 16px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.04);
+}
+.card-royal {
+  box-shadow: 0 2px 16px rgba(0,0,0,0.35), inset 0 1px 0 rgba(0,107,182,0.1);
+}
+.card-gold {
+  box-shadow: 0 2px 16px rgba(0,0,0,0.35), inset 0 1px 0 rgba(201,162,39,0.1);
+}

@@ -99,8 +99,9 @@ export default function HistoryPage() {
 
   if (loading || !appUser) return (
     <div className="min-h-screen page"><Navigation />
-      <div className="flex items-center justify-center h-64">
-        <p className="font-bebas text-xl tracking-widest animate-pulse" style={{color:'#C9A227'}}>LOADING…</p>
+      <div className="max-w-4xl mx-auto px-4 py-8 space-y-4">
+        <div className="skeleton h-8 w-40 rounded-xl mb-6" />
+        {[1,2,3].map(i => <div key={i} className="skeleton h-24 rounded-xl" />)}
       </div>
     </div>
   );
@@ -125,7 +126,9 @@ export default function HistoryPage() {
         </div>
 
         {fetching ? (
-          <div className="text-center py-20 font-bebas text-xl tracking-widest animate-pulse" style={{color:'rgba(148,163,184,0.4)'}}>LOADING HISTORY…</div>
+          <div className="space-y-4">
+            {[1,2,3,4].map(i => <div key={i} className="skeleton h-20 rounded-xl" />)}
+          </div>
         ) : yearGroups.length === 0 ? (
           <div className="card text-center py-16">
             <p className="text-white font-semibold mb-1">No history yet</p>

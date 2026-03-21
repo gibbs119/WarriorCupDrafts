@@ -40,10 +40,13 @@ export default function Dashboard() {
 
   if (loading || !appUser) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <WarriorsLogo size={56} />
-          <p className="font-bebas text-xl tracking-widest" style={{ color: '#C9A227' }}>LOADING…</p>
+      <div className="min-h-screen page">
+        <div className="max-w-4xl mx-auto px-4 py-8 space-y-4">
+          <div className="skeleton h-10 w-48 mb-6 rounded-xl" />
+          <div className="skeleton h-20 w-full rounded-xl" />
+          <div className="grid gap-4 sm:grid-cols-2">
+            {[1,2,3,4,5].map(i => <div key={i} className="skeleton h-32 rounded-xl" />)}
+          </div>
         </div>
       </div>
     );

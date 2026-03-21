@@ -555,33 +555,46 @@ export default function DraftRoomPage() {
           {/* Left column: my team + full draft board */}
           <div className="space-y-4">
 
-            {/* My roster */}
-            <div className="card">
-              <h2 className="font-bebas text-lg tracking-wider text-white mb-3">
-                My Team
-                <span className="text-slate-400 font-normal text-sm ml-2">
-                  ({myPicks.length}/{tournament.maxPicks})
-                </span>
-              </h2>
+            {/* My roster — card design */}
+            <div className="card-gold glow-gold">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="font-bebas text-lg tracking-wider text-white">My Team</h2>
+                <div className="flex items-center gap-1.5">
+                  {Array.from({ length: tournament.maxPicks }).map((_, i) => (
+                    <div key={i} className="w-2 h-2 rounded-full transition-all"
+                      style={{ background: i < myPicks.length ? '#C9A227' : 'rgba(255,255,255,0.12)' }} />
+                  ))}
+                  <span className="text-xs text-slate-500 ml-1">{myPicks.length}/{tournament.maxPicks}</span>
+                </div>
+              </div>
               {myPicks.length === 0 ? (
-                <p className="text-slate-500 text-sm italic">No picks yet</p>
+                <p className="text-slate-500 text-sm italic text-center py-4">Make your first pick →</p>
               ) : (
-                <ul className="space-y-1.5">
+                <div className="space-y-2">
                   {myPicks.map((pick, i) => {
                     const merged = mergedPlayers.find(
                       (p) => p.espnId === pick.playerId || p.id === pick.playerId
                     );
+                    const initials = pick.playerName.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase();
                     return (
-                      <li key={pick.playerId} className="flex items-center gap-2 text-sm">
-                        <span className="text-slate-500 w-4 shrink-0">{i + 1}.</span>
-                        <span className="text-white flex-1">{pick.playerName}</span>
+                      <div key={pick.playerId} className="flex items-center gap-3 rounded-xl px-3 py-2.5"
+                        style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                        <div className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center font-bold text-xs"
+                          style={{ background: 'rgba(201,162,39,0.2)', color: '#D4AF37', border: '1px solid rgba(201,162,39,0.3)' }}>
+                          {initials}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-semibold text-white truncate">{pick.playerName}</div>
+                          <div className="text-xs text-slate-500">Pick #{i + 1}</div>
+                        </div>
                         {merged?.oddsDisplay && (
-                          <span className="text-xs text-slate-500 font-mono">{merged.oddsDisplay}</span>
+                          <span className="text-xs font-mono font-bold shrink-0"
+                            style={{ color: 'rgba(201,162,39,0.7)' }}>{merged.oddsDisplay}</span>
                         )}
-                      </li>
+                      </div>
                     );
                   })}
-                </ul>
+                </div>
               )}
             </div>
 

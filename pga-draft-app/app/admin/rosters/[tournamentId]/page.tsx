@@ -17,6 +17,7 @@ import {
 import type { Tournament, DraftState, DraftPick, AppUser, WDReplacement, RosterEdit } from '@/lib/types';
 import type { OddsPlayer } from '@/lib/odds';
 import { ArrowRight, CheckCircle, XCircle, Clock, Edit2, History, AlertTriangle, Search } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 interface UserRoster {
   user: AppUser;
@@ -40,7 +41,6 @@ export default function AdminRostersPage() {
   const [editSearch, setEditSearch] = useState('');
   const [editReason, setEditReason] = useState('');
   const [saving, setSaving] = useState(false);
-  const [msg, setMsg] = useState('');
 
   // Active tab
   const [tab, setTab] = useState<'rosters' | 'requests' | 'log'>('rosters');
@@ -101,21 +101,21 @@ export default function AdminRostersPage() {
   // ── WD request actions ───────────────────────────────────────────────────────
 
   async function handleApprove(key: string, req: WDReplacement) {
-    setSaving(true); setMsg('');
+    setSaving(true);
     try {
       await approveWDRequest(tournamentId, key, req, appUser!.uid, appUser!.username);
-      setMsg(`✅ Approved: ${req.droppedPlayerName} → ${req.replacementPlayerName} for ${req.username}`);
-    } catch { setMsg('❌ Approval failed.'); }
+      toast.success(`Approved: ${req.droppedPlayerName} → ${req.replacementPlayerName} for ${req.username}`);
+    } catch { toast.error('Approval failed.'); }
     finally { setSaving(false); }
   }
 
   async function handleDeny(key: string, req: WDReplacement) {
     const note = prompt(`Optional note for ${req.username} (leave blank to skip):`);
-    setSaving(true); setMsg('');
+    setSaving(true);
     try {
       await denyWDRequest(tournamentId, key, req, appUser!.username, note ?? undefined);
-      setMsg(`Denied request from ${req.username}.`);
-    } catch { setMsg('❌ Deny failed.'); }
+      toast(`Denied request from ${req.username}.`, { icon: '🚫' });
+    } catch { toast.error('Deny failed.'); }
     finally { setSaving(false); }
   }
 
@@ -123,7 +123,7 @@ export default function AdminRostersPage() {
 
   async function handleAdminSwap(newPlayer: OddsPlayer) {
     if (!editingPick || !appUser) return;
-    setSaving(true); setMsg('');
+    setSaving(true);
     try {
       await adminEditRoster(
         tournamentId,
@@ -137,17 +137,17 @@ export default function AdminRostersPage() {
         appUser.username,
         editReason || 'Admin roster edit'
       );
-      setMsg(`✅ Swapped ${editingPick.pick.playerName} → ${newPlayer.name}`);
+      toast.success(`Swapped ${editingPick.pick.playerName} → ${newPlayer.name}`);
       setEditingPick(null);
       setEditSearch('');
       setEditReason('');
-    } catch { setMsg('❌ Swap failed.'); }
+    } catch { toast.error('Swap failed.'); }
     finally { setSaving(false); }
   }
 
   async function handleAdminRemove(userId: string, pick: DraftPick) {
     if (!confirm(`Remove ${pick.playerName} from ${users.find(u=>u.uid===userId)?.username}'s roster? They will have an empty slot.`)) return;
-    setSaving(true); setMsg('');
+    setSaving(true);
     try {
       // Use a sentinel "empty" replacement so the pick slot is cleared
       await adminEditRoster(
@@ -158,8 +158,8 @@ export default function AdminRostersPage() {
         appUser!.uid, appUser!.username,
         editReason || 'Admin removal'
       );
-      setMsg(`Removed ${pick.playerName}.`);
-    } catch { setMsg('❌ Remove failed.'); }
+      toast(`Removed ${pick.playerName}.`, { icon: '🗑' });
+    } catch { toast.error('Remove failed.'); }
     finally { setSaving(false); }
   }
 
@@ -192,12 +192,6 @@ export default function AdminRostersPage() {
           )}
         </div>
 
-        {msg && (
-          <p className="mb-4 p-3 rounded-lg text-sm"
-            style={{ background: msg.startsWith('✅') ? 'rgba(22,163,74,0.15)' : 'rgba(200,16,46,0.12)', color: msg.startsWith('✅') ? '#4ade80' : '#94a3b8' }}>
-            {msg}
-          </p>
-        )}
 
         {/* Tabs */}
         <div className="flex gap-1 mb-6">
