@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import WarriorsLogo from './WarriorsLogo';
-import { LogOut, History, Settings, Home } from 'lucide-react';
+import { LogOut, History, Settings, Home, BookOpen } from 'lucide-react';
 
 export default function Navigation() {
   const { appUser, signOut } = useAuth();
@@ -19,6 +19,7 @@ export default function Navigation() {
   const navLinks = [
     { href: '/dashboard', label: 'Home',    icon: Home },
     { href: '/history',   label: 'History', icon: History },
+    { href: '/recaps',    label: 'Recaps',  icon: BookOpen },
     ...(appUser?.role === 'admin'
       ? [{ href: '/admin', label: 'Admin', icon: Settings }]
       : []),

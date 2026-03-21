@@ -404,6 +404,55 @@ export async function getRoundPositionSnapshot(
   return snap.exists() ? (snap.val() as Record<string, number | null>) : null;
 }
 
+// ─── Daily Summaries (AI round recaps) ───────────────────────────────────────
+
+/**
+ * Returns the most recent daily summary for a tournament that this user hasn't dismissed.
+ * Returns null if none exist or all have been seen.
+ */
+export async function getLatestDailySummary(tournamentId: string): Promise<unknown> {
+  const snap = await get(ref(db, `dailySummaries/${tournamentId}`));
+  if (!snap.exists()) return null;
+  const all = snap.val() as Record<string, unknown>;
+  // Dates are YYYY-MM-DD keys — sort descending to get latest
+  const sorted = Object.entries(all).sort(([a], [b]) => b.localeCompare(a));
+  return sorted.length > 0 ? sorted[0][1] : null;
+}
+
+/**
+ * Returns all daily summaries for a tournament, sorted newest-first.
+ */
+export async function getAllDailySummaries(tournamentId: string): Promise<unknown[]> {
+  const snap = await get(ref(db, `dailySummaries/${tournamentId}`));
+  if (!snap.exists()) return [];
+  const all = snap.val() as Record<string, unknown>;
+  return Object.entries(all)
+    .sort(([a], [b]) => b.localeCompare(a))
+    .map(([, v]) => v);
+}
+
+/**
+ * Marks a daily summary as seen by a specific user so the modal won't re-show.
+ */
+export async function markSummarySeen(
+  tournamentId: string,
+  date: string,
+  userId: string
+): Promise<void> {
+  await update(ref(db, `dailySummaries/${tournamentId}/${date}/seen`), { [userId]: true });
+}
+
+// ─── Draft Grades (AI post-draft analysis) ────────────────────────────────────
+
+/**
+ * Returns all draft grades for a tournament, or empty array if none generated yet.
+ */
+export async function getDraftGrades(tournamentId: string): Promise<unknown[]> {
+  const snap = await get(ref(db, `draftGrades/${tournamentId}`));
+  if (!snap.exists()) return [];
+  return Object.values(snap.val() as Record<string, unknown>);
+}
+
 // ─── Hourly Score Snapshots (for Trend graph) ─────────────────────────────────
 
 export interface TrendSnapshot {
