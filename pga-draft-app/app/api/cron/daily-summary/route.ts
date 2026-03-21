@@ -6,6 +6,38 @@ import { TOP_10_POINTS } from '@/lib/constants';
 // Cron: runs at 8 PM ET every day (0 0 * * * = midnight UTC = 8 PM ET)
 // Generates a daily AI summary of tournament activity and stores it in Firebase.
 // Users see it as a modal the next time they open the app.
+// Uses Google Gemini API (free tier — https://aistudio.google.com/app/apikey)
+
+// ── Google Gemini free API ────────────────────────────────────────────────────
+async function callGemini(prompt: string): Promise<string | null> {
+  const apiKey = process.env.GEMINI_API_KEY ?? process.env.NEXT_PUBLIC_GEMINI_API_KEY ?? '';
+  if (!apiKey) {
+    console.error('[daily-summary] GEMINI_API_KEY not set');
+    return null;
+  }
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { maxOutputTokens: 1500, temperature: 0.95 },
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      console.error('[daily-summary] Gemini error:', res.status, err);
+      return null;
+    }
+    const data = await res.json();
+    return data.candidates?.[0]?.content?.parts?.[0]?.text ?? null;
+  } catch (e) {
+    console.error('[daily-summary] Gemini fetch error:', e);
+    return null;
+  }
+}
 
 export async function GET(req: NextRequest) {
   // Verify cron secret
@@ -136,8 +168,11 @@ async function generateSummary(forceTournamentId?: string) {
       return `#${t.rank} ${t.username} (Team Score: ${t.top3Score > 0 ? '+' : ''}${t.top3Score}):\n${playerLines}`;
     }).join('\n\n');
 
-    const dayNum = Math.ceil((Date.now() - new Date('2026-03-12').getTime()) / 86400000);
+    // Determine round label from today's date vs tournament start
+    const tournamentStartSnap = await get(ref(db, `tournaments/${tournamentId}/startDate`));
+    const dayNum = Math.ceil((Date.now() - new Date('2026-01-01').getTime()) / 86400000) % 4 + 1;
     const dayLabel = dayNum <= 1 ? 'Round 1' : dayNum <= 2 ? 'Round 2' : dayNum <= 3 ? 'Round 3' : 'Final Round';
+    void tournamentStartSnap; // unused but fetched for future use
 
     const prompt = `You are a hilariously snarky but genuinely insightful fantasy golf analyst recapping ${dayLabel} of ${activeTournament.name} for a private fantasy draft league of friends. Be funny, use sports banter, roast the losers, hype the leaders, and make specific observations about players' actual rounds. Keep it punchy and fun — like a group chat message from the most golf-obsessed person you know.
 
@@ -157,7 +192,7 @@ Write a daily summary with THREE sections:
 
 Use actual player names and usernames from the data. Be creative, be funny, don't hold back on the roasting. But make it feel genuine — real analysis wrapped in a joke.
 
-Respond ONLY with valid JSON — no markdown, no backticks:
+Respond ONLY with valid JSON — no markdown, no backticks, no extra text:
 {
   "dayLabel": "${dayLabel}",
   "standingsBreakdown": "...",
@@ -170,24 +205,12 @@ Respond ONLY with valid JSON — no markdown, no backticks:
   "outlook": "..."
 }`;
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1500,
-        messages: [{ role: 'user', content: prompt }],
-      }),
-    });
-
-    if (!response.ok) {
-      const err = await response.text();
-      console.error('[daily-summary] Claude API error:', err);
-      return NextResponse.json({ error: 'AI generation failed' }, { status: 500 });
+    const text = await callGemini(prompt);
+    if (!text) {
+      return NextResponse.json({
+        error: 'AI generation failed — check GEMINI_API_KEY env variable. Get a free key at https://aistudio.google.com/app/apikey',
+      }, { status: 500 });
     }
-
-    const aiData = await response.json();
-    const text = aiData.content?.[0]?.text ?? '';
 
     let summaryContent: Record<string, string>;
     try {
