@@ -44,18 +44,24 @@ interface DraftPlayer {
   impliedProb: number | null;
   oddsSource: string | null;
 
+  // Top 10 finish odds
+  top10Display: string | null;
+  top10AmericanOdds: number | null;
+  top10ImpliedProb: number | null;
+
   // ESPN live data (populated once tournament starts)
   position: number | null;
   positionDisplay: string;
   score: string;
   thru: string;
   status: Player['status'];
+  worldRanking: number | null;  // Official World Golf Ranking
 
   // Source flag
   source: 'odds' | 'espn' | 'both';
 }
 
-type SortMode = 'odds' | 'position' | 'name';
+type SortMode = 'odds' | 'top10' | 'rank' | 'position' | 'name';
 
 // Play a short chime using Web Audio API — no audio file needed
 function playChime() {
@@ -97,6 +103,7 @@ export default function DraftRoomPage() {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [sortMode, setSortMode] = useState<SortMode>('odds');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [pickLoading, setPickLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
   const [myTurnAlert, setMyTurnAlert] = useState(false);   // in-tab banner
@@ -189,7 +196,7 @@ export default function DraftRoomPage() {
     setMergedPlayers((prev) => {
       if (prev.length > 0) return prev;
       return staticPlayers.map((name) => ({
-        id: name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+        id: playerKey(name),
         displayName: name,
         espnId: null,
         espnName: name,
@@ -197,11 +204,15 @@ export default function DraftRoomPage() {
         americanOdds: null,
         impliedProb: null,
         oddsSource: null,
+        top10Display: null,
+        top10AmericanOdds: null,
+        top10ImpliedProb: null,
         position: null,
         positionDisplay: '-',
         score: '-',
         thru: '-',
         status: 'active' as const,
+        worldRanking: null,
         source: 'odds' as const,
       }));
     });
@@ -273,11 +284,15 @@ export default function DraftRoomPage() {
         americanOdds: op.americanOdds,
         impliedProb: op.impliedProb,
         oddsSource: op.bookmaker,
+        top10Display: op.top10Display ?? null,
+        top10AmericanOdds: op.top10AmericanOdds ?? null,
+        top10ImpliedProb: op.top10ImpliedProb ?? null,
         position: espnEntry?.position ?? null,
         positionDisplay: espnEntry?.positionDisplay ?? '-',
         score: espnEntry?.score ?? '-',
         thru: espnEntry?.thru ?? '-',
         status: espnEntry?.status ?? 'active',
+        worldRanking: espnEntry?.worldRanking ?? null,
         source: espnEntry ? 'both' : 'odds',
       });
     }
@@ -295,11 +310,15 @@ export default function DraftRoomPage() {
           americanOdds: null,
           impliedProb: null,
           oddsSource: null,
+          top10Display: null,
+          top10AmericanOdds: null,
+          top10ImpliedProb: null,
           position: ep.position,
           positionDisplay: ep.positionDisplay,
           score: ep.score,
           thru: ep.thru,
           status: ep.status,
+          worldRanking: ep.worldRanking ?? null,
           source: 'espn',
         });
       }
@@ -334,15 +353,12 @@ export default function DraftRoomPage() {
   const currentPickerName = currentPickerUid ? usernameMap[currentPickerUid] : '—';
   const myPicks = (draftState?.picks ?? []).filter((p) => p.userId === appUser.uid);
   const pickedIds = new Set((draftState?.picks ?? []).map((p) => p.playerId));
-  // Also track picked player names (normalized) so we can remove ghost duplicates —
-  // e.g. a player picked as ESPN ID "4663" would still show as odds-key "dustin-johnson"
-  // without this second check.
-  const pickedNames = new Set(
-    (draftState?.picks ?? []).map((p) =>
-      p.playerName.toLowerCase().normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '').replace(/\./g, '')
-        .replace(/[-–]/g, ' ').replace(/\s+/g, ' ').trim()
-    )
+  // Track picked player keys using playerKey() — this applies the nickname map
+  // so "Cam Davis" and "Cameron Davis" both resolve to the same key.
+  // This catches ghost duplicates where the same player appears under different
+  // name variants (odds vs ESPN) or was picked before ESPN IDs loaded.
+  const pickedKeys = new Set(
+    (draftState?.picks ?? []).map((p) => playerKey(p.playerName))
   );
   const hasEspnField = Object.keys(espnPlayers).length > 0;
   const hasOdds = oddsPlayers.length > 0;
@@ -350,34 +366,70 @@ export default function DraftRoomPage() {
   // Available players — not yet picked, filtered, sorted
   const available = mergedPlayers
     .filter((p) => {
-      // Filter out picked players — check id, espnId, AND normalized name
-      // The name check catches ghost duplicates where the same player appears
-      // as both an ESPN-matched entry AND an unmatched odds-only entry.
+      // Check ID-based membership (numeric ESPN IDs or stable name keys)
       if (pickedIds.has(p.id) || (p.espnId && pickedIds.has(p.espnId))) return false;
-      const normName = p.displayName.toLowerCase().normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '').replace(/\./g, '')
-        .replace(/[-–]/g, ' ').replace(/\s+/g, ' ').trim();
-      if (pickedNames.has(normName)) return false;
+      // Check name-based — playerKey applies nickname map so "Cam Davis" == "Cameron Davis"
+      // This catches ghost duplicates: same player appearing under both odds key AND ESPN key.
+      if (pickedKeys.has(playerKey(p.displayName))) return false;
+      if (p.espnName && pickedKeys.has(playerKey(p.espnName))) return false;
       if (searchTerm === '') return true;
       return p.displayName.toLowerCase().includes(searchTerm.toLowerCase());
     })
     .sort((a, b) => {
+      const dir = sortDir === 'asc' ? 1 : -1;
       if (sortMode === 'odds') {
         const ap = a.impliedProb ?? -1;
         const bp = b.impliedProb ?? -1;
-        if (ap !== bp) return bp - ap; // higher prob = favorite = first
-        // odds-less players go to bottom
+        // Players without odds always go to bottom
         if (ap === -1 && bp !== -1) return 1;
         if (bp === -1 && ap !== -1) return -1;
+        if (ap !== bp) return (bp - ap) * dir;  // default desc = favorites first
         return a.displayName.localeCompare(b.displayName);
+      }
+      if (sortMode === 'top10') {
+        const ap = a.top10ImpliedProb ?? -1;
+        const bp = b.top10ImpliedProb ?? -1;
+        if (ap === -1 && bp !== -1) return 1;
+        if (bp === -1 && ap !== -1) return -1;
+        if (ap !== bp) return (bp - ap) * dir;
+        return a.displayName.localeCompare(b.displayName);
+      }
+      if (sortMode === 'rank') {
+        const ar = a.worldRanking ?? 9999;
+        const br = b.worldRanking ?? 9999;
+        // Unranked players go to bottom regardless of direction
+        if (ar === 9999 && br !== 9999) return 1;
+        if (br === 9999 && ar !== 9999) return -1;
+        // Default asc for rank (lower number = better rank)
+        return (ar - br) * dir;
       }
       if (sortMode === 'position') {
         const ap = a.position ?? 9999;
         const bp = b.position ?? 9999;
-        return ap - bp;
+        if (ap === 9999 && bp !== 9999) return 1;
+        if (bp === 9999 && ap !== 9999) return -1;
+        return (ap - bp) * dir;
       }
-      return a.displayName.localeCompare(b.displayName);
+      // name
+      return a.displayName.localeCompare(b.displayName) * dir;
     });
+
+  // ─── Sort handler ────────────────────────────────────────────────────────────
+
+  function handleSortClick(mode: SortMode) {
+    if (sortMode === mode) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortMode(mode);
+      // Natural default direction per column
+      setSortDir(mode === 'name' ? 'asc' : mode === 'rank' ? 'asc' : 'desc');
+    }
+  }
+
+  function sortArrow(mode: SortMode) {
+    if (sortMode !== mode) return <span className="text-slate-600 ml-0.5 text-xs">⇅</span>;
+    return <span className="text-yellow-400 ml-0.5 text-xs">{sortDir === 'asc' ? '↑' : '↓'}</span>;
+  }
 
   // ─── Pick handler ────────────────────────────────────────────────────────────
 
@@ -574,18 +626,20 @@ export default function DraftRoomPage() {
                   </button>
                 </h2>
 
-                {/* Sort tabs */}
-                <div className="flex gap-1 text-xs">
+                {/* Quick-sort pills */}
+                <div className="flex gap-1 text-xs flex-wrap">
                   {([
-                    ['odds', '📊 Odds'],
-                    ...(hasEspnField ? [['position', '🏌️ Position']] : []),
-                    ['name', '🔤 A–Z'],
+                    ['odds', '🏆 Win'],
+                    ['top10', '🔟 Top 10'],
+                    ['rank', '🌍 OWGR'],
+                    ...(hasEspnField ? [['position', '🏌️ Pos']] as [SortMode, string][] : []),
+                    ['name', 'A–Z'],
                   ] as [SortMode, string][]).map(([mode, label]) => (
-                    <button key={mode} onClick={() => setSortMode(mode)}
+                    <button key={mode} onClick={() => handleSortClick(mode)}
                       className={`px-2 py-1 rounded transition-colors ${
                         sortMode === mode ? 'bg-green-700 text-white' : 'bg-slate-700 text-slate-400 hover:text-white'
                       }`}>
-                      {label}
+                      {label}{sortMode === mode ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''}
                     </button>
                   ))}
                 </div>
@@ -633,13 +687,33 @@ export default function DraftRoomPage() {
                 <div className="overflow-y-auto max-h-[30rem] pr-1">
                   <table className="w-full text-sm">
                     <thead className="sticky top-0 bg-slate-800 z-10">
-                      <tr className="text-slate-400 text-xs border-b border-slate-700">
+                      <tr className="text-slate-400 text-xs border-b border-slate-700 select-none">
                         <th className="text-left py-2 pr-2 w-6">#</th>
-                        <th className="text-left py-2">Player</th>
-                        <th className="text-right py-2 w-16">Odds</th>
+                        <th className="text-left py-2 cursor-pointer hover:text-white transition-colors"
+                            onClick={() => handleSortClick('name')}>
+                          Player {sortArrow('name')}
+                        </th>
+                        <th className="text-right py-2 w-20 cursor-pointer hover:text-white transition-colors"
+                            onClick={() => handleSortClick('odds')}
+                            title="Odds to win the tournament">
+                          Win {sortArrow('odds')}
+                        </th>
+                        <th className="text-right py-2 w-20 cursor-pointer hover:text-white transition-colors hidden md:table-cell"
+                            onClick={() => handleSortClick('top10')}
+                            title="Odds to finish top 10">
+                          Top 10 {sortArrow('top10')}
+                        </th>
+                        <th className="text-right py-2 w-14 cursor-pointer hover:text-white transition-colors hidden sm:table-cell"
+                            onClick={() => handleSortClick('rank')}
+                            title="Official World Golf Ranking">
+                          OWGR {sortArrow('rank')}
+                        </th>
                         {hasEspnField && <>
-                          <th className="text-right py-2 w-12">Pos</th>
-                          <th className="text-right py-2 w-10 hidden sm:table-cell">Thru</th>
+                          <th className="text-right py-2 w-12 cursor-pointer hover:text-white transition-colors"
+                              onClick={() => handleSortClick('position')}>
+                            Pos {sortArrow('position')}
+                          </th>
+                          <th className="text-right py-2 w-10 hidden lg:table-cell text-slate-500">Thru</th>
                         </>}
                         {isMyTurn && !draftComplete && <th className="w-14"></th>}
                       </tr>
@@ -651,16 +725,13 @@ export default function DraftRoomPage() {
                           <td className="py-2 pr-2 text-slate-600 text-xs">{idx + 1}</td>
                           <td className="py-2">
                             <div className="font-medium text-white leading-tight">{player.displayName}</div>
-                            {/* Show match status indicator */}
-                            {player.source === 'both' && (
-                              <div className="text-xs text-green-600/70">✓ ESPN matched</div>
-                            )}
                             {player.source === 'odds' && hasEspnField && (
-                              <div className="text-xs text-yellow-600/70">⚠ no ESPN match yet</div>
+                              <div className="text-xs text-yellow-600/60">⚠ no ESPN match yet</div>
                             )}
                           </td>
+                          {/* Win odds */}
                           <td className="py-2 text-right">
-                            {player.oddsDisplay ? (
+                            {player.oddsDisplay && player.oddsDisplay !== 'N/A' ? (
                               <div>
                                 <span className={`font-mono text-sm font-semibold ${
                                   player.americanOdds !== null && player.americanOdds < 0
@@ -672,11 +743,38 @@ export default function DraftRoomPage() {
                                   {player.oddsDisplay}
                                 </span>
                                 {player.impliedProb !== null && (
-                                  <div className="text-xs text-slate-500">
-                                    {player.impliedProb.toFixed(1)}%
-                                  </div>
+                                  <div className="text-xs text-slate-500">{player.impliedProb.toFixed(1)}%</div>
                                 )}
                               </div>
+                            ) : (
+                              <span className="text-slate-600 text-xs">—</span>
+                            )}
+                          </td>
+                          {/* Top 10 odds */}
+                          <td className="py-2 text-right hidden md:table-cell">
+                            {player.top10Display ? (
+                              <div>
+                                <span className="font-mono text-sm font-semibold text-slate-300">
+                                  {player.top10Display}
+                                </span>
+                                {player.top10ImpliedProb !== null && (
+                                  <div className="text-xs text-slate-500">{player.top10ImpliedProb.toFixed(1)}%</div>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-slate-600 text-xs">—</span>
+                            )}
+                          </td>
+                          {/* OWGR */}
+                          <td className="py-2 text-right hidden sm:table-cell">
+                            {player.worldRanking ? (
+                              <span className={`text-xs font-mono ${
+                                player.worldRanking <= 10 ? 'text-yellow-300 font-semibold'
+                                : player.worldRanking <= 50 ? 'text-slate-300'
+                                : 'text-slate-500'
+                              }`}>
+                                #{player.worldRanking}
+                              </span>
                             ) : (
                               <span className="text-slate-600 text-xs">—</span>
                             )}
@@ -689,7 +787,7 @@ export default function DraftRoomPage() {
                                 player.positionDisplay
                               ) : '—'}
                             </td>
-                            <td className="py-2 text-right text-xs text-slate-500 hidden sm:table-cell">
+                            <td className="py-2 text-right text-xs text-slate-500 hidden lg:table-cell">
                               {player.thru !== '-' ? player.thru : '—'}
                             </td>
                           </>}

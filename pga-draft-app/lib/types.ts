@@ -58,6 +58,8 @@ export interface Player {
   score: string;            // e.g. "-12", "E", "+3"
   status: PlayerStatus;
   thru: string;             // e.g. "F", "14", "-"
+  currentRound?: number;         // ESPN round number (1-4)
+  worldRanking?: number | null;  // Official World Golf Ranking (from ESPN stats)
 }
 
 export interface PlayerScore {
