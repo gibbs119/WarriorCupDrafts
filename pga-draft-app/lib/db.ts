@@ -404,6 +404,16 @@ export async function getRoundPositionSnapshot(
   return snap.exists() ? (snap.val() as Record<string, number | null>) : null;
 }
 
+// ─── Live Odds (AI win-probability) ──────────────────────────────────────────
+
+/**
+ * Returns the latest cached live odds for a tournament, or null if not yet generated.
+ */
+export async function getLiveOdds(tournamentId: string): Promise<unknown> {
+  const snap = await get(ref(db, `liveOdds/${tournamentId}`));
+  return snap.exists() ? snap.val() : null;
+}
+
 // ─── Daily Summaries (AI round recaps) ───────────────────────────────────────
 
 /**

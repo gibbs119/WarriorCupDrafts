@@ -13,12 +13,28 @@ import {
   getRoundPositionSnapshot,
   saveTrendSnapshot,
   getTrendSnapshots,
+  getLiveOdds,
   type TrendSnapshot,
 } from '@/lib/db';
 import { calculateLeaderboard } from '@/lib/scoring';
 import { parseLeaderboard } from '@/lib/espn';
 import type { Tournament, TeamScore, AppUser, Player } from '@/lib/types';
-import { RefreshCw, Wifi, WifiOff, AlertTriangle, BarChart2, List, TrendingUp, Activity, Globe } from 'lucide-react';
+import { TOURNAMENT_TZ_OFFSETS } from '@/lib/constants';
+import { RefreshCw, Wifi, WifiOff, AlertTriangle, BarChart2, List, TrendingUp, Activity, Globe, Percent } from 'lucide-react';
+
+// ─── Live odds type (mirrors app/api/ai/live-odds/route.ts) ──────────────────
+interface LiveOdds {
+  generatedAt: number;
+  roundLabel: string;
+  analysis: string;
+  odds: {
+    userId: string;
+    username: string;
+    winPct: number;
+    trend: 'up' | 'down' | 'stable';
+    insight: string;
+  }[];
+}
 
 const REFRESH_INTERVAL_NORMAL_MS  = 60_000;
 const REFRESH_INTERVAL_BACKOFF_MS = 90_000;
@@ -56,9 +72,9 @@ function StatusPill({ status }: { status: string }) {
 // ─── Simple scoreboard row ────────────────────────────────────────────────────
 
 function ScoreRow({
-  team, isMe, hasScores, expanded, onToggle, cutLine,
+  team, isMe, hasScores, expanded, onToggle, cutLine, winPct,
 }: {
-  team: TeamScore; isMe: boolean; hasScores: boolean; expanded: boolean; onToggle: () => void; cutLine: number;
+  team: TeamScore; isMe: boolean; hasScores: boolean; expanded: boolean; onToggle: () => void; cutLine: number; winPct?: number;
 }) {
   const top3 = team.players.filter(p => p.countsInTop3).sort((a, b) => a.points - b.points);
 
@@ -115,7 +131,10 @@ function ScoreRow({
           <div className="font-mono font-bold text-2xl" style={{ color: ptsColor(hasScores ? team.top3Score : 9999) }}>
             {hasScores ? fmtPts(team.top3Score) : '—'}
           </div>
-          <div className="text-xs text-slate-600">pts</div>
+          {winPct !== undefined
+            ? <div className="text-xs font-bold" style={{ color: 'rgba(201,162,39,0.85)' }}>{winPct}% win</div>
+            : <div className="text-xs text-slate-600">pts</div>
+          }
         </div>
         <div className="text-slate-600 text-xs ml-1">{expanded ? '▲' : '▼'}</div>
       </div>
@@ -741,6 +760,143 @@ function FieldLeaderboard({
   );
 }
 
+// ─── Odds Panel ───────────────────────────────────────────────────────────────
+
+function OddsPanel({
+  odds, myUserId, teams, loading, onRefresh,
+}: {
+  odds: LiveOdds | null;
+  myUserId: string;
+  teams: TeamScore[];
+  loading: boolean;
+  onRefresh: () => void;
+}) {
+  if (!odds && !loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 rounded-xl gap-4"
+        style={{ border: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.02)' }}>
+        <div className="text-4xl">🎲</div>
+        <div className="text-center">
+          <div className="font-bebas text-xl tracking-wider text-white mb-1">Live Odds Not Generated Yet</div>
+          <p className="text-slate-500 text-xs max-w-xs mx-auto">
+            Odds are generated automatically each hour alongside score updates. You can also generate them manually.
+          </p>
+        </div>
+        <button onClick={onRefresh}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
+          style={{ background: 'rgba(201,162,39,0.15)', color: '#C9A227', border: '1px solid rgba(201,162,39,0.3)' }}>
+          <Percent size={13} /> Generate Odds Now
+        </button>
+      </div>
+    );
+  }
+
+  if (loading && !odds) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 gap-3">
+        <div className="font-bebas text-xl tracking-widest animate-pulse" style={{ color: '#C9A227' }}>
+          ANALYZING THE FIELD…
+        </div>
+        <p className="text-slate-500 text-xs">Gemini is crunching the numbers</p>
+      </div>
+    );
+  }
+
+  if (!odds) return null;
+
+  const sorted = [...odds.odds].sort((a, b) => b.winPct - a.winPct);
+  const maxPct = Math.max(...sorted.map(o => o.winPct), 1);
+
+  return (
+    <div className="space-y-3">
+      {/* Header card */}
+      <div className="rounded-xl p-4"
+        style={{ background: 'rgba(201,162,39,0.06)', border: '1px solid rgba(201,162,39,0.2)' }}>
+        <div className="flex items-start justify-between mb-2">
+          <div>
+            <div className="flex items-center gap-2">
+              <Percent size={14} style={{ color: '#C9A227' }} />
+              <span className="font-bebas text-xl tracking-wider text-white">Live Win Odds</span>
+              <span className="text-xs px-2 py-0.5 rounded-full font-semibold"
+                style={{ background: 'rgba(201,162,39,0.15)', color: '#C9A227' }}>
+                {odds.roundLabel}
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Updated {new Date(odds.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </p>
+          </div>
+          <button
+            onClick={onRefresh}
+            disabled={loading}
+            className="p-1.5 rounded-lg transition-colors"
+            style={{ background: 'rgba(255,255,255,0.05)', color: loading ? '#C9A227' : '#475569' }}
+            title="Regenerate odds">
+            <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
+          </button>
+        </div>
+        <p className="text-sm text-slate-300 leading-relaxed">{odds.analysis}</p>
+      </div>
+
+      {/* Per-team odds bars */}
+      {sorted.map((o) => {
+        const isMe = o.userId === myUserId;
+        const teamIdx = teams.findIndex(t => t.userId === o.userId);
+        const color = TEAM_COLORS[teamIdx >= 0 ? teamIdx % TEAM_COLORS.length : 0];
+        const trendIcon = o.trend === 'up' ? '▲' : o.trend === 'down' ? '▼' : '—';
+        const trendColor = o.trend === 'up' ? '#34d399' : o.trend === 'down' ? '#f87171' : '#475569';
+        const barWidth = `${(o.winPct / maxPct) * 100}%`;
+        const teamScore = teams.find(t => t.userId === o.userId);
+
+        return (
+          <div key={o.userId} className="rounded-xl overflow-hidden"
+            style={{
+              background: isMe
+                ? 'linear-gradient(135deg,rgba(212,175,55,0.07),rgba(13,31,92,0.4))'
+                : 'rgba(255,255,255,0.025)',
+              border: isMe ? '1.5px solid rgba(212,175,55,0.28)' : '1px solid rgba(255,255,255,0.07)',
+            }}>
+            <div className="px-4 pt-3 pb-1">
+              {/* Name row */}
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="font-bebas text-lg tracking-wide" style={{ color: isMe ? '#D4AF37' : 'white' }}>
+                    {o.username}
+                  </span>
+                  {isMe && (
+                    <span className="text-xs font-bold px-1.5 py-0.5 rounded"
+                      style={{ background: 'rgba(212,175,55,0.15)', color: '#D4AF37' }}>YOU</span>
+                  )}
+                  <span className="text-xs font-bold" style={{ color: trendColor }}>{trendIcon}</span>
+                  {teamScore && (
+                    <span className="text-xs text-slate-500 font-mono">
+                      {fmtPts(teamScore.top3Score)}
+                    </span>
+                  )}
+                </div>
+                <span className="font-bebas text-2xl shrink-0" style={{ color }}>{o.winPct}%</span>
+              </div>
+
+              {/* Win % bar */}
+              <div className="h-1.5 rounded-full mb-2" style={{ background: 'rgba(0,0,0,0.3)' }}>
+                <div className="h-full rounded-full transition-all duration-700"
+                  style={{ width: barWidth, background: color }} />
+              </div>
+
+              {/* Insight */}
+              <p className="text-xs text-slate-400 leading-relaxed pb-2">{o.insight}</p>
+            </div>
+          </div>
+        );
+      })}
+
+      <p className="text-xs text-slate-700 text-center pt-1">
+        AI-generated · updates hourly with live scores · powered by Gemini
+      </p>
+    </div>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function LeaderboardPage() {
@@ -753,7 +909,7 @@ export default function LeaderboardPage() {
   const [users,              setUsers]              = useState<AppUser[]>([]);
   const [lastUpdated,        setLastUpdated]        = useState<Date | null>(null);
   const [refreshing,         setRefreshing]         = useState(false);
-  const [view,               setView]               = useState<'simple' | 'detailed' | 'trend' | 'movers' | 'field'>('simple');
+  const [view,               setView]               = useState<'simple' | 'detailed' | 'trend' | 'movers' | 'field' | 'odds'>('simple');
   const [roundStartScores,   setRoundStartScores]   = useState<Record<string, { score: number; rank: number }> | null>(null);
   const [fieldPlayers,       setFieldPlayers]       = useState<Record<string, Player>>({});
   const [draftedMap,         setDraftedMap]         = useState<Record<string, string>>({});  // playerName.lower → username
@@ -763,12 +919,15 @@ export default function LeaderboardPage() {
   const [isStale,            setIsStale]            = useState(false);
   const [fetchError,         setFetchError]         = useState<string | null>(null);
   const [prevRoundPositions, setPrevRoundPositions] = useState<Record<string, number | null> | null>(null);
+  const [liveOdds,           setLiveOdds]           = useState<LiveOdds | null>(null);
+  const [oddsLoading,        setOddsLoading]        = useState(false);
 
   const consecutiveFailures = useRef(0);
   const intervalRef         = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasScoresRef        = useRef(false);
   const lastGoodUpdateRef   = useRef<Date | null>(null);
   const lastSnapshotHourRef = useRef<string>('');
+  const lastOddsHourRef     = useRef<string>('');
   const detectedRoundRef    = useRef(1);
 
   useEffect(() => {
@@ -778,14 +937,16 @@ export default function LeaderboardPage() {
   useEffect(() => {
     if (!appUser) return;
     async function load() {
-      const [t, allUsers, snaps] = await Promise.all([
+      const [t, allUsers, snaps, cachedOdds] = await Promise.all([
         getTournament(tournamentId),
         getAllUsers(),
         getTrendSnapshots(tournamentId),
+        getLiveOdds(tournamentId),
       ]);
       setTournament(t);
       setUsers(allUsers);
       if (snaps.length > 0) setTrendSnapshots(snaps);
+      if (cachedOdds) setLiveOdds(cachedOdds as LiveOdds);
     }
     load();
   }, [appUser, tournamentId]);
@@ -893,25 +1054,27 @@ export default function LeaderboardPage() {
         lastGoodUpdateRef.current = now;
         if (cacheAge && parseInt(cacheAge, 10) > 180) setIsStale(true);
 
-        // ── Hourly trend snapshot ──────────────────────────────────────────
-        // EDT = UTC-4. Record one snapshot per hour, Thu–Sun 8 AM–8 PM ET,
+        // ── Hourly trend snapshot + live odds ─────────────────────────────
+        // Use per-tournament timezone offset (default -4 for EDT).
+        // Record one snapshot per hour, Thu–Sun 8 AM–8 PM local time,
         // only when at least one team has a real score (not the 9999 sentinel).
-        const nowET  = new Date(now.getTime() - 4 * 60 * 60 * 1000);
-        const dow    = nowET.getUTCDay();    // 0=Sun 4=Thu 5=Fri 6=Sat
-        const hourET = nowET.getUTCHours();
+        const tzOffset = TOURNAMENT_TZ_OFFSETS[tournamentId] ?? -4;
+        const nowLocal = new Date(now.getTime() + tzOffset * 60 * 60 * 1000);
+        const dow      = nowLocal.getUTCDay();    // 0=Sun 4=Thu 5=Fri 6=Sat
+        const hourLoc  = nowLocal.getUTCHours();
 
         const isTourDay  = dow === 4 || dow === 5 || dow === 6 || dow === 0;
-        const isTourHour = hourET >= 8 && hourET <= 20;
+        const isTourHour = hourLoc >= 8 && hourLoc <= 20;
 
         if (isTourDay && isTourHour && scores.some(s => s.top3Score < 9000)) {
           // Key is ISO-hour string e.g. "2026-03-12T14" — one snapshot per hour
-          const hourKey = nowET.toISOString().slice(0, 13);
+          const hourKey = nowLocal.toISOString().slice(0, 13);
           if (hourKey !== lastSnapshotHourRef.current) {
             lastSnapshotHourRef.current = hourKey;
-            const DAYS   = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-            const h      = hourET % 12 || 12;
-            const ampm   = hourET < 12 ? 'AM' : 'PM';
-            const label  = `${DAYS[dow]} ${h}${ampm}`;
+            const DAYS  = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            const h     = hourLoc % 12 || 12;
+            const ampm  = hourLoc < 12 ? 'AM' : 'PM';
+            const label = `${DAYS[dow]} ${h}${ampm}`;
             const snap: TrendSnapshot = {
               timestamp: now.getTime(),
               hour:      label,
@@ -922,6 +1085,18 @@ export default function LeaderboardPage() {
               const deduped = prev.filter(s => s.hour !== label);
               return [...deduped, snap].sort((a, b) => a.timestamp - b.timestamp);
             });
+
+            // Also regenerate live odds alongside each hourly snapshot
+            if (hourKey !== lastOddsHourRef.current) {
+              lastOddsHourRef.current = hourKey;
+              fetch('/api/ai/live-odds', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tournamentId }),
+              }).then(r => r.ok ? r.json() : null)
+                .then(d => { if (d?.odds?.length > 0) setLiveOdds(d as LiveOdds); })
+                .catch(() => {});
+            }
           }
         }
 
@@ -998,7 +1173,7 @@ export default function LeaderboardPage() {
           {/* Tab row — scrollable so it never wraps or clips on narrow screens */}
           <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
             <div className="flex rounded-lg min-w-max" style={{ border: '1px solid rgba(255,255,255,0.09)' }}>
-              {([['simple','Board',<List size={11}/>], ['detailed','Detail',<BarChart2 size={11}/>], ['trend','Trend',<TrendingUp size={11}/>], ['movers','Movers',<Activity size={11}/>], ['field','Field',<Globe size={11}/>]] as const).map(([v, label, icon]) => (
+              {([['simple','Board',<List size={11}/>], ['detailed','Detail',<BarChart2 size={11}/>], ['trend','Trend',<TrendingUp size={11}/>], ['movers','Movers',<Activity size={11}/>], ['field','Field',<Globe size={11}/>], ['odds','Odds',<Percent size={11}/>]] as const).map(([v, label, icon]) => (
                 <button key={v} onClick={() => setView(v as any)}
                   className="flex items-center gap-1 px-3 py-2 text-xs font-medium transition-all whitespace-nowrap flex-1"
                   style={{
@@ -1045,6 +1220,19 @@ export default function LeaderboardPage() {
               <div className="font-bebas text-4xl tracking-wider leading-none" style={{ color: '#D4AF37' }}>
                 {myTeam.rank}{['st','nd','rd'][myTeam.rank-1] ?? 'th'} place
               </div>
+              {liveOdds && (() => {
+                const myO = liveOdds.odds.find(o => o.userId === appUser.uid);
+                const trendIcon = myO?.trend === 'up' ? ' ▲' : myO?.trend === 'down' ? ' ▼' : '';
+                const trendColor = myO?.trend === 'up' ? '#34d399' : myO?.trend === 'down' ? '#f87171' : '#C9A227';
+                return myO ? (
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <span className="text-sm font-bold" style={{ color: trendColor }}>
+                      {myO.winPct}% to win
+                    </span>
+                    <span className="text-xs font-bold" style={{ color: trendColor }}>{trendIcon}</span>
+                  </div>
+                ) : null;
+              })()}
             </div>
             <div className="text-right">
               <div className="font-mono font-bold text-3xl" style={{ color: ptsColor(myTeam.top3Score) }}>
@@ -1083,6 +1271,7 @@ export default function LeaderboardPage() {
                     <ScoreRow
                       team={team} isMe={isMe} hasScores={hasLiveScores}
                       expanded={isExp} cutLine={cutLine}
+                      winPct={liveOdds?.odds.find(o => o.userId === team.userId)?.winPct}
                       onToggle={() => setExpandedTeam(isExp ? null : team.userId)}
                     />
                     {isExp && <DetailPanel team={team} isMe={isMe} cutLine={cutLine} />}
@@ -1152,6 +1341,28 @@ export default function LeaderboardPage() {
               />
             </div>
           </div>
+        )}
+
+        {/* ODDS view */}
+        {view === 'odds' && (
+          <OddsPanel
+            odds={liveOdds}
+            myUserId={appUser.uid}
+            teams={teamScores}
+            loading={oddsLoading}
+            onRefresh={() => {
+              if (oddsLoading) return;
+              setOddsLoading(true);
+              fetch('/api/ai/live-odds', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tournamentId, force: true }),
+              }).then(r => r.ok ? r.json() : null)
+                .then(d => { if (d?.odds?.length > 0) setLiveOdds(d as LiveOdds); })
+                .catch(() => {})
+                .finally(() => setOddsLoading(false));
+            }}
+          />
         )}
 
       </main>

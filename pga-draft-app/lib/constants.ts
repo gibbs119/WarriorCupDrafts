@@ -94,6 +94,17 @@ export const TOP_10_POINTS = [-25, -15, -10, -8, -6, -5, -4, -3, -2, -1];
 export const SCORING_PLAYERS = 3;
 export const PICK_TIMER_SECONDS = 120;
 
+// ─── Tournament timezone offsets (hours from UTC) ─────────────────────────────
+// Used for hourly snapshot windows and cron timing.
+// US events: EDT = -4 (summer), The Open (UK): BST = +1
+export const TOURNAMENT_TZ_OFFSETS: Record<string, number> = {
+  'players-championship': -4,  // Sawgrass, FL — EDT
+  'masters':              -4,  // Augusta, GA — EDT
+  'pga-championship':     -4,  // EDT
+  'us-open':              -4,  // EDT
+  'the-open':             +1,  // UK — BST
+};
+
 // ─── Static Field Fallbacks ───────────────────────────────────────────────────
 // Used when both ESPN and DraftKings APIs fail to return player data.
 // These are the confirmed fields for each tournament, scraped from official sources.
