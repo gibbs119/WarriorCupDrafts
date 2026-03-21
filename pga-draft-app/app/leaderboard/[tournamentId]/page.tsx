@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import confetti from 'canvas-confetti';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import Navigation from '@/components/Navigation';
@@ -69,19 +70,43 @@ function StatusPill({ status }: { status: string }) {
   return null;
 }
 
+// ─── Mini sparkline per team ──────────────────────────────────────────────────
+
+function MiniSparkline({ snapshots, userId }: { snapshots: TrendSnapshot[]; userId: string }) {
+  const scores = snapshots.map(s => s.scores[userId]).filter((v): v is number => v !== undefined && v < 9000);
+  if (scores.length < 2) return null;
+  const W = 52; const H = 20; const PAD = 2;
+  const mn = Math.min(...scores); const mx = Math.max(...scores);
+  const rng = Math.max(mx - mn, 1);
+  const pts = scores.map((s, i) => ({
+    x: PAD + (i / (scores.length - 1)) * (W - PAD * 2),
+    y: PAD + ((s - mn) / rng) * (H - PAD * 2),
+  }));
+  const d = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+  const lastScore = scores[scores.length - 1];
+  const firstScore = scores[0];
+  const color = lastScore < firstScore ? '#34d399' : lastScore > firstScore ? '#f87171' : '#475569';
+  return (
+    <svg width={W} height={H} style={{ display: 'block', overflow: 'visible' }}>
+      <path d={d} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" opacity={0.7} />
+      <circle cx={pts[pts.length-1].x} cy={pts[pts.length-1].y} r={2.5} fill={color} />
+    </svg>
+  );
+}
+
 // ─── Simple scoreboard row ────────────────────────────────────────────────────
 
 function ScoreRow({
-  team, isMe, hasScores, expanded, onToggle, cutLine, winPct,
+  team, isMe, hasScores, expanded, onToggle, cutLine, winPct, flashClass, snapshots,
 }: {
-  team: TeamScore; isMe: boolean; hasScores: boolean; expanded: boolean; onToggle: () => void; cutLine: number; winPct?: number;
+  team: TeamScore; isMe: boolean; hasScores: boolean; expanded: boolean; onToggle: () => void; cutLine: number; winPct?: number; flashClass?: string; snapshots?: TrendSnapshot[];
 }) {
   const top3 = team.players.filter(p => p.countsInTop3).sort((a, b) => a.points - b.points);
 
   return (
     <div
       onClick={onToggle}
-      className="cursor-pointer select-none transition-all duration-150"
+      className={`cursor-pointer select-none transition-all duration-150 ${flashClass ?? ''}`}
       style={{
         background: isMe
           ? 'linear-gradient(135deg,rgba(212,175,55,0.09),rgba(13,31,92,0.55))'
@@ -127,6 +152,11 @@ function ScoreRow({
             <span className="text-xs text-slate-600">{hasScores ? 'No scores yet' : 'Awaiting tee-off'}</span>
           )}
         </div>
+        {snapshots && snapshots.length >= 2 && (
+          <div className="hidden sm:block shrink-0 mr-1">
+            <MiniSparkline snapshots={snapshots} userId={team.userId} />
+          </div>
+        )}
         <div className="text-right shrink-0">
           <div className="font-mono font-bold text-2xl" style={{ color: ptsColor(hasScores ? team.top3Score : 9999) }}>
             {hasScores ? fmtPts(team.top3Score) : '—'}
@@ -245,13 +275,9 @@ function DetailPanel({ team, isMe, cutLine, standalone }: {
                     : p.status === 'dq'  ? 'DQ'
                     : p.positionDisplay || '—'}
                 </div>
-                {!pending && p.positionChange !== null && p.currentRound > 1 && (
-                  <span className="text-xs font-bold" style={{
-                    color: p.positionChange > 0 ? '#34d399' : p.positionChange < 0 ? '#f87171' : '#64748b',
-                  }}>
-                    {p.positionChange > 0 ? `▲${p.positionChange}`
-                   : p.positionChange < 0 ? `▼${Math.abs(p.positionChange)}`
-                   : '—'}
+                {!pending && p.positionChange !== null && p.currentRound > 1 && p.positionChange !== 0 && (
+                  <span className={p.positionChange > 0 ? 'arrow-up' : 'arrow-down'}>
+                    {p.positionChange > 0 ? `▲${p.positionChange}` : `▼${Math.abs(p.positionChange)}`}
                   </span>
                 )}
               </div>
@@ -727,7 +753,9 @@ function FieldLeaderboard({
 
       {/* Active players */}
       {active.map((p, i) => (
-        <PlayerRow key={p.id} p={p} idx={i} total={active.length} />
+        <React.Fragment key={p.id}>
+          <PlayerRow p={p} idx={i} total={active.length} />
+        </React.Fragment>
       ))}
 
       {/* Cut line divider + toggle */}
@@ -746,7 +774,9 @@ function FieldLeaderboard({
             <span>{showCut ? '▲ hide' : '▼ show'}</span>
           </button>
           {showCut && cut.map((p, i) => (
-            <PlayerRow key={p.id} p={p} idx={i} total={cut.length} />
+            <React.Fragment key={p.id}>
+              <PlayerRow p={p} idx={i} total={cut.length} />
+            </React.Fragment>
           ))}
         </>
       )}
@@ -879,7 +909,7 @@ function OddsPanel({
 
               {/* Win % bar */}
               <div className="h-1.5 rounded-full mb-2" style={{ background: 'rgba(0,0,0,0.3)' }}>
-                <div className="h-full rounded-full transition-all duration-700"
+                <div className="h-full rounded-full odds-bar"
                   style={{ width: barWidth, background: color }} />
               </div>
 
@@ -929,6 +959,9 @@ export default function LeaderboardPage() {
   const lastSnapshotHourRef = useRef<string>('');
   const lastOddsHourRef     = useRef<string>('');
   const detectedRoundRef    = useRef(1);
+  const confettiFiredRef    = useRef(false);
+  const prevScoresRef       = useRef<Record<string, number>>({});
+  const [scoreFlashes,      setScoreFlashes] = useState<Record<string, 'up' | 'down'>>({});
 
   useEffect(() => {
     if (!loading && !appUser) router.push('/');
@@ -1031,6 +1064,21 @@ export default function LeaderboardPage() {
 
         const scores = calculateLeaderboard(userPicksMap, mergedMap, cutLine ?? t.cutLine ?? 65, currentPrevPositions);
         setTeamScores(scores);
+
+        // ── Score change flash detection ──────────────────────────────────
+        const flashes: Record<string, 'up' | 'down'> = {};
+        for (const s of scores) {
+          const prev = prevScoresRef.current[s.userId];
+          if (prev !== undefined && prev !== s.top3Score && s.top3Score < 9000) {
+            flashes[s.userId] = s.top3Score < prev ? 'up' : 'down';
+          }
+        }
+        if (Object.keys(flashes).length > 0) {
+          setScoreFlashes(flashes);
+          setTimeout(() => setScoreFlashes({}), 1500);
+        }
+        prevScoresRef.current = Object.fromEntries(scores.map(s => [s.userId, s.top3Score]));
+
         // Store full field for Field tab
         setFieldPlayers(mergedMap);
         // Build name→username map from draft picks
@@ -1116,6 +1164,16 @@ export default function LeaderboardPage() {
     [tournamentId, prevRoundPositions]
   );
 
+  // Confetti when user is rank 1 (once per session)
+  useEffect(() => {
+    if (confettiFiredRef.current) return;
+    const myTeamLocal = teamScores.find(t => t.userId === appUser?.uid);
+    if (!myTeamLocal || myTeamLocal.rank !== 1 || !hasScoresRef.current) return;
+    confettiFiredRef.current = true;
+    confetti({ particleCount: 120, spread: 80, origin: { y: 0.55 },
+      colors: ['#C9A227', '#D4AF37', '#006BB6', '#34d399', '#ffffff'] });
+  }, [teamScores, appUser]);
+
   useEffect(() => {
     if (!tournament || users.length === 0) return;
     const t = tournament;
@@ -1132,7 +1190,11 @@ export default function LeaderboardPage() {
   if (loading || !appUser) {
     return (
       <div className="min-h-screen page"><Navigation />
-        <div className="flex items-center justify-center h-64 font-bebas text-xl tracking-widest animate-pulse" style={{ color: '#C9A227' }}>LOADING…</div>
+        <main className="max-w-2xl mx-auto px-4 py-6 space-y-3">
+          <div className="skeleton h-8 w-48 mb-4" />
+          <div className="skeleton h-20 w-full rounded-xl" />
+          {[1,2,3,4].map(i => <div key={i} className="skeleton h-16 w-full rounded-xl" />)}
+        </main>
       </div>
     );
   }
@@ -1171,18 +1233,11 @@ export default function LeaderboardPage() {
             </button>
           </div>
           {/* Tab row — scrollable so it never wraps or clips on narrow screens */}
-          <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
-            <div className="flex rounded-lg min-w-max" style={{ border: '1px solid rgba(255,255,255,0.09)' }}>
+          <div className="overflow-x-auto scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
+            <div className="flex gap-1 min-w-max p-1 rounded-xl" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
               {([['simple','Board',<List size={11}/>], ['detailed','Detail',<BarChart2 size={11}/>], ['trend','Trend',<TrendingUp size={11}/>], ['movers','Movers',<Activity size={11}/>], ['field','Field',<Globe size={11}/>], ['odds','Odds',<Percent size={11}/>]] as const).map(([v, label, icon]) => (
                 <button key={v} onClick={() => setView(v as any)}
-                  className="flex items-center gap-1 px-3 py-2 text-xs font-medium transition-all whitespace-nowrap flex-1"
-                  style={{
-                    background:  view === v ? 'rgba(212,175,55,0.18)' : 'transparent',
-                    color:       view === v ? '#D4AF37' : '#64748b',
-                    borderLeft:  v !== 'simple' ? '1px solid rgba(255,255,255,0.09)' : 'none',
-                    minWidth: '56px',
-                    justifyContent: 'center',
-                  }}>
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition-all whitespace-nowrap ${view === v ? 'tab-active' : 'tab-inactive'}`}>
                   {icon}
                   {label}
                 </button>
@@ -1213,8 +1268,7 @@ export default function LeaderboardPage() {
 
         {/* My position callout */}
         {hasLiveScores && myTeam && (
-          <div className="mb-5 rounded-xl px-5 py-4 flex items-center justify-between"
-            style={{ background: 'linear-gradient(135deg,rgba(27,58,158,0.35),rgba(13,31,92,0.55))', border: '1px solid rgba(212,175,55,0.2)' }}>
+          <div className="callout-my-team mb-5 flex items-center justify-between">
             <div>
               <div className="text-xs text-slate-500 mb-0.5 uppercase tracking-wider">Your position</div>
               <div className="font-bebas text-4xl tracking-wider leading-none" style={{ color: '#D4AF37' }}>
@@ -1272,6 +1326,8 @@ export default function LeaderboardPage() {
                       team={team} isMe={isMe} hasScores={hasLiveScores}
                       expanded={isExp} cutLine={cutLine}
                       winPct={liveOdds?.odds.find(o => o.userId === team.userId)?.winPct}
+                      flashClass={scoreFlashes[team.userId] === 'up' ? 'score-improved' : scoreFlashes[team.userId] === 'down' ? 'score-worsened' : undefined}
+                      snapshots={trendSnapshots}
                       onToggle={() => setExpandedTeam(isExp ? null : team.userId)}
                     />
                     {isExp && <DetailPanel team={team} isMe={isMe} cutLine={cutLine} />}
@@ -1294,7 +1350,9 @@ export default function LeaderboardPage() {
           <>
             <div className="space-y-4">
               {teamScores.map((team) => (
-                <DetailPanel key={team.userId} team={team} isMe={team.userId === appUser.uid} cutLine={cutLine} standalone />
+                <React.Fragment key={team.userId}>
+                  <DetailPanel team={team} isMe={team.userId === appUser.uid} cutLine={cutLine} standalone />
+                </React.Fragment>
               ))}
             </div>
             <div className="mt-6 pt-4 text-xs text-slate-600 flex flex-wrap gap-x-4 gap-y-1"

@@ -251,8 +251,9 @@ export default function RecapsPage() {
     return (
       <div className="min-h-screen page">
         <Navigation />
-        <div className="flex items-center justify-center h-64 font-bebas text-xl tracking-widest animate-pulse" style={{ color: '#C9A227' }}>
-          LOADING RECAPS…
+        <div className="max-w-3xl mx-auto px-4 py-6 space-y-4">
+          <div className="skeleton h-10 w-56 rounded-xl mb-4" />
+          {[1,2,3].map(i => <div key={i} className="skeleton h-32 rounded-xl" />)}
         </div>
       </div>
     );

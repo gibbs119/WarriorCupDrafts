@@ -15,6 +15,7 @@ import { parseLeaderboard } from '@/lib/espn';
 import { USERS, TOURNAMENTS } from '@/lib/constants';
 import type { Tournament, AppUser } from '@/lib/types';
 import { Settings, Users, Trophy, Plus, Shuffle, Zap } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 const TOURNAMENT_SEQUENCE = TOURNAMENTS.map((t) => t.id);
 
@@ -40,14 +41,11 @@ export default function AdminPage() {
   const [cutLine, setCutLine] = useState(65);
   const [draftOrderInput, setDraftOrderInput] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
-  const [msg, setMsg] = useState('');
-  const [lockMsg, setLockMsg] = useState('');
   const [seeding, setSeeding] = useState(false);
 
   const [newUsername, setNewUsername] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
-  const [userMsg, setUserMsg] = useState('');
 
   useEffect(() => {
     if (!loading) {
@@ -72,13 +70,11 @@ export default function AdminPage() {
     setEspnId(t.espnEventId ?? '');
     setCutLine(t.cutLine ?? 65);
     setDraftOrderInput(t.draftOrder ?? []);
-    setMsg('');
   }
 
   async function saveTournament() {
     if (!editingId) return;
     setSaving(true);
-    setMsg('');
     try {
       await updateTournament(editingId, { espnEventId: espnId, cutLine, draftOrder: draftOrderInput });
       setTournaments((prev) =>
@@ -86,10 +82,10 @@ export default function AdminPage() {
           t.id === editingId ? { ...t, espnEventId: espnId, cutLine, draftOrder: draftOrderInput } : t
         )
       );
-      setMsg('✅ Saved!');
+      toast.success('Saved!');
       setEditingId(null);
     } catch {
-      setMsg('❌ Save failed.');
+      toast.error('Save failed.');
     } finally {
       setSaving(false);
     }
@@ -97,11 +93,11 @@ export default function AdminPage() {
 
   function randomizeDraftOrder() {
     if (users.length === 0) {
-      setMsg('⚠ No registered users found — create accounts first (Users tab).');
+      toast.error('No registered users found — create accounts first (Users tab).');
       return;
     }
     setDraftOrderInput(shuffleArray(users.map((u) => u.uid)));
-    setMsg('🎲 Draft order randomized! Click Save Changes to confirm.');
+    toast.success('Draft order randomized! Click Save Changes to confirm.');
   }
 
   async function loadOrderFromPrevious(currentId: string) {
@@ -109,17 +105,16 @@ export default function AdminPage() {
     if (idx <= 0) return;
     const prevId = TOURNAMENT_SEQUENCE[idx - 1];
     setSaving(true);
-    setMsg('Loading previous results…');
     try {
       const savedOrder = await getDraftOrderFromResults(prevId);
       if (savedOrder && savedOrder.length > 0) {
         setDraftOrderInput(savedOrder);
-        setMsg('✅ Draft order loaded from previous tournament finishing positions.');
+        toast.success('Draft order loaded from previous tournament finishing positions.');
       } else {
-        setMsg('⚠ No saved results for the previous tournament. Mark it Final first.');
+        toast('No saved results for the previous tournament. Mark it Final first.', { icon: '⚠️' });
       }
     } catch {
-      setMsg('❌ Failed to load previous results.');
+      toast.error('Failed to load previous results.');
     } finally {
       setSaving(false);
     }
@@ -130,13 +125,12 @@ export default function AdminPage() {
   async function handleResetDraft(t: Tournament) {
     if (!confirm(`⚠️ RESET ENTIRE DRAFT for ${t.name}?\n\nThis will DELETE all picks and set the tournament back to Upcoming. This cannot be undone.`)) return;
     setSaving(true);
-    setMsg('Resetting draft…');
     try {
       await resetDraft(t.id);
       setTournaments((prev) => prev.map((x) => x.id === t.id ? { ...x, status: 'upcoming', draftComplete: false } : x));
-      setMsg(`✅ Draft reset for ${t.name}. You can now re-launch.`);
+      toast.success(`Draft reset for ${t.name}. You can now re-launch.`);
     } catch {
-      setMsg('❌ Reset failed.');
+      toast.error('Reset failed.');
     } finally {
       setSaving(false);
     }
@@ -146,12 +140,11 @@ export default function AdminPage() {
   async function handleClearPicks(t: Tournament) {
     if (!confirm(`Clear all picks for ${t.name}?\n\nThe draft room stays open but everyone starts over from pick #1.`)) return;
     setSaving(true);
-    setMsg('Clearing picks…');
     try {
       await clearDraftPicks(t.id);
-      setMsg(`✅ All picks cleared for ${t.name}. Draft room is still open — pick #1 is up.`);
+      toast.success(`All picks cleared for ${t.name}. Draft room is still open — pick #1 is up.`);
     } catch {
-      setMsg('❌ Clear picks failed.');
+      toast.error('Clear picks failed.');
     } finally {
       setSaving(false);
     }
@@ -160,14 +153,13 @@ export default function AdminPage() {
   // ── ONE-CLICK LAUNCH for tonight's draft ─────────────────────────────────
   async function quickLaunchDraft(t: Tournament) {
     if (users.length === 0) {
-      setMsg('⚠ No users found. Go to the Users tab and click "Create All 8 Default Users" first.');
+      toast.error('No users found. Go to the Users tab and click "Create All 8 Default Users" first.');
       return;
     }
     setSaving(true);
-    setMsg('🚀 Launching draft…');
     try {
       // 1. Randomize order
-      const randomOrder = shuffleArray(users.map((u) => u.uid));
+      const randomOrder: string[] = shuffleArray(users.map((u) => u.uid));
       // 2. Save ESPN ID + draft order
       await updateTournament(t.id, {
         espnEventId: t.espnEventId || '401811937',
@@ -184,10 +176,10 @@ export default function AdminPage() {
           x.id === t.id ? { ...x, status: 'drafting', draftOrder: randomOrder, espnEventId: t.espnEventId || '401811937' } : x
         )
       );
-      setMsg(`✅ Draft is OPEN for ${t.name}! Share the link with everyone now.`);
+      toast.success(`Draft is OPEN for ${t.name}! Share the link with everyone.`);
     } catch (e) {
       console.error(e);
-      setMsg('❌ Launch failed — check console for details.');
+      toast.error('Launch failed — check console for details.');
     } finally {
       setSaving(false);
     }
@@ -195,7 +187,7 @@ export default function AdminPage() {
 
   async function openDraft(t: Tournament) {
     if (!t.draftOrder || t.draftOrder.length < 2) {
-      setMsg('⚠ Set draft order first — click Edit then Randomize.');
+      toast('Set draft order first — click Edit then Randomize.', { icon: '⚠️' });
       return;
     }
     setSaving(true);
@@ -205,9 +197,9 @@ export default function AdminPage() {
       await initializeDraft(t.id, snakeOrder);
       await updateTournament(t.id, { status: 'drafting' });
       setTournaments((prev) => prev.map((x) => (x.id === t.id ? { ...x, status: 'drafting' } : x)));
-      setMsg(`✅ Draft opened for ${t.name}!`);
+      toast.success(`Draft opened for ${t.name}!`);
     } catch {
-      setMsg('❌ Failed to open draft.');
+      toast.error('Failed to open draft.');
     } finally {
       setSaving(false);
     }
@@ -225,7 +217,7 @@ export default function AdminPage() {
 
   async function markFinal(t: Tournament) {
     setSaving(true);
-    setMsg('Calculating final standings…');
+    const toastId = toast.loading('Calculating final standings…');
     try {
       let rankedUids: string[] = [];
       if (t.espnEventId) {
@@ -249,7 +241,7 @@ export default function AdminPage() {
       }
       if (rankedUids.length === 0 && t.draftOrder?.length > 0) {
         rankedUids = [...t.draftOrder];
-        setMsg('⚠ ESPN data unavailable — using draft order as fallback ranking.');
+        toast('ESPN data unavailable — using draft order as fallback ranking.', { icon: '⚠️', id: toastId });
       }
       if (rankedUids.length > 0) await saveRankedOrder(t.id, rankedUids);
       await updateTournament(t.id, { status: 'completed' });
@@ -266,14 +258,14 @@ export default function AdminPage() {
             return x;
           })
         );
-        setMsg(`✅ ${t.name} marked Final. Draft order for ${nextName} set automatically.`);
+        toast.success(`${t.name} marked Final. Draft order for ${nextName} set automatically.`, { id: toastId });
       } else {
         setTournaments((prev) => prev.map((x) => (x.id === t.id ? { ...x, status: 'completed' } : x)));
-        setMsg(`✅ ${t.name} marked Final.`);
+        toast.success(`${t.name} marked Final.`, { id: toastId });
       }
     } catch (e) {
       console.error(e);
-      setMsg('❌ Failed to mark Final.');
+      toast.error('Failed to mark Final.', { id: toastId });
     } finally {
       setSaving(false);
     }
@@ -281,7 +273,7 @@ export default function AdminPage() {
 
   async function lockTournamentScores(t: Tournament) {
     setSaving(true);
-    setLockMsg('Fetching final scores from ESPN…');
+    const toastId = toast.loading('Fetching final scores from ESPN…');
     try {
       const res = await fetch('/api/admin/lock-scores', {
         method: 'POST',
@@ -290,13 +282,13 @@ export default function AdminPage() {
       });
       const data = await res.json();
       if (res.ok) {
-        setLockMsg(`✅ Scores locked for ${t.name}! ${data.teamScores?.length ?? 0} teams recorded.`);
+        toast.success(`Scores locked for ${t.name}! ${data.teamScores?.length ?? 0} teams recorded.`, { id: toastId });
         setTournaments((prev) => prev.map((x) => x.id === t.id ? { ...x, status: 'completed', scoreLocked: true } as typeof x : x));
       } else {
-        setLockMsg(`❌ Lock failed: ${data.error}`);
+        toast.error(`Lock failed: ${data.error}`, { id: toastId });
       }
     } catch {
-      setLockMsg('❌ Network error during lock.');
+      toast.error('Network error during lock.', { id: toastId });
     } finally {
       setSaving(false);
     }
@@ -304,7 +296,6 @@ export default function AdminPage() {
 
   async function handleCreateUser() {
     if (!newUsername || !newEmail || !newPassword) return;
-    setUserMsg('');
     try {
       const res = await fetch('/api/admin/create-user', {
         method: 'POST',
@@ -313,16 +304,16 @@ export default function AdminPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      setUserMsg(`✅ Account created for ${newUsername}`);
+      toast.success(`Account created for ${newUsername}`);
       setNewUsername(''); setNewEmail(''); setNewPassword('');
       setUsers(await getAllUsers());
     } catch (e: unknown) {
-      setUserMsg(`❌ ${e instanceof Error ? e.message : 'Unknown error'}`);
+      toast.error(e instanceof Error ? e.message : 'Unknown error');
     }
   }
 
   async function initAllUsers() {
-    setUserMsg('Creating accounts…');
+    const toastId = toast.loading('Creating accounts…');
     let created = 0;
     for (const u of USERS) {
       try {
@@ -334,13 +325,13 @@ export default function AdminPage() {
         if (res.ok) created++;
       } catch { /* already exists */ }
     }
-    setUserMsg(`✅ Done! ${created} users created. Default password: changeme123`);
+    toast.success(`Done! ${created} users created. Default password: changeme123`, { id: toastId });
     setUsers(await getAllUsers());
   }
 
   async function seedHistoricalData() {
     setSeeding(true);
-    setLockMsg('Importing historical data…');
+    const toastId = toast.loading('Importing historical data…');
     try {
       const res = await fetch('/api/admin/seed-history', {
         method: 'POST',
@@ -348,10 +339,10 @@ export default function AdminPage() {
         body: JSON.stringify({ overwrite: false }),
       });
       const data = await res.json();
-      if (res.ok) setLockMsg(`✅ Imported ${data.imported} tournaments (${data.skipped} already existed).`);
-      else setLockMsg(`❌ Seed failed: ${data.error}`);
+      if (res.ok) toast.success(`Imported ${data.imported} tournaments (${data.skipped} already existed).`, { id: toastId });
+      else toast.error(`Seed failed: ${data.error}`, { id: toastId });
     } catch {
-      setLockMsg('❌ Network error during seed.');
+      toast.error('Network error during seed.', { id: toastId });
     } finally {
       setSeeding(false);
     }
@@ -408,7 +399,6 @@ export default function AdminPage() {
                 {saving ? 'LAUNCHING…' : '🚀 LAUNCH DRAFT NOW'}
               </button>
             </div>
-            {msg && <p className="mt-3 text-sm font-semibold" style={{ color: msg.startsWith('✅') ? '#4ade80' : msg.startsWith('⚠') ? '#fbbf24' : '#f87171' }}>{msg}</p>}
           </div>
         )}
 
@@ -429,9 +419,6 @@ export default function AdminPage() {
         {/* ── Tournaments Tab ── */}
         {tab === 'tournaments' && (
           <div className="space-y-4">
-            {msg && !nextDraftTournament && <p className="text-sm p-3 bg-slate-800 border border-slate-700 rounded-lg">{msg}</p>}
-            {lockMsg && <p className="text-sm p-3 card-gold rounded-lg">{lockMsg}</p>}
-
             {tournaments.map((t) => {
               const seqIdx = TOURNAMENT_SEQUENCE.indexOf(t.id);
               const isFirst = seqIdx === 0;
@@ -575,13 +562,11 @@ export default function AdminPage() {
                         )}
                       </div>
 
-                      {msg && <p className="text-sm" style={{ color: msg.startsWith('✅') ? '#4ade80' : '#fbbf24' }}>{msg}</p>}
-
                       <div className="flex gap-2">
                         <button onClick={saveTournament} disabled={saving} className="btn-primary text-sm">
                           {saving ? 'Saving…' : 'Save Changes'}
                         </button>
-                        <button onClick={() => { setEditingId(null); setMsg(''); }} className="btn-secondary text-sm">Cancel</button>
+                        <button onClick={() => setEditingId(null)} className="btn-secondary text-sm">Cancel</button>
                       </div>
                     </div>
                   )}
@@ -596,7 +581,6 @@ export default function AdminPage() {
               <button onClick={seedHistoricalData} disabled={seeding} className="btn-secondary text-sm disabled:opacity-50">
                 {seeding ? 'Importing…' : '📂 Import Historical Picks'}
               </button>
-              {lockMsg && <p className="mt-2 text-sm">{lockMsg}</p>}
             </div>
           </div>
         )}
@@ -613,7 +597,6 @@ export default function AdminPage() {
                 style={{ background: '#C9A227', color: '#0D1F38' }}>
                 Create All 8 Default Users
               </button>
-              {userMsg && <p className="mt-2 text-sm">{userMsg}</p>}
             </div>
 
             <div className="card">
@@ -656,7 +639,6 @@ export default function AdminPage() {
               <button onClick={handleCreateUser} className="btn-primary text-sm">
                 <Plus size={14} className="inline mr-1" /> Create Account
               </button>
-              {userMsg && <p className="mt-2 text-sm">{userMsg}</p>}
             </div>
           </div>
         )}

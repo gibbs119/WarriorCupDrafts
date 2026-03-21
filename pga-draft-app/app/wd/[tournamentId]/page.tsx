@@ -13,6 +13,7 @@ import {
 import { playerKey, type OddsPlayer } from '@/lib/odds';
 import type { Tournament, DraftState, DraftPick, WDReplacement } from '@/lib/types';
 import { AlertTriangle, CheckCircle, Clock, XCircle, ArrowRight, RefreshCw } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 export default function WDReplacementPage() {
   const { tournamentId } = useParams<{ tournamentId: string }>();
@@ -29,7 +30,6 @@ export default function WDReplacementPage() {
   const [selectedReplacement, setSelectedReplacement] = useState<OddsPlayer | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [submitMsg, setSubmitMsg] = useState('');
 
   useEffect(() => {
     if (!loading && !appUser) router.push('/');
@@ -89,24 +89,23 @@ export default function WDReplacementPage() {
   async function handleSubmit() {
     if (!selectedDrop || !selectedReplacement || !appUser) return;
     setSubmitting(true);
-    setSubmitMsg('');
     try {
       const request: WDReplacement = {
         userId: appUser.uid,
         username: appUser.username,
         droppedPlayerId: selectedDrop.playerId,
         droppedPlayerName: selectedDrop.playerName,
-        replacementPlayerId: selectedReplacement.espnId ?? selectedReplacement.id,
+        replacementPlayerId: selectedReplacement.id,
         replacementPlayerName: selectedReplacement.espnName ?? selectedReplacement.name,
         requestedAt: Date.now(),
         status: 'pending',
       };
       await submitWDRequest(tournamentId, request);
-      setSubmitMsg('✅ Request submitted! Gibbs will approve it shortly.');
+      toast.success('Request submitted! Gibbs will approve it shortly.');
       setSelectedDrop(null);
       setSelectedReplacement(null);
     } catch {
-      setSubmitMsg('❌ Failed to submit. Try again.');
+      toast.error('Failed to submit. Try again.');
     } finally {
       setSubmitting(false);
     }
@@ -303,12 +302,6 @@ export default function WDReplacementPage() {
                 </div>
               )}
 
-              {submitMsg && (
-                <p className="text-sm p-3 rounded-lg text-center"
-                  style={{ background: submitMsg.startsWith('✅') ? 'rgba(22,163,74,0.15)' : 'rgba(200,16,46,0.15)', color: submitMsg.startsWith('✅') ? '#4ade80' : '#f87171' }}>
-                  {submitMsg}
-                </p>
-              )}
             </div>
           )}
         </div>
