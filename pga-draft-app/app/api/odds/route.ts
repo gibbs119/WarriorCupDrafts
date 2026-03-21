@@ -4,6 +4,7 @@ import {
   DRAFTKINGS_URLS,
   parseOddsApiResponse,
   parseDraftKingsResponse,
+  playerKey,
   type OddsPlayer,
 } from '@/lib/odds';
 import { fetchLeaderboardRaw, parseLeaderboard } from '@/lib/espn';
@@ -67,13 +68,16 @@ export async function GET(req: NextRequest) {
         ? parseFloat((100 / (americanOdds + 100) * 100).toFixed(1))
         : parseFloat((Math.abs(americanOdds) / (Math.abs(americanOdds) + 100) * 100).toFixed(1));
       return {
-        id: name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+        id: playerKey(name),  // consistent with playerKey() used everywhere else
         name,
         espnName: name,
         americanOdds,
         impliedProb,
         oddsDisplay: americanOdds > 0 ? `+${americanOdds}` : `${americanOdds}`,
         bookmaker: 'DraftKings (static)',
+        top10AmericanOdds: null,
+        top10Display: null,
+        top10ImpliedProb: null,
       };
     });
     source = 'DraftKings (static)';
@@ -124,13 +128,16 @@ export async function GET(req: NextRequest) {
           if (espnList.length > 5) {
             // Convert ESPN players to OddsPlayer format (no odds, just names)
             players = espnList.map((p) => ({
-              id: p.id,
+              id: playerKey(p.name),
               name: p.name,
               espnName: p.name,
               americanOdds: 9999,
               impliedProb: 0,
               oddsDisplay: 'N/A',
               bookmaker: 'ESPN',
+              top10AmericanOdds: null,
+              top10Display: null,
+              top10ImpliedProb: null,
             }));
             source = 'ESPN Field (no odds available)';
           }
@@ -144,13 +151,16 @@ export async function GET(req: NextRequest) {
     const staticField = STATIC_FIELDS[tournamentId];
     if (staticField && staticField.length > 0) {
       players = staticField.map((name) => ({
-        id: name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+        id: playerKey(name),
         name,
         espnName: name,
         americanOdds: 9999,
         impliedProb: 0,
         oddsDisplay: 'N/A',
         bookmaker: 'Field List',
+        top10AmericanOdds: null,
+        top10Display: null,
+        top10ImpliedProb: null,
       }));
       source = 'Static Field (no odds — APIs unavailable)';
     }

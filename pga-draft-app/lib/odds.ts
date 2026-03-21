@@ -12,6 +12,10 @@ export interface OddsPlayer {
   impliedProb: number;      // 0–100 percentage
   oddsDisplay: string;      // e.g. "+1200" or "-110"
   bookmaker: string;        // source label
+  // Top 10 finish odds (null if market not available)
+  top10AmericanOdds: number | null;
+  top10Display: string | null;
+  top10ImpliedProb: number | null;
 }
 
 // ─── The Odds API ─────────────────────────────────────────────────────────────
@@ -177,6 +181,9 @@ export function parseOddsApiResponse(events: OddsApiEvent[]): OddsPlayer[] {
             impliedProb: americanToImplied(outcome.price),
             oddsDisplay: formatAmericanOdds(outcome.price),
             bookmaker: bookmaker.title,
+            top10AmericanOdds: null,
+            top10Display: null,
+            top10ImpliedProb: null,
           });
         }
       }
@@ -227,10 +234,16 @@ export function parseDraftKingsResponse(
     return [];
   }
 
+  // top10Map: player key → best top-10 odds found in the response
+  const top10Map = new Map<string, { americanOdds: number; display: string; impliedProb: number }>();
+
   for (const cat of group.offerCategories ?? []) {
     for (const sub of cat.offerSubcategoryDescriptors ?? []) {
       const subName = sub.name?.toLowerCase() ?? '';
-      if (!subName.includes('winner') && !subName.includes('outright') && !subName.includes('to win')) continue;
+      const isWinner = subName.includes('winner') || subName.includes('outright') || subName.includes('to win');
+      const isTop10 = subName.includes('top 10') || subName.includes('top10') || subName.includes('top-10');
+
+      if (!isWinner && !isTop10) continue;
 
       for (const offer of sub.offerSubcategory?.offers ?? []) {
         for (const outcome of offer.outcomes ?? []) {
@@ -241,26 +254,50 @@ export function parseDraftKingsResponse(
           if (isNaN(american) || american === 9999) continue;
 
           const key = playerKey(name);
-          players.push({
-            id: key,
-            name,
-            espnName: null,
-            americanOdds: american,
-            impliedProb: americanToImplied(american),
-            oddsDisplay: formatAmericanOdds(american),
-            bookmaker: 'DraftKings',
-          });
+
+          if (isWinner) {
+            players.push({
+              id: key,
+              name,
+              espnName: null,
+              americanOdds: american,
+              impliedProb: americanToImplied(american),
+              oddsDisplay: formatAmericanOdds(american),
+              bookmaker: 'DraftKings',
+              top10AmericanOdds: null,
+              top10Display: null,
+              top10ImpliedProb: null,
+            });
+          }
+
+          if (isTop10) {
+            const existing = top10Map.get(key);
+            const prob = americanToImplied(american);
+            if (!existing || prob > existing.impliedProb) {
+              top10Map.set(key, { americanOdds: american, display: formatAmericanOdds(american), impliedProb: prob });
+            }
+          }
         }
       }
     }
   }
 
-  // Deduplicate — keep best odds per player
+  // Deduplicate win odds — keep best odds per player
   const deduped = new Map<string, OddsPlayer>();
   for (const p of players) {
     const existing = deduped.get(p.id);
     if (!existing || p.impliedProb > existing.impliedProb) {
       deduped.set(p.id, p);
+    }
+  }
+
+  // Attach top-10 odds to each player
+  for (const [key, player] of deduped) {
+    const t10 = top10Map.get(key);
+    if (t10) {
+      player.top10AmericanOdds = t10.americanOdds;
+      player.top10Display = t10.display;
+      player.top10ImpliedProb = t10.impliedProb;
     }
   }
 

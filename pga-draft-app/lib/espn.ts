@@ -180,6 +180,15 @@ export function parseLeaderboard(data: ESPNLeaderboardResponse): {
     // Current round number (ESPN period field: 1=R1, 2=R2, etc.)
     const currentRound = typeof comp.status?.period === 'number' ? comp.status.period : 1;
 
+    // World ranking — ESPN sometimes includes this in the statistics array
+    const rankStat = comp.statistics?.find((s) =>
+      s.name === 'worldRanking' || s.abbreviation === 'WR' ||
+      s.name === 'ranking' || s.abbreviation === 'WRLD' || s.abbreviation === 'RNK'
+    );
+    const worldRanking = rankStat
+      ? (parseInt(rankStat.displayValue ?? '', 10) || null)
+      : null;
+
     if (id) {
       players[id] = {
         id,
@@ -190,6 +199,7 @@ export function parseLeaderboard(data: ESPNLeaderboardResponse): {
         status,
         thru: thruDisplay,
         currentRound,
+        worldRanking,
       };
     }
   }

@@ -5,6 +5,7 @@ import { TOURNAMENTS, TOP_10_POINTS } from '@/lib/constants';
 
 // Generates AI draft grades for all teams and caches them in Firebase.
 // Called once after the draft completes; cached forever (grades don't change).
+// Uses Google Gemini API (free tier — https://aistudio.google.com/app/apikey)
 
 export interface DraftGrade {
   userId: string;
@@ -13,6 +14,37 @@ export interface DraftGrade {
   winPct: number;         // 0-100 likelihood of winning
   summary: string;        // 2-3 sentence roast+analysis paragraph
   generatedAt: number;
+}
+
+// ── Google Gemini free API ────────────────────────────────────────────────────
+async function callGemini(prompt: string): Promise<string | null> {
+  const apiKey = process.env.GEMINI_API_KEY ?? process.env.NEXT_PUBLIC_GEMINI_API_KEY ?? '';
+  if (!apiKey) {
+    console.error('[draft-grades] GEMINI_API_KEY not set');
+    return null;
+  }
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { maxOutputTokens: 2000, temperature: 0.9 },
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      console.error('[draft-grades] Gemini error:', res.status, err);
+      return null;
+    }
+    const data = await res.json();
+    return data.candidates?.[0]?.content?.parts?.[0]?.text ?? null;
+  } catch (e) {
+    console.error('[draft-grades] Gemini fetch error:', e);
+    return null;
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -39,7 +71,7 @@ export async function POST(req: NextRequest) {
 
     const draftState = draftSnap.val();
     const users = usersSnap.exists() ? Object.values(usersSnap.val()) as Array<{ uid: string; username: string }> : [];
-    const tournament = tournamentSnap.exists() ? tournamentSnap.val() : null;
+    const tournament = tournamentSnap.exists() ? tournamentSnap.val() : TOURNAMENTS.find((t) => t.id === tournamentId);
 
     // Load static odds for context
     const staticOddsSnap = await get(ref(db, `players/${tournamentId}`));
@@ -64,15 +96,15 @@ export async function POST(req: NextRequest) {
 
     const tournamentName = tournament?.name ?? tournamentId;
     const totalTeams = Object.keys(userPicks).length;
+    const picksPerTeam = picks.length / Math.max(totalTeams, 1);
 
-    // Build prompt
     const teamsBlock = Object.values(userPicks).map(({ username, players }) =>
       `${username}:\n${players.map((p, i) => `  Pick ${i + 1}: ${p.name} (${p.odds})`).join('\n')}`
     ).join('\n\n');
 
     const prompt = `You are a snarky, hilarious golf analyst grading fantasy draft teams for a group of friends in a ${tournamentName} draft league. Be funny, sarcastic, and roast bad picks mercilessly — but keep it friendly and fun. You know golf well.
 
-Scoring system: Best 3 of ${picks.length / totalTeams} drafted players count. Top 10 bonuses: ${TOP_10_POINTS.map((p, i) => `${i + 1}st: ${p}`).join(', ')}. Position 11+: points = finishing position (lower is better). Cut/WD = cut line + 1 points.
+Scoring system: Best 3 of ${picksPerTeam} drafted players count. Top 10 bonuses: ${TOP_10_POINTS.map((p, i) => `${i + 1}st: ${p}`).join(', ')}. Position 11+: points = finishing position (lower is better). Cut/WD = cut line + 1 points.
 
 Here are the ${totalTeams} teams:
 
@@ -83,7 +115,7 @@ For each team, give:
 2. A win likelihood percentage (all ${totalTeams} teams must add up to 100%)
 3. A 2-3 sentence paragraph that analyzes their picks, mentions specific players, roasts them if warranted, but also genuinely assesses their chances. Reference the odds where relevant. Be snarky but accurate.
 
-Respond ONLY with valid JSON — no markdown, no extra text. Format:
+Respond ONLY with valid JSON — no markdown, no backticks, no extra text:
 [
   {
     "username": "...",
@@ -93,24 +125,12 @@ Respond ONLY with valid JSON — no markdown, no extra text. Format:
   }
 ]`;
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 2000,
-        messages: [{ role: 'user', content: prompt }],
-      }),
-    });
-
-    if (!response.ok) {
-      const err = await response.text();
-      console.error('[draft-grades] Claude API error:', err);
-      return NextResponse.json({ error: 'AI generation failed' }, { status: 500 });
+    const text = await callGemini(prompt);
+    if (!text) {
+      return NextResponse.json({
+        error: 'AI generation failed — check GEMINI_API_KEY env variable. Get a free key at https://aistudio.google.com/app/apikey',
+      }, { status: 500 });
     }
-
-    const data = await response.json();
-    const text = data.content?.[0]?.text ?? '';
 
     let parsed: Array<{ username: string; grade: string; winPct: number; summary: string }>;
     try {

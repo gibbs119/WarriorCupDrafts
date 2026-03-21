@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import type { Tournament } from '@/lib/types';
-import { Calendar, ChevronRight } from 'lucide-react';
+import { Calendar, ChevronRight, BookOpen } from 'lucide-react';
 
 const TOURNAMENT_ICONS: Record<string, string> = {
   'players-championship': '🏖️',
@@ -95,6 +95,13 @@ export default function TournamentCard({ tournament }: { tournament: Tournament 
           <p className="text-xs italic" style={{ color: 'rgba(148,163,184,0.5)' }}>
             Draft will open closer to tournament week
           </p>
+        )}
+        {/* Recaps link when draft is complete (grades + daily summaries) */}
+        {tournament.draftComplete && (
+          <Link href="/recaps"
+            className="btn-secondary text-sm py-1.5 px-3 flex items-center gap-1.5">
+            <BookOpen size={12} /> Recaps
+          </Link>
         )}
         {/* WD replacement link when tournament is active and draft is done */}
         {tournament.status === 'active' && tournament.draftComplete && (
