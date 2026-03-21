@@ -167,7 +167,7 @@ export default function AdminPage() {
     setMsg('🚀 Launching draft…');
     try {
       // 1. Randomize order
-      const randomOrder = shuffleArray(users.map((u) => u.uid));
+      const randomOrder: string[] = shuffleArray(users.map((u) => u.uid));
       // 2. Save ESPN ID + draft order
       await updateTournament(t.id, {
         espnEventId: t.espnEventId || '401811937',

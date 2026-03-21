@@ -3,7 +3,11 @@ import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import { getDatabase } from 'firebase-admin/database';
 import { fetchLeaderboardRaw, parseLeaderboard } from '@/lib/espn';
 import { calculateLeaderboard } from '@/lib/scoring';
+import { TOURNAMENTS } from '@/lib/constants';
 import type { DraftPick, AppUser } from '@/lib/types';
+
+// Single source of truth: tournament order from constants (not a duplicate hardcoded list)
+const TOURNAMENT_SEQUENCE = TOURNAMENTS.map((t) => t.id);
 
 // ─── Firebase Admin ──────────────────────────────────────────────────────────
 function getAdminDb() {
@@ -105,10 +109,9 @@ export async function GET(req: NextRequest) {
         });
 
         // Propagate standings to next tournament's draft order
-        const SEQUENCE = ['players-championship','masters','pga-championship','us-open','the-open'];
-        const nextIdx = SEQUENCE.indexOf(t.id) + 1;
-        if (nextIdx < SEQUENCE.length) {
-          await db.ref(`tournaments/${SEQUENCE[nextIdx]}`).update({ draftOrder: rankedUids });
+        const nextIdx = TOURNAMENT_SEQUENCE.indexOf(t.id) + 1;
+        if (nextIdx > 0 && nextIdx < TOURNAMENT_SEQUENCE.length) {
+          await db.ref(`tournaments/${TOURNAMENT_SEQUENCE[nextIdx]}`).update({ draftOrder: rankedUids });
         }
 
         results.push({ tournament: t.name, status: 'locked', message: `${teamScores.length} teams @ ${lockedAt}` });

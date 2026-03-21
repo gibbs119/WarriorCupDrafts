@@ -727,7 +727,9 @@ function FieldLeaderboard({
 
       {/* Active players */}
       {active.map((p, i) => (
-        <PlayerRow key={p.id} p={p} idx={i} total={active.length} />
+        <React.Fragment key={p.id}>
+          <PlayerRow p={p} idx={i} total={active.length} />
+        </React.Fragment>
       ))}
 
       {/* Cut line divider + toggle */}
@@ -746,7 +748,9 @@ function FieldLeaderboard({
             <span>{showCut ? '▲ hide' : '▼ show'}</span>
           </button>
           {showCut && cut.map((p, i) => (
-            <PlayerRow key={p.id} p={p} idx={i} total={cut.length} />
+            <React.Fragment key={p.id}>
+              <PlayerRow p={p} idx={i} total={cut.length} />
+            </React.Fragment>
           ))}
         </>
       )}
@@ -1294,7 +1298,9 @@ export default function LeaderboardPage() {
           <>
             <div className="space-y-4">
               {teamScores.map((team) => (
-                <DetailPanel key={team.userId} team={team} isMe={team.userId === appUser.uid} cutLine={cutLine} standalone />
+                <React.Fragment key={team.userId}>
+                  <DetailPanel team={team} isMe={team.userId === appUser.uid} cutLine={cutLine} standalone />
+                </React.Fragment>
               ))}
             </div>
             <div className="mt-6 pt-4 text-xs text-slate-600 flex flex-wrap gap-x-4 gap-y-1"

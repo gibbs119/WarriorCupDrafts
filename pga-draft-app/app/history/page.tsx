@@ -94,7 +94,7 @@ export default function HistoryPage() {
       setStats(Object.entries(st).map(([username, s]) => ({ username, ...s })).sort((a,b) => a.total - b.total));
       setFetching(false);
     }
-    load();
+    load().catch(() => setFetching(false));
   }, [appUser]);
 
   if (loading || !appUser) return (

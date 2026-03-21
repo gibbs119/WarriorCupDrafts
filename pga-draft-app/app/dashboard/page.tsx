@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { getAllTournaments } from '@/lib/db';
@@ -151,7 +151,9 @@ export default function Dashboard() {
         ) : (
           <div className="grid gap-4 sm:grid-cols-2">
             {tournaments.map((t: Tournament) => (
-              <TournamentCard key={t.id} tournament={t} />
+              <React.Fragment key={t.id}>
+                <TournamentCard tournament={t} />
+              </React.Fragment>
             ))}
           </div>
         )}

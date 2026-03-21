@@ -25,12 +25,11 @@ export const viewport: Viewport = {
   themeColor: '#030912',  // colors the iOS status bar area
 };
 
-export default function RootLayout(props: { children: React.ReactNode }) {
-  const { children } = props;
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <body className="bg-warriors min-h-dvh">
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider children={children} />
       </body>
     </html>
   );
