@@ -64,6 +64,17 @@ export function buildPlayerScores(
   // Filter out admin-removed slots (sentinel value) before scoring
   const activePicks = picks.filter((p) => p.playerId !== '__removed__');
 
+  // Compute effective cut line: cut/WD/DQ players must always score *worse* than
+  // every active player. When ties at the cut bubble cause active players to have
+  // positions beyond the nominal cutLine (e.g. T65 spreads to positions 65-72),
+  // use the highest active position instead so that cut golfers aren't inadvertently
+  // given a better (lower) score than an active player still in the field.
+  const maxActivePos = Object.values(playersMap).reduce<number>((max, p) => {
+    if (p.status === 'active' && p.position !== null && p.position > max) return p.position;
+    return max;
+  }, 0);
+  const effectiveCutLine = Math.max(cutLine, maxActivePos);
+
   // Build name lookup as fallback for picks stored without ESPN IDs
   const nameLookup = buildNameLookup(playersMap);
 
@@ -124,7 +135,7 @@ export function buildPlayerScores(
       };
     }
 
-    const points = calculatePoints(player.position, player.status, cutLine);
+    const points = calculatePoints(player.position, player.status, effectiveCutLine);
 
     // Position change vs end of previous round
     let positionChange: number | null = null;
