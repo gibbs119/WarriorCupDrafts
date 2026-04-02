@@ -109,6 +109,21 @@ export default function DraftRoomPage() {
   const [myTurnAlert, setMyTurnAlert] = useState(false);   // in-tab banner
   const prevPickerUidRef = useRef<string | null>(null);     // track picker changes
   const snakeOrderRef = useRef<string[]>([]);                  // always-current snake order
+  const notifPermissionRef = useRef<NotificationPermission>('default');
+
+  // Request browser notification permission once the draft is active so we can
+  // fire OS-level banners even when the user's tab is backgrounded.
+  useEffect(() => {
+    if (typeof Notification === 'undefined') return;
+    if (Notification.permission === 'granted') {
+      notifPermissionRef.current = 'granted';
+      return;
+    }
+    if (Notification.permission === 'denied') return;
+    Notification.requestPermission().then((perm) => {
+      notifPermissionRef.current = perm;
+    });
+  }, []);
 
   // Auth guard
   useEffect(() => {
@@ -218,24 +233,37 @@ export default function DraftRoomPage() {
     });
   }, [tournamentId]);
 
-  // ── In-tab alert + push trigger when it becomes your turn ────────────────
+  // ── In-tab alert + OS notifications when it's your turn or you're on deck ──
   useEffect(() => {
     const order = snakeOrderRef.current;
     if (!draftState || !appUser || order.length === 0) return;
-    const currentUid = getCurrentPicker(order, draftState.currentPickIndex);
+    const idx = draftState.currentPickIndex;
+    const currentUid = getCurrentPicker(order, idx);
     const prevUid = prevPickerUidRef.current;
+
+    // Helper — send a browser notification if permission was granted
+    function notify(title: string, body: string) {
+      if (typeof Notification === 'undefined') return;
+      if (Notification.permission !== 'granted') return;
+      try { new Notification(title, { body, icon: '/favicon.ico' }); } catch {}
+    }
 
     // Only fire when picker actually changes (not on first load)
     if (prevUid !== null && currentUid !== prevUid) {
       if (currentUid === appUser.uid) {
         // ── It's MY turn ──
         setMyTurnAlert(true);
-        // Play a chime using Web Audio API (no file needed)
         playChime();
-        // Page title flash
+        notify('⛳ It\'s your pick!', 'Head back to the draft room and make your selection.');
         try { document.title = "⛳ YOUR PICK! — PGA Draft"; setTimeout(() => { document.title = "PGA Draft League"; }, 8000); } catch {}
       } else {
         setMyTurnAlert(false);
+
+        // ── I'm on deck (next pick is mine) ──
+        const nextUid = order[(idx + 1) % order.length];
+        if (nextUid === appUser.uid) {
+          notify('You\'re on deck!', 'One more pick before it\'s your turn — start thinking.');
+        }
       }
     }
 
