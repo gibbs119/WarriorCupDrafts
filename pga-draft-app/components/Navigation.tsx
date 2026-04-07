@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
-import { getAllTournaments } from '@/lib/db';
+import { getAllTournaments, saveUserFcmToken } from '@/lib/db';
+import { requestPushToken } from '@/lib/fcm';
 import WarriorsLogo from './WarriorsLogo';
 import { LogOut, History, Settings, Home, BookOpen } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -21,6 +22,15 @@ export default function Navigation() {
       .then((ts) => setHasLive(ts.some((t) => t.status === 'active' || t.status === 'drafting')))
       .catch(() => {});
   }, [appUser]);
+
+  // Register FCM push token for this device — runs for every logged-in user on every page
+  useEffect(() => {
+    if (!appUser) return;
+    requestPushToken().then((token) => {
+      if (token) saveUserFcmToken(appUser.uid, token).catch(() => {});
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appUser?.uid]);
 
   async function handleSignOut() {
     await signOut();
