@@ -47,6 +47,12 @@ export default function AdminPage() {
   const [newEmail, setNewEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
 
+  // User editing
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [editEmail, setEditEmail] = useState('');
+  const [editPassword, setEditPassword] = useState('');
+  const [savingUser, setSavingUser] = useState(false);
+
   useEffect(() => {
     if (!loading) {
       if (!appUser) router.push('/');
@@ -291,6 +297,39 @@ export default function AdminPage() {
       toast.error('Network error during lock.', { id: toastId });
     } finally {
       setSaving(false);
+    }
+  }
+
+  function startEditUser(u: AppUser) {
+    setEditingUserId(u.uid);
+    setEditEmail(u.email);
+    setEditPassword('');
+  }
+
+  async function handleSaveUser() {
+    if (!editingUserId) return;
+    if (!editEmail && !editPassword) { toast.error('Enter an email or password to update'); return; }
+    if (editPassword && editPassword.length < 6) { toast.error('Password must be at least 6 characters'); return; }
+    setSavingUser(true);
+    const tid = toast.loading('Saving…');
+    try {
+      const body: Record<string, string> = { uid: editingUserId };
+      if (editEmail) body.email = editEmail;
+      if (editPassword) body.password = editPassword;
+      const res = await fetch('/api/admin/update-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      toast.success(`Updated ${data.updated.join(' & ')} for user`, { id: tid });
+      setUsers((prev) => prev.map((u) => u.uid === editingUserId ? { ...u, email: editEmail || u.email } : u));
+      setEditingUserId(null);
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Update failed', { id: tid });
+    } finally {
+      setSavingUser(false);
     }
   }
 
@@ -610,19 +649,63 @@ export default function AdminPage() {
                       <th className="text-left py-2">Username</th>
                       <th className="text-left py-2">Email</th>
                       <th className="text-left py-2">Role</th>
+                      <th className="text-left py-2"></th>
                     </tr>
                   </thead>
                   <tbody>
                     {users.map((u) => (
-                      <tr key={u.uid} className="border-b border-slate-700/50">
-                        <td className="py-2 font-medium text-white">{u.username}</td>
-                        <td className="py-2 text-slate-400 text-xs">{u.email}</td>
-                        <td className="py-2">
-                          <span className={`text-xs px-1.5 py-0.5 rounded ${u.role === 'admin' ? 'bg-yellow-700 text-yellow-100' : 'bg-slate-700 text-slate-300'}`}>
-                            {u.role}
-                          </span>
-                        </td>
-                      </tr>
+                      <>
+                        <tr key={u.uid} className="border-b border-slate-700/50">
+                          <td className="py-2 font-medium text-white">{u.username}</td>
+                          <td className="py-2 text-slate-400 text-xs">{u.email}</td>
+                          <td className="py-2">
+                            <span className={`text-xs px-1.5 py-0.5 rounded ${u.role === 'admin' ? 'bg-yellow-700 text-yellow-100' : 'bg-slate-700 text-slate-300'}`}>
+                              {u.role}
+                            </span>
+                          </td>
+                          <td className="py-2 text-right">
+                            <button
+                              onClick={() => editingUserId === u.uid ? setEditingUserId(null) : startEditUser(u)}
+                              className="text-xs px-2 py-1 rounded text-slate-400 hover:text-white hover:bg-white/5 transition-colors">
+                              {editingUserId === u.uid ? 'Cancel' : '✏️ Edit'}
+                            </button>
+                          </td>
+                        </tr>
+                        {editingUserId === u.uid && (
+                          <tr key={`${u.uid}-edit`} className="border-b border-slate-700/50 bg-slate-800/40">
+                            <td colSpan={4} className="py-3 px-2">
+                              <div className="flex flex-wrap gap-2 items-end">
+                                <div>
+                                  <label className="block text-xs text-slate-400 mb-1">New Email</label>
+                                  <input
+                                    type="email"
+                                    value={editEmail}
+                                    onChange={(e) => setEditEmail(e.target.value)}
+                                    className="input text-sm py-1.5 w-48"
+                                    placeholder="email@example.com"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs text-slate-400 mb-1">New Password</label>
+                                  <input
+                                    type="password"
+                                    value={editPassword}
+                                    onChange={(e) => setEditPassword(e.target.value)}
+                                    className="input text-sm py-1.5 w-40"
+                                    placeholder="leave blank to keep"
+                                  />
+                                </div>
+                                <button
+                                  onClick={handleSaveUser}
+                                  disabled={savingUser}
+                                  className="btn-primary text-xs py-1.5 px-3 disabled:opacity-40">
+                                  {savingUser ? 'Saving…' : 'Save'}
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </>
                     ))}
                   </tbody>
                 </table>
