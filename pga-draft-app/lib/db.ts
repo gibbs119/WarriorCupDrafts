@@ -119,6 +119,14 @@ export async function getUserByUid(uid: string): Promise<AppUser | null> {
   return snap.exists() ? (snap.val() as AppUser) : null;
 }
 
+export async function getUserByUsername(username: string): Promise<AppUser | null> {
+  const { query, orderByChild, equalTo } = await import('firebase/database');
+  const snap = await get(query(ref(db, 'users'), orderByChild('username'), equalTo(username)));
+  if (!snap.exists()) return null;
+  const vals = Object.values(snap.val() as Record<string, AppUser>);
+  return vals[0] ?? null;
+}
+
 export async function getAllUsers(): Promise<AppUser[]> {
   const snap = await get(ref(db, 'users'));
   if (!snap.exists()) return [];
@@ -127,6 +135,10 @@ export async function getAllUsers(): Promise<AppUser[]> {
 
 export async function setUser(uid: string, user: AppUser) {
   await set(ref(db, `users/${uid}`), user);
+}
+
+export async function updateUserEmail(uid: string, email: string) {
+  await update(ref(db, `users/${uid}`), { email });
 }
 
 // ─── Results / History ───────────────────────────────────────────────────────

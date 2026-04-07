@@ -86,7 +86,7 @@ export default function Navigation() {
           {/* User + sign out */}
           <div className="flex items-center gap-3">
             {appUser && (
-              <div className="hidden sm:flex items-center gap-1.5">
+              <Link href="/account" className="hidden sm:flex items-center gap-1.5 hover:opacity-80 transition-opacity">
                 <span className="text-sm font-semibold text-white">{appUser.username}</span>
                 {appUser.role === 'admin' && (
                   <span className="text-xs px-1.5 py-0.5 rounded font-bold"
@@ -94,7 +94,7 @@ export default function Navigation() {
                     ADMIN
                   </span>
                 )}
-              </div>
+              </Link>
             )}
             <button onClick={handleSignOut}
               className="flex items-center gap-1 text-slate-500 hover:text-white transition-colors text-sm p-1.5 rounded-lg hover:bg-white/5">
