@@ -109,7 +109,8 @@ export default function DraftRoomPage() {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [pickLoading, setPickLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
-  const [myTurnAlert, setMyTurnAlert] = useState(false);   // in-tab banner
+  const [myTurnAlert, setMyTurnAlert] = useState(false);    // in-tab banner: your turn
+  const [onDeckAlert, setOnDeckAlert] = useState(false);    // in-tab banner: you're next
   const prevPickerUidRef = useRef<string | null>(null);     // track picker changes
   const snakeOrderRef = useRef<string[]>([]);                  // always-current snake order
   const notifPermissionRef = useRef<NotificationPermission>('default');
@@ -256,6 +257,7 @@ export default function DraftRoomPage() {
       if (currentUid === appUser.uid) {
         // ── It's MY turn ──
         setMyTurnAlert(true);
+        setOnDeckAlert(false);
         playChime();
         notify('⛳ It\'s your pick!', 'Head back to the draft room and make your selection.');
         try { document.title = "⛳ YOUR PICK! — Warrior Cup"; setTimeout(() => { document.title = "Warrior Cup Drafts"; }, 8000); } catch {}
@@ -265,7 +267,25 @@ export default function DraftRoomPage() {
         // ── I'm on deck (next pick is mine) ──
         const nextUid = order[(idx + 1) % order.length];
         if (nextUid === appUser.uid) {
-          notify('You\'re on deck!', 'One more pick before it\'s your turn — start thinking.');
+          setOnDeckAlert(true);
+          // Single soft chime (one note instead of three)
+          try {
+            const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain); gain.connect(ctx.destination);
+            osc.frequency.value = 660;
+            osc.type = 'sine';
+            gain.gain.setValueAtTime(0, ctx.currentTime);
+            gain.gain.linearRampToValueAtTime(0.18, ctx.currentTime + 0.03);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+            osc.start(ctx.currentTime);
+            osc.stop(ctx.currentTime + 0.6);
+          } catch {}
+          notify('🔜 You\'re on deck!', 'One more pick before it\'s your turn — start thinking.');
+          try { document.title = "🔜 ON DECK — Warrior Cup"; setTimeout(() => { document.title = "Warrior Cup Drafts"; }, 10000); } catch {}
+        } else {
+          setOnDeckAlert(false);
         }
       }
     }
@@ -501,7 +521,7 @@ export default function DraftRoomPage() {
     <div className="min-h-screen page">
       <Navigation />
 
-      {/* ── "Your turn" alert banner — pulses gold, tap to dismiss ── */}
+      {/* ── "Your turn" alert banner — pulses, tap to dismiss ── */}
       {myTurnAlert && (
         <div
           className="sticky top-0 z-40 flex items-center justify-between gap-3 px-4 py-3 text-sm font-bold cursor-pointer"
@@ -510,6 +530,18 @@ export default function DraftRoomPage() {
         >
           <span>⛳ &nbsp;IT'S YOUR PICK — You're on the clock!</span>
           <span className="text-base opacity-70">✕</span>
+        </div>
+      )}
+
+      {/* ── "On deck" alert banner — softer, tap to dismiss ── */}
+      {onDeckAlert && !myTurnAlert && (
+        <div
+          className="sticky top-0 z-40 flex items-center justify-between gap-3 px-4 py-3 text-sm font-semibold cursor-pointer"
+          style={{ background: 'rgba(30,30,40,0.97)', borderBottom: `2px solid ${theme.accent}`, color: theme.accentMid }}
+          onClick={() => setOnDeckAlert(false)}
+        >
+          <span>🔜 &nbsp;You're on deck — one more pick before yours. Start thinking!</span>
+          <span className="text-base opacity-50">✕</span>
         </div>
       )}
 
