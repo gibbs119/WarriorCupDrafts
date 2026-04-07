@@ -5,6 +5,8 @@ import confetti from 'canvas-confetti';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import Navigation from '@/components/Navigation';
+import TournamentHero from '@/components/TournamentHero';
+import { getTournamentTheme } from '@/lib/tournament-theme';
 import {
   getTournament,
   getDraftState,
@@ -931,6 +933,7 @@ function OddsPanel({
 
 export default function LeaderboardPage() {
   const { tournamentId } = useParams<{ tournamentId: string }>();
+  const theme = getTournamentTheme(tournamentId);
   const { appUser, loading } = useAuth();
   const router = useRouter();
 
@@ -1208,41 +1211,40 @@ export default function LeaderboardPage() {
       <Navigation />
       <main className="max-w-2xl mx-auto px-4 py-6">
 
-        {/* Header — stacked layout for mobile/landscape */}
-        <div className="mb-4">
-          {/* Title row */}
-          <div className="flex items-start justify-between mb-3">
-            <div className="min-w-0 mr-2">
-              <h1 className="font-bebas text-2xl tracking-wider text-white leading-none truncate">
-                {tournament?.shortName ?? tournament?.name ?? 'Leaderboard'}
-              </h1>
-              <div className="flex items-center gap-2 mt-0.5 flex-wrap text-xs text-slate-500">
-                <span>{tournament?.startDate}</span>
-                {lastUpdated && <span>· {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>}
-                {dataSource && !fetchError && (
-                  <span className="flex items-center gap-1"><Wifi size={9} className="text-green-500" />live</span>
-                )}
-              </div>
-            </div>
+        {/* Tournament hero banner */}
+        <TournamentHero
+          theme={theme}
+          year={tournament?.year ?? new Date().getFullYear()}
+          subtitle={[
+            tournament?.startDate,
+            lastUpdated ? `Updated ${lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : null,
+          ].filter(Boolean).join(' · ')}
+          rightSlot={
             <button
               onClick={() => tournament && users.length > 0 && refreshScores(tournament, users, true)}
               disabled={refreshing}
-              className="p-2 rounded-lg shrink-0 transition-colors"
-              style={{ background: 'rgba(255,255,255,0.05)', color: refreshing ? '#D4AF37' : '#475569' }}>
-              <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} />
+              className="p-2 rounded-lg transition-colors"
+              style={{ background: 'rgba(255,255,255,0.08)', color: refreshing ? theme.accentMid : '#64748b' }}
+              title="Force refresh scores">
+              <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
             </button>
-          </div>
-          {/* Tab row — scrollable so it never wraps or clips on narrow screens */}
-          <div className="overflow-x-auto scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
-            <div className="flex gap-1 min-w-max p-1 rounded-xl" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
-              {([['simple','Board',<List size={11}/>], ['detailed','Detail',<BarChart2 size={11}/>], ['trend','Trend',<TrendingUp size={11}/>], ['movers','Movers',<Activity size={11}/>], ['field','Field',<Globe size={11}/>], ['odds','Odds',<Percent size={11}/>]] as const).map(([v, label, icon]) => (
-                <button key={v} onClick={() => setView(v as any)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition-all whitespace-nowrap ${view === v ? 'tab-active' : 'tab-inactive'}`}>
-                  {icon}
-                  {label}
-                </button>
-              ))}
-            </div>
+          }
+        />
+
+        {/* Tab row — scrollable */}
+        <div className="overflow-x-auto scrollbar-hide mb-4" style={{ WebkitOverflowScrolling: 'touch' }}>
+          <div className="flex gap-1 min-w-max p-1 rounded-xl" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
+            {([['simple','Board',<List size={11}/>], ['detailed','Detail',<BarChart2 size={11}/>], ['trend','Trend',<TrendingUp size={11}/>], ['movers','Movers',<Activity size={11}/>], ['field','Field',<Globe size={11}/>], ['odds','Odds',<Percent size={11}/>]] as const).map(([v, label, icon]) => (
+              <button key={v} onClick={() => setView(v as any)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition-all whitespace-nowrap rounded-lg"
+                style={view === v
+                  ? { background: theme.activeBg, color: theme.activeText, border: `1px solid ${theme.activeBorder}` }
+                  : { color: '#475569', background: 'transparent', border: '1px solid transparent' }
+                }>
+                {icon}
+                {label}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -1268,10 +1270,11 @@ export default function LeaderboardPage() {
 
         {/* My position callout */}
         {hasLiveScores && myTeam && (
-          <div className="callout-my-team mb-5 flex items-center justify-between">
+          <div className="callout-my-team mb-5 flex items-center justify-between"
+            style={{ borderColor: theme.cardBorder, boxShadow: theme.cardGlow }}>
             <div>
               <div className="text-xs text-slate-500 mb-0.5 uppercase tracking-wider">Your position</div>
-              <div className="font-bebas text-4xl tracking-wider leading-none" style={{ color: '#D4AF37' }}>
+              <div className="font-bebas text-4xl tracking-wider leading-none" style={{ color: theme.accentMid }}>
                 {myTeam.rank}{['st','nd','rd'][myTeam.rank-1] ?? 'th'} place
               </div>
               {liveOdds && (() => {
