@@ -3,6 +3,8 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import {
   signInWithEmailAndPassword,
+  signInWithPopup,
+  GoogleAuthProvider,
   signOut as firebaseSignOut,
   onAuthStateChanged,
   updatePassword as firebaseUpdatePassword,
@@ -37,11 +39,21 @@ function writeCache(user: AppUser | null) {
   }
 }
 
+// Returned by signInWithGoogle when the user is new (no DB record yet).
+// The caller should prompt username selection, then call linkGoogleAccount.
+export interface GooglePendingUser {
+  uid: string;
+  googleEmail: string;
+  displayName: string | null;
+}
+
 interface AuthContextValue {
   firebaseUser: FirebaseUser | null;
   appUser: AppUser | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
+  signInWithGoogle: () => Promise<{ status: 'ok' } | { status: 'new'; pending: GooglePendingUser }>;
+  linkGoogleAccount: (pending: GooglePendingUser, username: string) => Promise<void>;
   signOut: () => Promise<void>;
   createAccount: (email: string, password: string, username: string, role: 'admin' | 'user') => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
@@ -81,6 +93,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const user = await getUserByUid(cred.user.uid);
     setFirebaseUser(cred.user);
     setAppUser(user);
+    setLoading(false);
+  }
+
+  async function signInWithGoogle(): Promise<{ status: 'ok' } | { status: 'new'; pending: GooglePendingUser }> {
+    const provider = new GoogleAuthProvider();
+    const cred = await signInWithPopup(auth, provider);
+    setFirebaseUser(cred.user);
+
+    const existing = await getUserByUid(cred.user.uid);
+    if (existing) {
+      setAppUser(existing);
+      setLoading(false);
+      return { status: 'ok' };
+    }
+
+    // First Google login — caller must ask which league member they are
+    return {
+      status: 'new',
+      pending: {
+        uid: cred.user.uid,
+        googleEmail: cred.user.email ?? '',
+        displayName: cred.user.displayName,
+      },
+    };
+  }
+
+  async function linkGoogleAccount(pending: GooglePendingUser, username: string) {
+    const { getUserByUsername } = await import('./db');
+    const existing = await getUserByUsername(username);
+    // If they had a prior password-based account, copy their role; otherwise default to user
+    const role = existing?.role ?? 'user';
+    const newUser: AppUser = {
+      uid: pending.uid,
+      username,
+      email: pending.googleEmail,
+      role,
+    };
+    await setUser(pending.uid, newUser);
+    setAppUser(newUser);
     setLoading(false);
   }
 
@@ -127,7 +178,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ firebaseUser, appUser, loading, signIn, signOut, createAccount, changePassword, changeEmail }}>
+    <AuthContext.Provider value={{ firebaseUser, appUser, loading, signIn, signInWithGoogle, linkGoogleAccount, signOut, createAccount, changePassword, changeEmail }}>
       {children}
     </AuthContext.Provider>
   );
