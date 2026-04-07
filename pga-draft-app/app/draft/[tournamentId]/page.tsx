@@ -15,7 +15,9 @@ import {
   getAllUsers,
   savePlayers,
   updateTournament,
+  saveUserFcmToken,
 } from '@/lib/db';
+import { requestPushToken, getPushPermission, type PushPermission } from '@/lib/fcm';
 import { buildSnakeDraftOrder, getCurrentPicker } from '@/lib/scoring';
 import { STATIC_FIELDS } from '@/lib/constants';
 import { parseLeaderboard } from '@/lib/espn';
@@ -109,24 +111,33 @@ export default function DraftRoomPage() {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [pickLoading, setPickLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
-  const [myTurnAlert, setMyTurnAlert] = useState(false);   // in-tab banner
+  const [myTurnAlert, setMyTurnAlert] = useState(false);    // in-tab banner: your turn
+  const [onDeckAlert, setOnDeckAlert] = useState(false);    // in-tab banner: you're next
+  const [pushPermission, setPushPermission] = useState<PushPermission>('default');
   const prevPickerUidRef = useRef<string | null>(null);     // track picker changes
   const snakeOrderRef = useRef<string[]>([]);                  // always-current snake order
   const notifPermissionRef = useRef<NotificationPermission>('default');
 
-  // Request browser notification permission once the draft is active so we can
-  // fire OS-level banners even when the user's tab is backgrounded.
+  // Register FCM push token so server-side notifications reach this device.
+  // Also tracks permission state for the UI badge.
   useEffect(() => {
-    if (typeof Notification === 'undefined') return;
-    if (Notification.permission === 'granted') {
-      notifPermissionRef.current = 'granted';
-      return;
-    }
-    if (Notification.permission === 'denied') return;
-    Notification.requestPermission().then((perm) => {
-      notifPermissionRef.current = perm;
+    if (!appUser) return;
+    const current = getPushPermission();
+    setPushPermission(current);
+    notifPermissionRef.current = current === 'unsupported' ? 'default' : current as NotificationPermission;
+
+    if (current === 'denied') return; // can't ask again — OS settings required
+
+    requestPushToken().then((token) => {
+      const perm = getPushPermission();
+      setPushPermission(perm);
+      notifPermissionRef.current = perm === 'unsupported' ? 'default' : perm as NotificationPermission;
+      if (token) {
+        saveUserFcmToken(appUser.uid, token).catch(() => {});
+      }
     });
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appUser?.uid]);
 
   // Auth guard
   useEffect(() => {
@@ -256,6 +267,7 @@ export default function DraftRoomPage() {
       if (currentUid === appUser.uid) {
         // ── It's MY turn ──
         setMyTurnAlert(true);
+        setOnDeckAlert(false);
         playChime();
         notify('⛳ It\'s your pick!', 'Head back to the draft room and make your selection.');
         try { document.title = "⛳ YOUR PICK! — Warrior Cup"; setTimeout(() => { document.title = "Warrior Cup Drafts"; }, 8000); } catch {}
@@ -265,7 +277,25 @@ export default function DraftRoomPage() {
         // ── I'm on deck (next pick is mine) ──
         const nextUid = order[(idx + 1) % order.length];
         if (nextUid === appUser.uid) {
-          notify('You\'re on deck!', 'One more pick before it\'s your turn — start thinking.');
+          setOnDeckAlert(true);
+          // Single soft chime (one note instead of three)
+          try {
+            const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain); gain.connect(ctx.destination);
+            osc.frequency.value = 660;
+            osc.type = 'sine';
+            gain.gain.setValueAtTime(0, ctx.currentTime);
+            gain.gain.linearRampToValueAtTime(0.18, ctx.currentTime + 0.03);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+            osc.start(ctx.currentTime);
+            osc.stop(ctx.currentTime + 0.6);
+          } catch {}
+          notify('🔜 You\'re on deck!', 'One more pick before it\'s your turn — start thinking.');
+          try { document.title = "🔜 ON DECK — Warrior Cup"; setTimeout(() => { document.title = "Warrior Cup Drafts"; }, 10000); } catch {}
+        } else {
+          setOnDeckAlert(false);
         }
       }
     }
@@ -488,6 +518,15 @@ export default function DraftRoomPage() {
       const isDraftComplete = nextIndex >= snakeOrder.length;
       await submitPick(tournamentId, pick, nextIndex, isDraftComplete);
       setStatusMsg(`✅ Picked ${pickName}`);
+
+      // Fire-and-forget: notify next picker(s) via FCM push
+      if (!isDraftComplete) {
+        fetch('/api/notify-draft', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tournamentId, baseUrl: window.location.origin }),
+        }).catch(() => {});
+      }
     } catch {
       setStatusMsg('❌ Pick failed — try again.');
     } finally {
@@ -501,7 +540,7 @@ export default function DraftRoomPage() {
     <div className="min-h-screen page">
       <Navigation />
 
-      {/* ── "Your turn" alert banner — pulses gold, tap to dismiss ── */}
+      {/* ── "Your turn" alert banner — pulses, tap to dismiss ── */}
       {myTurnAlert && (
         <div
           className="sticky top-0 z-40 flex items-center justify-between gap-3 px-4 py-3 text-sm font-bold cursor-pointer"
@@ -510,6 +549,18 @@ export default function DraftRoomPage() {
         >
           <span>⛳ &nbsp;IT'S YOUR PICK — You're on the clock!</span>
           <span className="text-base opacity-70">✕</span>
+        </div>
+      )}
+
+      {/* ── "On deck" alert banner — softer, tap to dismiss ── */}
+      {onDeckAlert && !myTurnAlert && (
+        <div
+          className="sticky top-0 z-40 flex items-center justify-between gap-3 px-4 py-3 text-sm font-semibold cursor-pointer"
+          style={{ background: 'rgba(30,30,40,0.97)', borderBottom: `2px solid ${theme.accent}`, color: theme.accentMid }}
+          onClick={() => setOnDeckAlert(false)}
+        >
+          <span>🔜 &nbsp;You're on deck — one more pick before yours. Start thinking!</span>
+          <span className="text-base opacity-50">✕</span>
         </div>
       )}
 
@@ -525,27 +576,54 @@ export default function DraftRoomPage() {
           ].filter(Boolean).join(' · ')}
         />
 
-        {/* Data source pills */}
-        {(hasOdds || hasEspnField) && (
-          <div className="flex flex-wrap items-center gap-2 mb-4 -mt-2">
-            {hasOdds && (
-              <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-green-900/50 border border-green-800 text-green-300">
-                <TrendingUp size={10} />
-                {oddsSource} odds
-                {oddsStale && ' (cached)'}
-              </span>
-            )}
-            {hasEspnField && (
-              <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-blue-900/50 border border-blue-800 text-blue-300">
-                <Wifi size={10} />
-                {espnSource} field
-              </span>
-            )}
-            {!hasOdds && !hasEspnField && (
-              <span className="text-xs text-yellow-500 animate-pulse">Loading player data…</span>
-            )}
-          </div>
-        )}
+        {/* Data source pills + push notification status */}
+        <div className="flex flex-wrap items-center gap-2 mb-4 -mt-2">
+          {hasOdds && (
+            <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-green-900/50 border border-green-800 text-green-300">
+              <TrendingUp size={10} />
+              {oddsSource} odds
+              {oddsStale && ' (cached)'}
+            </span>
+          )}
+          {hasEspnField && (
+            <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-blue-900/50 border border-blue-800 text-blue-300">
+              <Wifi size={10} />
+              {espnSource} field
+            </span>
+          )}
+          {!hasOdds && !hasEspnField && (
+            <span className="text-xs text-yellow-500 animate-pulse">Loading player data…</span>
+          )}
+
+          {/* Push notification permission badge */}
+          {pushPermission === 'granted' && (
+            <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-emerald-900/50 border border-emerald-700 text-emerald-300">
+              🔔 Push on
+            </span>
+          )}
+          {pushPermission === 'default' && (
+            <button
+              className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-yellow-900/50 border border-yellow-700 text-yellow-300 hover:bg-yellow-800/60 transition-colors"
+              onClick={() => {
+                requestPushToken().then((token) => {
+                  const perm = getPushPermission();
+                  setPushPermission(perm);
+                  if (token && appUser) saveUserFcmToken(appUser.uid, token).catch(() => {});
+                });
+              }}
+            >
+              🔔 Enable push notifications
+            </button>
+          )}
+          {pushPermission === 'denied' && (
+            <span
+              className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-red-900/50 border border-red-700 text-red-300 cursor-help"
+              title="Notifications blocked. Go to your browser/OS Settings → Notifications → allow this site."
+            >
+              🔕 Push blocked — tap for help
+            </span>
+          )}
+        </div>
 
         {/* Status banner */}
         {draftComplete ? (
