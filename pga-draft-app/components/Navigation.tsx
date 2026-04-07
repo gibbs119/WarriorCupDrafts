@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
-import { getAllTournaments } from '@/lib/db';
+import { getAllTournaments, saveUserFcmToken } from '@/lib/db';
+import { requestPushToken } from '@/lib/fcm';
 import WarriorsLogo from './WarriorsLogo';
 import { LogOut, History, Settings, Home, BookOpen } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -21,6 +22,18 @@ export default function Navigation() {
       .then((ts) => setHasLive(ts.some((t) => t.status === 'active' || t.status === 'drafting')))
       .catch(() => {});
   }, [appUser]);
+
+  // Silently refresh FCM token if permission already granted (no gesture needed).
+  // First-time permission prompt requires a user tap — handled by the dashboard banner.
+  useEffect(() => {
+    if (!appUser) return;
+    if (typeof Notification === 'undefined') return;
+    if (Notification.permission !== 'granted') return;
+    requestPushToken().then((token) => {
+      if (token) saveUserFcmToken(appUser.uid, token).catch(() => {});
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appUser?.uid]);
 
   async function handleSignOut() {
     await signOut();

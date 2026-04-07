@@ -15,7 +15,6 @@ import {
   getAllUsers,
   savePlayers,
   updateTournament,
-  saveUserFcmToken,
 } from '@/lib/db';
 import { requestPushToken, getPushPermission, type PushPermission } from '@/lib/fcm';
 import { buildSnakeDraftOrder, getCurrentPicker } from '@/lib/scoring';
@@ -118,26 +117,12 @@ export default function DraftRoomPage() {
   const snakeOrderRef = useRef<string[]>([]);                  // always-current snake order
   const notifPermissionRef = useRef<NotificationPermission>('default');
 
-  // Register FCM push token so server-side notifications reach this device.
-  // Also tracks permission state for the UI badge.
+  // Track permission state for the UI badge (token registration handled by Navigation)
   useEffect(() => {
-    if (!appUser) return;
-    const current = getPushPermission();
-    setPushPermission(current);
-    notifPermissionRef.current = current === 'unsupported' ? 'default' : current as NotificationPermission;
-
-    if (current === 'denied') return; // can't ask again — OS settings required
-
-    requestPushToken().then((token) => {
-      const perm = getPushPermission();
-      setPushPermission(perm);
-      notifPermissionRef.current = perm === 'unsupported' ? 'default' : perm as NotificationPermission;
-      if (token) {
-        saveUserFcmToken(appUser.uid, token).catch(() => {});
-      }
-    });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [appUser?.uid]);
+    const perm = getPushPermission();
+    setPushPermission(perm);
+    notifPermissionRef.current = perm === 'unsupported' ? 'default' : perm as NotificationPermission;
+  }, []);
 
   // Auth guard
   useEffect(() => {
