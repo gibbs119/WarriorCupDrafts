@@ -3,7 +3,8 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
-import { getAllTournaments } from '@/lib/db';
+import { getAllTournaments, saveUserFcmToken } from '@/lib/db';
+import { getPushPermission, requestPushToken, type PushPermission } from '@/lib/fcm';
 import Navigation from '@/components/Navigation';
 import TournamentCard from '@/components/TournamentCard';
 import WarriorsLogo from '@/components/WarriorsLogo';
@@ -16,6 +17,19 @@ export default function Dashboard() {
   const router = useRouter();
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [fetching, setFetching] = useState(true);
+  const [pushPerm, setPushPerm] = useState<PushPermission>('default');
+
+  // Read current permission state on mount (no gesture needed for reading)
+  useEffect(() => {
+    setPushPerm(getPushPermission());
+  }, []);
+
+  async function enableNotifications() {
+    const token = await requestPushToken();
+    const perm = getPushPermission();
+    setPushPerm(perm);
+    if (token && appUser) saveUserFcmToken(appUser.uid, token).catch(() => {});
+  }
 
   useEffect(() => {
     if (!loading && !appUser) router.push('/');
@@ -80,6 +94,32 @@ export default function Dashboard() {
           </h1>
           <p className="text-slate-500 text-sm mt-1">Warrior Cup Drafts · The Players + All 4 Majors</p>
         </div>
+
+        {/* Push notification prompt — only shown until user enables or dismisses */}
+        {pushPerm === 'default' && (
+          <div className="card mb-6 flex items-center justify-between gap-4 flex-wrap"
+            style={{ border: '1px solid rgba(201,162,39,0.3)', background: 'rgba(201,162,39,0.06)' }}>
+            <div>
+              <p className="font-semibold text-white text-sm">🔔 Enable push notifications</p>
+              <p className="text-slate-400 text-xs mt-0.5">Get notified on your phone when it's your turn to pick — even with the app closed.</p>
+            </div>
+            <button
+              onClick={enableNotifications}
+              className="btn-gold shrink-0 text-sm py-1.5 px-4"
+            >
+              Enable
+            </button>
+          </div>
+        )}
+        {pushPerm === 'denied' && (
+          <div className="card mb-6 flex items-center gap-3"
+            style={{ border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.05)' }}>
+            <span className="text-xl">🔕</span>
+            <p className="text-slate-400 text-xs">
+              Notifications are blocked. To fix: <strong className="text-white">Settings → Safari / Chrome → Notifications → allow this site</strong>, then reload.
+            </p>
+          </div>
+        )}
 
         {/* Active tournament callout */}
         {activeTournament && (
