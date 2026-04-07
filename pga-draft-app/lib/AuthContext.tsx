@@ -6,7 +6,7 @@ import {
   signOut as firebaseSignOut,
   onAuthStateChanged,
   updatePassword as firebaseUpdatePassword,
-  updateEmail as firebaseUpdateEmail,
+  verifyBeforeUpdateEmail,
   reauthenticateWithCredential,
   EmailAuthProvider,
   User as FirebaseUser,
@@ -102,10 +102,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!user || !user.email) throw new Error('Not signed in');
     const cred = EmailAuthProvider.credential(user.email, currentPassword);
     await reauthenticateWithCredential(user, cred);
-    await firebaseUpdateEmail(user, newEmail);
-    // Update DB record to keep it in sync
+    // verifyBeforeUpdateEmail sends a verification link to the new address.
+    // The Firebase Auth email only changes after the user clicks the link.
+    // We update the DB immediately so login can use either old or new email.
+    await verifyBeforeUpdateEmail(user, newEmail);
     await updateUserEmail(user.uid, newEmail);
-    // Update local cache
     if (appUser) setAppUser({ ...appUser, email: newEmail });
   }
 

@@ -52,7 +52,7 @@ export default function AccountPage() {
     const tid = toast.loading('Updating email…');
     try {
       await changeEmail(emailPw, newEmail);
-      toast.success('Email updated', { id: tid });
+      toast.success('Verification email sent — click the link to confirm your new address', { id: tid, duration: 6000 });
       setEmailPw(''); setNewEmail('');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
