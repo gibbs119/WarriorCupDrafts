@@ -5,12 +5,37 @@ import {
   signInWithEmailAndPassword,
   signOut as firebaseSignOut,
   onAuthStateChanged,
+  updatePassword as firebaseUpdatePassword,
+  updateEmail as firebaseUpdateEmail,
+  reauthenticateWithCredential,
+  EmailAuthProvider,
   User as FirebaseUser,
   createUserWithEmailAndPassword,
 } from 'firebase/auth';
 import { auth } from './firebase';
-import { getUserByUid, setUser } from './db';
+import { getUserByUid, setUser, updateUserEmail } from './db';
 import type { AppUser } from './types';
+
+const CACHE_KEY = 'pgadraft_user';
+
+function readCache(): AppUser | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    return raw ? (JSON.parse(raw) as AppUser) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCache(user: AppUser | null) {
+  if (typeof window === 'undefined') return;
+  if (user) {
+    localStorage.setItem(CACHE_KEY, JSON.stringify(user));
+  } else {
+    localStorage.removeItem(CACHE_KEY);
+  }
+}
 
 interface AuthContextValue {
   firebaseUser: FirebaseUser | null;
@@ -19,14 +44,23 @@ interface AuthContextValue {
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   createAccount: (email: string, password: string, username: string, role: 'admin' | 'user') => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+  changeEmail: (currentPassword: string, newEmail: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
-  const [appUser, setAppUser] = useState<AppUser | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Seed from localStorage so returning users see their data instantly
+  const [appUser, setAppUserState] = useState<AppUser | null>(readCache);
+  // Only show loading spinner if there's no cached data to show
+  const [loading, setLoading] = useState(() => readCache() === null);
+
+  function setAppUser(user: AppUser | null) {
+    setAppUserState(user);
+    writeCache(user);
+  }
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (fbUser) => {
@@ -44,9 +78,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function signIn(email: string, password: string) {
     const cred = await signInWithEmailAndPassword(auth, email, password);
-    // Wait for the appUser record to load from the DB before resolving.
-    // Without this, router.push('/dashboard') fires before appUser is set,
-    // the dashboard sees null and redirects back to login — requiring a second attempt.
     const user = await getUserByUid(cred.user.uid);
     setFirebaseUser(cred.user);
     setAppUser(user);
@@ -55,6 +86,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function signOut() {
     await firebaseSignOut(auth);
+    setAppUser(null);
+  }
+
+  async function changePassword(currentPassword: string, newPassword: string) {
+    const user = auth.currentUser;
+    if (!user || !user.email) throw new Error('Not signed in');
+    const cred = EmailAuthProvider.credential(user.email, currentPassword);
+    await reauthenticateWithCredential(user, cred);
+    await firebaseUpdatePassword(user, newPassword);
+  }
+
+  async function changeEmail(currentPassword: string, newEmail: string) {
+    const user = auth.currentUser;
+    if (!user || !user.email) throw new Error('Not signed in');
+    const cred = EmailAuthProvider.credential(user.email, currentPassword);
+    await reauthenticateWithCredential(user, cred);
+    await firebaseUpdateEmail(user, newEmail);
+    // Update DB record to keep it in sync
+    await updateUserEmail(user.uid, newEmail);
+    // Update local cache
+    if (appUser) setAppUser({ ...appUser, email: newEmail });
   }
 
   async function createAccount(
@@ -63,33 +115,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     username: string,
     role: 'admin' | 'user'
   ) {
-    // Re-auth as current admin after creating the new user, because
-    // createUserWithEmailAndPassword immediately signs in as the new account,
-    // which would log Gibbs out of the admin panel.
     const currentUser = auth.currentUser;
-    // We need the admin's credentials to re-sign-in — store email temporarily
     const adminEmail = currentUser?.email ?? null;
+    void adminEmail; // kept for reference
 
     const cred = await createUserWithEmailAndPassword(auth, email, password);
     const newUser: AppUser = { uid: cred.user.uid, username, email, role };
     await setUser(cred.user.uid, newUser);
-
-    // Sign back into the admin account via server-side — the cleanest approach
-    // here is to call our create-user API instead. For now, sign out the new
-    // account immediately; the admin will need to stay logged in via the
-    // onAuthStateChanged listener which will re-read appUser from the DB.
-    // The admin's firebaseUser is already replaced, so we sign out of the new
-    // account and the admin re-authenticates via the UI if needed.
-    //
-    // Workaround: sign the new user out immediately so admin session is restored
-    // when the admin re-navigates or refreshes.
     await firebaseSignOut(auth);
-    // NOTE: For a production fix, use /api/admin/create-user with Firebase Admin SDK.
-    // This keeps the admin signed in without signing into the new account at all.
   }
 
   return (
-    <AuthContext.Provider value={{ firebaseUser, appUser, loading, signIn, signOut, createAccount }}>
+    <AuthContext.Provider value={{ firebaseUser, appUser, loading, signIn, signOut, createAccount, changePassword, changeEmail }}>
       {children}
     </AuthContext.Provider>
   );

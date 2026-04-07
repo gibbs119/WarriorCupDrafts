@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
+import { getUserByUsername } from '@/lib/db';
 import WarriorsLogo from '@/components/WarriorsLogo';
 import { USERS } from '@/lib/constants';
 
@@ -24,10 +25,20 @@ export default function LoginPage() {
     setError('');
     setSubmitting(true);
     try {
-      // Look up email from selected username
-      const user = USERS.find((u) => u.username === selectedUser);
-      if (!user) throw new Error('Unknown user');
-      await signIn(user.email, password);
+      // Look up current email from DB first (supports users who've changed their email),
+      // falling back to the static USERS constant for first-time or offline scenarios.
+      let email: string | undefined;
+      try {
+        const dbUser = await getUserByUsername(selectedUser);
+        email = dbUser?.email;
+      } catch {
+        // DB unavailable — fall through to constant
+      }
+      if (!email) {
+        email = USERS.find((u) => u.username === selectedUser)?.email;
+      }
+      if (!email) throw new Error('Unknown user');
+      await signIn(email, password);
       router.push('/dashboard');
     } catch {
       setError('Wrong password. Contact Gibbs if you need a reset.');
