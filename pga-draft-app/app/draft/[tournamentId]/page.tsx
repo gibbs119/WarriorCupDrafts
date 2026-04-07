@@ -6,6 +6,8 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import Navigation from '@/components/Navigation';
+import TournamentHero from '@/components/TournamentHero';
+import { getTournamentTheme } from '@/lib/tournament-theme';
 import {
   getTournament,
   subscribeDraftState,
@@ -86,6 +88,7 @@ function playChime() {
 
 export default function DraftRoomPage() {
   const { tournamentId } = useParams<{ tournamentId: string }>();
+  const theme = getTournamentTheme(tournamentId);
   const { appUser, loading } = useAuth();
   const router = useRouter();
 
@@ -255,7 +258,7 @@ export default function DraftRoomPage() {
         setMyTurnAlert(true);
         playChime();
         notify('⛳ It\'s your pick!', 'Head back to the draft room and make your selection.');
-        try { document.title = "⛳ YOUR PICK! — PGA Draft"; setTimeout(() => { document.title = "PGA Draft League"; }, 8000); } catch {}
+        try { document.title = "⛳ YOUR PICK! — Warrior Cup"; setTimeout(() => { document.title = "Warrior Cup Drafts"; }, 8000); } catch {}
       } else {
         setMyTurnAlert(false);
 
@@ -502,7 +505,7 @@ export default function DraftRoomPage() {
       {myTurnAlert && (
         <div
           className="sticky top-0 z-40 flex items-center justify-between gap-3 px-4 py-3 text-sm font-bold cursor-pointer"
-          style={{ background: 'linear-gradient(90deg, #A07A14, #C9A227, #D4B040, #C9A227, #A07A14)', color: '#030912', animation: 'pulse 1.5s ease-in-out infinite' }}
+          style={{ background: `linear-gradient(90deg, ${theme.accentLight}, ${theme.accent}, ${theme.accentMid}, ${theme.accent}, ${theme.accentLight})`, color: '#fff', animation: 'pulse 1.5s ease-in-out infinite' }}
           onClick={() => setMyTurnAlert(false)}
         >
           <span>⛳ &nbsp;IT'S YOUR PICK — You're on the clock!</span>
@@ -512,15 +515,19 @@ export default function DraftRoomPage() {
 
       <main className="max-w-6xl mx-auto px-4 py-6">
 
-        {/* Header */}
-        <div className="mb-4">
-          <h1 className="font-bebas text-3xl tracking-wider text-white">{tournament.name}</h1>
-          <div className="flex flex-wrap items-center gap-3 mt-1">
-            <p className="text-slate-400 text-sm">
-              Snake Draft · {tournament.maxPicks} picks/team
-              {tournament.fieldSize > 0 ? ` · ${tournament.fieldSize} player field` : ''}
-            </p>
-            {/* Data source pills */}
+        {/* Tournament hero banner */}
+        <TournamentHero
+          theme={theme}
+          year={tournament.year}
+          subtitle={[
+            `Snake Draft · ${tournament.maxPicks} picks/team`,
+            tournament.fieldSize > 0 ? `${tournament.fieldSize} players` : '',
+          ].filter(Boolean).join(' · ')}
+        />
+
+        {/* Data source pills */}
+        {(hasOdds || hasEspnField) && (
+          <div className="flex flex-wrap items-center gap-2 mb-4 -mt-2">
             {hasOdds && (
               <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-green-900/50 border border-green-800 text-green-300">
                 <TrendingUp size={10} />
@@ -538,7 +545,7 @@ export default function DraftRoomPage() {
               <span className="text-xs text-yellow-500 animate-pulse">Loading player data…</span>
             )}
           </div>
-        </div>
+        )}
 
         {/* Status banner */}
         {draftComplete ? (
@@ -584,13 +591,13 @@ export default function DraftRoomPage() {
           <div className="space-y-4">
 
             {/* My roster — card design */}
-            <div className="card-gold glow-gold">
+            <div className="card" style={{ border: `1.5px solid ${theme.cardBorder}`, boxShadow: theme.cardGlow }}>
               <div className="flex items-center justify-between mb-3">
                 <h2 className="font-bebas text-lg tracking-wider text-white">My Team</h2>
                 <div className="flex items-center gap-1.5">
                   {Array.from({ length: tournament.maxPicks }).map((_, i) => (
                     <div key={i} className="w-2 h-2 rounded-full transition-all"
-                      style={{ background: i < myPicks.length ? '#C9A227' : 'rgba(255,255,255,0.12)' }} />
+                      style={{ background: i < myPicks.length ? theme.accent : 'rgba(255,255,255,0.12)' }} />
                   ))}
                   <span className="text-xs text-slate-500 ml-1">{myPicks.length}/{tournament.maxPicks}</span>
                 </div>
@@ -608,7 +615,7 @@ export default function DraftRoomPage() {
                       <div key={pick.playerId} className="flex items-center gap-3 rounded-xl px-3 py-2.5"
                         style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
                         <div className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center font-bold text-xs"
-                          style={{ background: 'rgba(201,162,39,0.2)', color: '#D4AF37', border: '1px solid rgba(201,162,39,0.3)' }}>
+                          style={{ background: theme.accentLight, color: theme.accentMid, border: `1px solid ${theme.cardBorder}` }}>
                           {initials}
                         </div>
                         <div className="flex-1 min-w-0">
@@ -677,9 +684,11 @@ export default function DraftRoomPage() {
                     ['name', 'A–Z'],
                   ] as [SortMode, string][]).map(([mode, label]) => (
                     <button key={mode} onClick={() => handleSortClick(mode)}
-                      className={`px-2 py-1 rounded transition-colors ${
-                        sortMode === mode ? 'bg-green-700 text-white' : 'bg-slate-700 text-slate-400 hover:text-white'
-                      }`}>
+                      className="px-2 py-1 rounded transition-colors text-xs font-semibold"
+                      style={sortMode === mode
+                        ? { background: theme.activeBg, color: theme.activeText, border: `1px solid ${theme.activeBorder}` }
+                        : { background: 'rgba(255,255,255,0.05)', color: '#64748b', border: '1px solid transparent' }
+                      }>
                       {label}{sortMode === mode ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''}
                     </button>
                   ))}
@@ -835,7 +844,8 @@ export default function DraftRoomPage() {
                           {isMyTurn && !draftComplete && (
                             <td className="py-2 pl-2">
                               <button onClick={() => handlePick(player)} disabled={pickLoading}
-                                className="btn-primary text-xs py-1 px-2 w-full">
+                                className="text-xs py-1 px-2 w-full rounded-lg font-bold transition-all disabled:opacity-40"
+                                style={{ background: theme.accent, color: '#fff' }}>
                                 Pick
                               </button>
                             </td>
