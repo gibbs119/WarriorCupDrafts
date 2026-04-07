@@ -141,6 +141,26 @@ export async function updateUserEmail(uid: string, email: string) {
   await update(ref(db, `users/${uid}`), { email });
 }
 
+// ─── FCM Push Tokens ──────────────────────────────────────────────────────────
+// Each user can have multiple tokens (one per device/browser).
+// Key is first 20 chars of the token — stable identifier per device.
+
+export async function saveUserFcmToken(uid: string, token: string): Promise<void> {
+  const key = token.slice(0, 20).replace(/[.#$/[\]]/g, '_');
+  await update(ref(db, `users/${uid}/fcmTokens/${key}`), {
+    token,
+    updatedAt: Date.now(),
+  });
+}
+
+export async function getUserFcmTokens(uid: string): Promise<string[]> {
+  const snap = await get(ref(db, `users/${uid}/fcmTokens`));
+  if (!snap.exists()) return [];
+  return Object.values(snap.val() as Record<string, { token: string }>)
+    .map((v) => v.token)
+    .filter(Boolean);
+}
+
 // ─── Results / History ───────────────────────────────────────────────────────
 
 export async function saveResults(tournamentId: string, results: unknown) {

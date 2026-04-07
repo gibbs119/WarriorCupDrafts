@@ -15,7 +15,9 @@ import {
   getAllUsers,
   savePlayers,
   updateTournament,
+  saveUserFcmToken,
 } from '@/lib/db';
+import { requestPushToken, getPushPermission, type PushPermission } from '@/lib/fcm';
 import { buildSnakeDraftOrder, getCurrentPicker } from '@/lib/scoring';
 import { STATIC_FIELDS } from '@/lib/constants';
 import { parseLeaderboard } from '@/lib/espn';
@@ -111,23 +113,31 @@ export default function DraftRoomPage() {
   const [statusMsg, setStatusMsg] = useState('');
   const [myTurnAlert, setMyTurnAlert] = useState(false);    // in-tab banner: your turn
   const [onDeckAlert, setOnDeckAlert] = useState(false);    // in-tab banner: you're next
+  const [pushPermission, setPushPermission] = useState<PushPermission>('default');
   const prevPickerUidRef = useRef<string | null>(null);     // track picker changes
   const snakeOrderRef = useRef<string[]>([]);                  // always-current snake order
   const notifPermissionRef = useRef<NotificationPermission>('default');
 
-  // Request browser notification permission once the draft is active so we can
-  // fire OS-level banners even when the user's tab is backgrounded.
+  // Register FCM push token so server-side notifications reach this device.
+  // Also tracks permission state for the UI badge.
   useEffect(() => {
-    if (typeof Notification === 'undefined') return;
-    if (Notification.permission === 'granted') {
-      notifPermissionRef.current = 'granted';
-      return;
-    }
-    if (Notification.permission === 'denied') return;
-    Notification.requestPermission().then((perm) => {
-      notifPermissionRef.current = perm;
+    if (!appUser) return;
+    const current = getPushPermission();
+    setPushPermission(current);
+    notifPermissionRef.current = current === 'unsupported' ? 'default' : current as NotificationPermission;
+
+    if (current === 'denied') return; // can't ask again — OS settings required
+
+    requestPushToken().then((token) => {
+      const perm = getPushPermission();
+      setPushPermission(perm);
+      notifPermissionRef.current = perm === 'unsupported' ? 'default' : perm as NotificationPermission;
+      if (token) {
+        saveUserFcmToken(appUser.uid, token).catch(() => {});
+      }
     });
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appUser?.uid]);
 
   // Auth guard
   useEffect(() => {
@@ -508,6 +518,15 @@ export default function DraftRoomPage() {
       const isDraftComplete = nextIndex >= snakeOrder.length;
       await submitPick(tournamentId, pick, nextIndex, isDraftComplete);
       setStatusMsg(`✅ Picked ${pickName}`);
+
+      // Fire-and-forget: notify next picker(s) via FCM push
+      if (!isDraftComplete) {
+        fetch('/api/notify-draft', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tournamentId, baseUrl: window.location.origin }),
+        }).catch(() => {});
+      }
     } catch {
       setStatusMsg('❌ Pick failed — try again.');
     } finally {
@@ -557,27 +576,54 @@ export default function DraftRoomPage() {
           ].filter(Boolean).join(' · ')}
         />
 
-        {/* Data source pills */}
-        {(hasOdds || hasEspnField) && (
-          <div className="flex flex-wrap items-center gap-2 mb-4 -mt-2">
-            {hasOdds && (
-              <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-green-900/50 border border-green-800 text-green-300">
-                <TrendingUp size={10} />
-                {oddsSource} odds
-                {oddsStale && ' (cached)'}
-              </span>
-            )}
-            {hasEspnField && (
-              <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-blue-900/50 border border-blue-800 text-blue-300">
-                <Wifi size={10} />
-                {espnSource} field
-              </span>
-            )}
-            {!hasOdds && !hasEspnField && (
-              <span className="text-xs text-yellow-500 animate-pulse">Loading player data…</span>
-            )}
-          </div>
-        )}
+        {/* Data source pills + push notification status */}
+        <div className="flex flex-wrap items-center gap-2 mb-4 -mt-2">
+          {hasOdds && (
+            <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-green-900/50 border border-green-800 text-green-300">
+              <TrendingUp size={10} />
+              {oddsSource} odds
+              {oddsStale && ' (cached)'}
+            </span>
+          )}
+          {hasEspnField && (
+            <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-blue-900/50 border border-blue-800 text-blue-300">
+              <Wifi size={10} />
+              {espnSource} field
+            </span>
+          )}
+          {!hasOdds && !hasEspnField && (
+            <span className="text-xs text-yellow-500 animate-pulse">Loading player data…</span>
+          )}
+
+          {/* Push notification permission badge */}
+          {pushPermission === 'granted' && (
+            <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-emerald-900/50 border border-emerald-700 text-emerald-300">
+              🔔 Push on
+            </span>
+          )}
+          {pushPermission === 'default' && (
+            <button
+              className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-yellow-900/50 border border-yellow-700 text-yellow-300 hover:bg-yellow-800/60 transition-colors"
+              onClick={() => {
+                requestPushToken().then((token) => {
+                  const perm = getPushPermission();
+                  setPushPermission(perm);
+                  if (token && appUser) saveUserFcmToken(appUser.uid, token).catch(() => {});
+                });
+              }}
+            >
+              🔔 Enable push notifications
+            </button>
+          )}
+          {pushPermission === 'denied' && (
+            <span
+              className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-red-900/50 border border-red-700 text-red-300 cursor-help"
+              title="Notifications blocked. Go to your browser/OS Settings → Notifications → allow this site."
+            >
+              🔕 Push blocked — tap for help
+            </span>
+          )}
+        </div>
 
         {/* Status banner */}
         {draftComplete ? (
