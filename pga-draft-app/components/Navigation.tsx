@@ -56,8 +56,8 @@ export default function Navigation() {
           <Link href="/dashboard" className="flex items-center gap-2.5">
             <WarriorsLogo size={32} />
             <div className="hidden sm:block leading-none">
-              <span className="font-bebas text-xl tracking-widest text-white">PGA DRAFT</span>
-              <span className="font-bebas text-xs tracking-widest block" style={{ color: '#C9A227', marginTop: '-2px' }}>LEAGUE </span>
+              <span className="font-bebas text-xl tracking-widest text-white">WARRIOR CUP</span>
+              <span className="font-bebas text-xs tracking-widest block" style={{ color: '#C9A227', marginTop: '-2px' }}>DRAFTS</span>
             </div>
           </Link>
 

@@ -101,7 +101,7 @@ export default function LoginPage() {
                 <WarriorsLogo size={72} />
               </div>
             </div>
-            <h1 className="font-bebas text-3xl tracking-widest text-white">One-Time Setup</h1>
+            <h1 className="font-bebas text-3xl tracking-widest text-white">Welcome to Warrior Cup</h1>
             <p className="text-slate-400 text-sm mt-1">
               Signed in as <span className="text-white font-medium">{googlePending.googleEmail}</span>
             </p>
@@ -185,10 +185,10 @@ export default function LoginPage() {
           </div>
 
           <h1 className="font-bebas text-5xl tracking-widest text-white leading-none">
-            PGA DRAFT
+            WARRIOR CUP
           </h1>
           <p className="font-bebas text-2xl tracking-widest mt-0.5" style={{ color: '#C9A227' }}>
-            LEAGUE
+            DRAFTS
           </p>
           <p className="text-slate-400 text-xs mt-2 tracking-wide uppercase">
             The Players · Masters · PGA · US Open · The Open

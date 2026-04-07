@@ -255,7 +255,7 @@ export default function DraftRoomPage() {
         setMyTurnAlert(true);
         playChime();
         notify('⛳ It\'s your pick!', 'Head back to the draft room and make your selection.');
-        try { document.title = "⛳ YOUR PICK! — PGA Draft"; setTimeout(() => { document.title = "PGA Draft League"; }, 8000); } catch {}
+        try { document.title = "⛳ YOUR PICK! — Warrior Cup"; setTimeout(() => { document.title = "Warrior Cup Drafts"; }, 8000); } catch {}
       } else {
         setMyTurnAlert(false);
 

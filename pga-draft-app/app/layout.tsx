@@ -5,13 +5,13 @@ import { AuthProvider } from '@/lib/AuthContext';
 import { Toaster } from 'react-hot-toast';
 
 export const metadata: Metadata = {
-  title: 'PGA Draft League',
+  title: 'Warrior Cup Drafts',
   description: 'Snake draft fantasy golf — The Players & all 4 Majors',
   // Makes app installable / full-screen on iOS home screen
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'PGA Draft',
+    title: 'Warrior Cup',
   },
 };
 
