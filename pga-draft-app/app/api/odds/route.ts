@@ -8,6 +8,7 @@ import {
   type OddsPlayer,
 } from '@/lib/odds';
 import { fetchLeaderboardRaw, parseLeaderboard } from '@/lib/espn';
+import { fetchOwgrRankings, buildOwgrLookup } from '@/lib/owgr';
 import { TOURNAMENTS, STATIC_FIELDS, STATIC_ODDS } from '@/lib/constants';
 
 // ─── Server-side cache ────────────────────────────────────────────────────────
@@ -83,6 +84,7 @@ export async function GET(req: NextRequest) {
         top10AmericanOdds: top10Odds ?? null,
         top10Display: top10Odds != null ? (top10Odds > 0 ? `+${top10Odds}` : `${top10Odds}`) : null,
         top10ImpliedProb,
+        worldRanking: null,
       };
     });
     source = 'ESPN (static)';
@@ -143,6 +145,7 @@ export async function GET(req: NextRequest) {
               top10AmericanOdds: null,
               top10Display: null,
               top10ImpliedProb: null,
+              worldRanking: null,
             }));
             source = 'ESPN Field (no odds available)';
           }
@@ -166,6 +169,7 @@ export async function GET(req: NextRequest) {
         top10AmericanOdds: null,
         top10Display: null,
         top10ImpliedProb: null,
+        worldRanking: null,
       }));
       source = 'Static Field (no odds — APIs unavailable)';
     }
@@ -184,6 +188,22 @@ export async function GET(req: NextRequest) {
       { error: 'No player data available from any source', players: [] },
       { status: 503 }
     );
+  }
+
+  // ── Merge OWGR rankings ────────────────────────────────────────────────────
+  // Fetch concurrently — don't let a slow OWGR response block the odds data.
+  // Failure is silent: worldRanking stays null if OWGR is unavailable.
+  try {
+    const owgrEntries = await fetchOwgrRankings();
+    if (owgrEntries && owgrEntries.length > 0) {
+      const owgrLookup = buildOwgrLookup(owgrEntries);
+      for (const p of players) {
+        const rank = owgrLookup.get(p.id);
+        if (rank) p.worldRanking = rank;
+      }
+    }
+  } catch (e) {
+    console.warn('[Odds] OWGR merge error:', e);
   }
 
   oddsCache.set(tournamentId, { players, fetchedAt: Date.now(), source });

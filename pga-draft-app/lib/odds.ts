@@ -16,6 +16,8 @@ export interface OddsPlayer {
   top10AmericanOdds: number | null;
   top10Display: string | null;
   top10ImpliedProb: number | null;
+  // Official World Golf Ranking (null if unavailable)
+  worldRanking: number | null;
 }
 
 // ─── The Odds API ─────────────────────────────────────────────────────────────
@@ -188,6 +190,7 @@ export function parseOddsApiResponse(events: OddsApiEvent[]): OddsPlayer[] {
             top10AmericanOdds: null,
             top10Display: null,
             top10ImpliedProb: null,
+            worldRanking: null,
           });
         }
       }
@@ -271,6 +274,7 @@ export function parseDraftKingsResponse(
               top10AmericanOdds: null,
               top10Display: null,
               top10ImpliedProb: null,
+              worldRanking: null,
             });
           }
 

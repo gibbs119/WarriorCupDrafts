@@ -320,7 +320,7 @@ export default function DraftRoomPage() {
         score: espnEntry?.score ?? '-',
         thru: espnEntry?.thru ?? '-',
         status: espnEntry?.status ?? 'active',
-        worldRanking: espnEntry?.worldRanking ?? null,
+        worldRanking: espnEntry?.worldRanking ?? op.worldRanking ?? null,
         source: espnEntry ? 'both' : 'odds',
       });
     }
