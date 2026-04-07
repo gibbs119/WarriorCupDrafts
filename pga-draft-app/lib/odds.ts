@@ -92,8 +92,12 @@ const NICKNAME_MAP: Record<string, string> = {
 export function normalizeName(name: string): string {
   return name
     .toLowerCase()
+    // Explicit substitutions for characters that don't decompose via NFD
+    // (ø, æ, å, ð, þ, ß are atomic Unicode chars — stripping combining marks won't help)
+    .replace(/ø/g, 'o').replace(/æ/g, 'ae').replace(/å/g, 'a')
+    .replace(/ð/g, 'd').replace(/þ/g, 'th').replace(/ß/g, 'ss')
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')   // strip accents
+    .replace(/[\u0300-\u036f]/g, '')   // strip accents (é→e, ü→u, etc.)
     .replace(/\./g, '')                 // remove dots: C.T. → CT
     .replace(/[-–]/g, ' ')             // hyphens to spaces
     .replace(/\s+/g, ' ')              // collapse whitespace
