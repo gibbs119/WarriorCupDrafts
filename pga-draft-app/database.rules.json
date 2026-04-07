@@ -1,0 +1,120 @@
+{
+  "rules": {
+
+    "users": {
+      // All authenticated users can read (needed to display usernames everywhere)
+      ".read": "auth != null",
+      "$uid": {
+        // Users can only write their own record; admins can write any user record
+        ".write": "auth != null && (auth.uid === $uid || root.child('users').child(auth.uid).child('role').val() === 'admin')"
+      }
+    },
+
+    "tournaments": {
+      // All authenticated users can read tournament info
+      ".read": "auth != null",
+      // Only admins can modify tournaments (status, draft order, ESPN ID, etc.)
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'"
+    },
+
+    "drafts": {
+      "$tournamentId": {
+        // All authenticated users can read live draft state
+        ".read": "auth != null",
+        // Any authenticated user can write (submit picks via transaction, etc.)
+        // Turn-order enforcement is handled in app logic, not rules
+        ".write": "auth != null"
+      }
+    },
+
+    "players": {
+      // All authenticated users can read and write player data
+      // (leaderboard page fetches from ESPN and saves to DB for all clients)
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+
+    "results": {
+      // All authenticated users can read final results
+      ".read": "auth != null",
+      // Written only by Firebase Admin SDK (server-side) — block all client writes
+      ".write": false
+    },
+
+    "lockedScores": {
+      ".read": "auth != null",
+      // Written only by Firebase Admin SDK — block all client writes
+      ".write": false
+    },
+
+    "wdRequests": {
+      "$tournamentId": {
+        ".read": "auth != null",
+        "$requestKey": {
+          // Users can create/update their own requests; admins can update any request
+          ".write": "auth != null && (newData.child('userId').val() === auth.uid || data.child('userId').val() === auth.uid || root.child('users').child(auth.uid).child('role').val() === 'admin')"
+        }
+      }
+    },
+
+    "rosterEdits": {
+      // All authenticated users can read the audit log
+      ".read": "auth != null",
+      // Only admins can write roster edit records
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'"
+    },
+
+    "historicalDrafts": {
+      ".read": "auth != null",
+      // Written only by Firebase Admin SDK (seed-history route) — block client writes
+      ".write": false
+    },
+
+    "roundPositions": {
+      // Leaderboard page reads and writes position snapshots
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+
+    "liveOdds": {
+      ".read": "auth != null",
+      // Written only by Firebase Admin SDK (AI odds API route) — block client writes
+      ".write": false
+    },
+
+    "dailySummaries": {
+      "$tournamentId": {
+        "$date": {
+          ".read": "auth != null",
+          // Cron writes the full summary node via Admin SDK (bypasses rules — fine)
+          // Block direct client writes to the summary itself
+          ".write": false,
+          "seen": {
+            "$uid": {
+              // Users can only mark their own seen status
+              ".write": "auth != null && auth.uid === $uid"
+            }
+          }
+        }
+      }
+    },
+
+    "draftGrades": {
+      ".read": "auth != null",
+      // Written only by Firebase Admin SDK (AI draft-grades route) — block client writes
+      ".write": false
+    },
+
+    "trendSnapshots": {
+      // Leaderboard page reads and writes hourly score snapshots
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+
+    "scores": {
+      ".read": "auth != null",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'"
+    }
+
+  }
+}
