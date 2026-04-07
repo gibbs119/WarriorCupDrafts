@@ -320,7 +320,7 @@ export default function DraftRoomPage() {
         score: espnEntry?.score ?? '-',
         thru: espnEntry?.thru ?? '-',
         status: espnEntry?.status ?? 'active',
-        worldRanking: espnEntry?.worldRanking ?? null,
+        worldRanking: espnEntry?.worldRanking ?? op.worldRanking ?? null,
         source: espnEntry ? 'both' : 'odds',
       });
     }
@@ -734,12 +734,12 @@ export default function DraftRoomPage() {
                             onClick={() => handleSortClick('name')}>
                           Player {sortArrow('name')}
                         </th>
-                        <th className="text-right py-2 w-20 cursor-pointer hover:text-white transition-colors"
+                        <th className={`text-right py-2 w-20 cursor-pointer hover:text-white transition-colors ${sortMode === 'top10' ? 'hidden md:table-cell' : ''}`}
                             onClick={() => handleSortClick('odds')}
                             title="Odds to win the tournament">
                           Win {sortArrow('odds')}
                         </th>
-                        <th className="text-right py-2 w-20 cursor-pointer hover:text-white transition-colors hidden md:table-cell"
+                        <th className={`text-right py-2 w-20 cursor-pointer hover:text-white transition-colors ${sortMode === 'top10' ? '' : 'hidden md:table-cell'}`}
                             onClick={() => handleSortClick('top10')}
                             title="Odds to finish top 10">
                           Top 10 {sortArrow('top10')}
@@ -771,7 +771,7 @@ export default function DraftRoomPage() {
                             )}
                           </td>
                           {/* Win odds */}
-                          <td className="py-2 text-right">
+                          <td className={`py-2 text-right ${sortMode === 'top10' ? 'hidden md:table-cell' : ''}`}>
                             {player.oddsDisplay && player.oddsDisplay !== 'N/A' ? (
                               <div>
                                 <span className={`font-mono text-sm font-semibold ${
@@ -792,7 +792,7 @@ export default function DraftRoomPage() {
                             )}
                           </td>
                           {/* Top 10 odds */}
-                          <td className="py-2 text-right hidden md:table-cell">
+                          <td className={`py-2 text-right ${sortMode === 'top10' ? '' : 'hidden md:table-cell'}`}>
                             {player.top10Display ? (
                               <div>
                                 <span className="font-mono text-sm font-semibold text-slate-300">
