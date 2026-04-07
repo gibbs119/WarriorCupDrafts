@@ -63,24 +63,29 @@ export async function GET(req: NextRequest) {
   // Live API sources below will overwrite this if they succeed.
   const staticOddsData = STATIC_ODDS[tournamentId];
   if (staticOddsData && staticOddsData.length > 0) {
-    players = staticOddsData.map(([name, americanOdds]) => {
+    players = staticOddsData.map(([name, americanOdds, top10Odds]) => {
       const impliedProb = americanOdds > 0
         ? parseFloat((100 / (americanOdds + 100) * 100).toFixed(1))
         : parseFloat((Math.abs(americanOdds) / (Math.abs(americanOdds) + 100) * 100).toFixed(1));
+      const top10ImpliedProb = top10Odds != null
+        ? top10Odds > 0
+          ? parseFloat((100 / (top10Odds + 100) * 100).toFixed(1))
+          : parseFloat((Math.abs(top10Odds) / (Math.abs(top10Odds) + 100) * 100).toFixed(1))
+        : null;
       return {
-        id: playerKey(name),  // consistent with playerKey() used everywhere else
+        id: playerKey(name),
         name,
         espnName: name,
         americanOdds,
         impliedProb,
         oddsDisplay: americanOdds > 0 ? `+${americanOdds}` : `${americanOdds}`,
-        bookmaker: 'DraftKings (static)',
-        top10AmericanOdds: null,
-        top10Display: null,
-        top10ImpliedProb: null,
+        bookmaker: 'ESPN (static)',
+        top10AmericanOdds: top10Odds ?? null,
+        top10Display: top10Odds != null ? (top10Odds > 0 ? `+${top10Odds}` : `${top10Odds}`) : null,
+        top10ImpliedProb,
       };
     });
-    source = 'DraftKings (static)';
+    source = 'ESPN (static)';
   }
 
   // ── Source 1: The Odds API (needs key, most reliable) ────────────────────
