@@ -100,9 +100,9 @@ function MiniSparkline({ snapshots, userId }: { snapshots: TrendSnapshot[]; user
 // ─── Simple scoreboard row ────────────────────────────────────────────────────
 
 function ScoreRow({
-  team, isMe, hasScores, expanded, onToggle, cutLine, winPct, flashClass, snapshots,
+  team, isMe, hasScores, expanded, onToggle, cutLine, winPct, flashClass, snapshots, playersMap,
 }: {
-  team: TeamScore; isMe: boolean; hasScores: boolean; expanded: boolean; onToggle: () => void; cutLine: number; winPct?: number; flashClass?: string; snapshots?: TrendSnapshot[];
+  team: TeamScore; isMe: boolean; hasScores: boolean; expanded: boolean; onToggle: () => void; cutLine: number; winPct?: number; flashClass?: string; snapshots?: TrendSnapshot[]; playersMap?: Record<string, Player>;
 }) {
   const top3 = team.players.filter(p => p.countsInTop3).sort((a, b) => a.points - b.points);
 
@@ -152,7 +152,19 @@ function ScoreRow({
               ))}
             </div>
           ) : (
-            <span className="text-xs text-slate-600">{hasScores ? 'No scores yet' : 'Awaiting tee-off'}</span>
+            <span className="text-xs text-slate-600">
+              {hasScores ? 'No scores yet' : (() => {
+                if (!playersMap) return 'Awaiting tee-off';
+                const teeTimes = team.players
+                  .map(p => playersMap[p.playerId]?.teeTime)
+                  .filter((t): t is string => !!t)
+                  .map(t => new Date(t).getTime())
+                  .filter(t => !isNaN(t))
+                  .sort((a, b) => a - b);
+                if (teeTimes.length === 0) return 'Awaiting tee-off';
+                return `First tee: ${fmtTeeTime(new Date(teeTimes[0]).toISOString())}`;
+              })()}
+            </span>
           )}
         </div>
         {snapshots && snapshots.length >= 2 && (
@@ -724,19 +736,26 @@ function FieldLeaderboard({
           {isCut ? 'CUT' : isWdDq ? p.status.toUpperCase() : (p.positionDisplay || '—')}
         </div>
 
-        {/* Name + owner tag */}
-        <div className="flex-1 min-w-0 flex items-center gap-1.5 flex-wrap">
-          <span className="text-sm truncate" style={{
-            color: isDrafted ? 'white' : '#94a3b8',
-            fontWeight: isDrafted ? 600 : 400,
-          }}>
-            {p.name}
-          </span>
-          {isDrafted && (
-            <span className="text-xs shrink-0 font-bold px-1.5 py-0.5 rounded"
-              style={{ background: 'rgba(212,175,55,0.15)', color: '#D4AF37', fontSize: '10px' }}>
-              {owner}
+        {/* Name + owner tag + tee time */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-sm truncate" style={{
+              color: isDrafted ? 'white' : '#94a3b8',
+              fontWeight: isDrafted ? 600 : 400,
+            }}>
+              {p.name}
             </span>
+            {isDrafted && (
+              <span className="text-xs shrink-0 font-bold px-1.5 py-0.5 rounded"
+                style={{ background: 'rgba(212,175,55,0.15)', color: '#D4AF37', fontSize: '10px' }}>
+                {owner}
+              </span>
+            )}
+          </div>
+          {p.position === null && p.teeTime && (
+            <div className="text-xs mt-0.5" style={{ color: '#475569' }}>
+              {fmtTeeTime(p.teeTime)}
+            </div>
           )}
         </div>
 
@@ -1356,6 +1375,7 @@ export default function LeaderboardPage() {
                       winPct={liveOdds?.odds.find(o => o.userId === team.userId)?.winPct}
                       flashClass={scoreFlashes[team.userId] === 'up' ? 'score-improved' : scoreFlashes[team.userId] === 'down' ? 'score-worsened' : undefined}
                       snapshots={trendSnapshots}
+                      playersMap={fieldPlayers}
                       onToggle={() => setExpandedTeam(isExp ? null : team.userId)}
                     />
                     {isExp && <DetailPanel team={team} isMe={isMe} cutLine={cutLine} playersMap={fieldPlayers} />}
