@@ -8,6 +8,7 @@ import { getPushPermission, requestPushToken, type PushPermission } from '@/lib/
 import Navigation from '@/components/Navigation';
 import TournamentCard from '@/components/TournamentCard';
 import WarriorsLogo from '@/components/WarriorsLogo';
+import DailySummaryModal from '@/components/DailySummaryModal';
 import type { Tournament } from '@/lib/types';
 type TournamentItem = Tournament;
 import { TOURNAMENTS } from '@/lib/constants';
@@ -70,9 +71,14 @@ export default function Dashboard() {
     (t) => t.status === 'active' || t.status === 'drafting'
   );
 
+  const activeTournamentId = activeTournament?.status === 'active' ? activeTournament.id : null;
+
   return (
     <div className="min-h-screen page">
       <Navigation />
+      {activeTournamentId && appUser && (
+        <DailySummaryModal tournamentId={activeTournamentId} />
+      )}
 
       {/* Page-level glow */}
       <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[900px] h-64 pointer-events-none"

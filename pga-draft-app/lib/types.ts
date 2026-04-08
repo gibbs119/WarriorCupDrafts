@@ -61,6 +61,7 @@ export interface Player {
   currentRound?: number;         // ESPN round number (1-4)
   worldRanking?: number | null;  // Official World Golf Ranking (from ESPN stats)
   teeTime?: string | null;       // ISO string from ESPN, null when unavailable
+  roundScores?: (string | null)[]; // [R1, R2, R3, R4] score-to-par per round e.g. "-3", "E", "+2"
 }
 
 export interface PlayerScore {

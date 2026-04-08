@@ -24,7 +24,7 @@ import { calculateLeaderboard } from '@/lib/scoring';
 import { parseLeaderboard } from '@/lib/espn';
 import type { Tournament, TeamScore, AppUser, Player } from '@/lib/types';
 import { TOURNAMENT_TZ_OFFSETS } from '@/lib/constants';
-import { RefreshCw, Wifi, WifiOff, AlertTriangle, BarChart2, List, TrendingUp, Activity, Globe, Percent } from 'lucide-react';
+import { RefreshCw, Wifi, WifiOff, AlertTriangle, BarChart2, List, TrendingUp, Activity, Globe, Percent, Users } from 'lucide-react';
 
 // ─── Live odds type (mirrors app/api/ai/live-odds/route.ts) ──────────────────
 interface LiveOdds {
@@ -100,9 +100,9 @@ function MiniSparkline({ snapshots, userId }: { snapshots: TrendSnapshot[]; user
 // ─── Simple scoreboard row ────────────────────────────────────────────────────
 
 function ScoreRow({
-  team, isMe, hasScores, expanded, onToggle, cutLine, winPct, flashClass, snapshots, playersMap,
+  team, isMe, hasScores, expanded, onToggle, cutLine, winPct, trend, flashClass, snapshots, playersMap,
 }: {
-  team: TeamScore; isMe: boolean; hasScores: boolean; expanded: boolean; onToggle: () => void; cutLine: number; winPct?: number; flashClass?: string; snapshots?: TrendSnapshot[]; playersMap?: Record<string, Player>;
+  team: TeamScore; isMe: boolean; hasScores: boolean; expanded: boolean; onToggle: () => void; cutLine: number; winPct?: number; trend?: 'up' | 'down' | 'stable'; flashClass?: string; snapshots?: TrendSnapshot[]; playersMap?: Record<string, Player>;
 }) {
   const top3 = team.players.filter(p => p.countsInTop3).sort((a, b) => a.points - b.points);
 
@@ -177,7 +177,11 @@ function ScoreRow({
             {hasScores ? fmtPts(team.top3Score) : '—'}
           </div>
           {winPct !== undefined
-            ? <div className="text-xs font-bold" style={{ color: 'rgba(201,162,39,0.85)' }}>{winPct}% win</div>
+            ? <div className="text-xs font-bold flex items-center gap-0.5" style={{ color: trend === 'up' ? '#34d399' : trend === 'down' ? '#f87171' : 'rgba(201,162,39,0.85)' }}>
+                {winPct}% win
+                {trend === 'up' && <span style={{ fontSize: '9px' }}>↑</span>}
+                {trend === 'down' && <span style={{ fontSize: '9px' }}>↓</span>}
+              </div>
             : <div className="text-xs text-slate-600">pts</div>
           }
         </div>
@@ -272,6 +276,21 @@ function DetailPanel({ team, isMe, cutLine, standalone, playersMap }: {
                   : p.thru !== '-' ? `Thru hole ${p.thru}`
                   : 'Tee time pending'}
               </div>
+              {!pending && (() => {
+                const rs = playersMap?.[p.playerId]?.roundScores;
+                if (!rs?.some(r => r !== null)) return null;
+                const labels = ['R1','R2','R3','R4'];
+                return (
+                  <div className="flex items-center gap-2 mt-0.5">
+                    {rs.map((r, i) => r === null ? null : (
+                      <span key={i} className="text-xs">
+                        <span className="text-slate-700">{labels[i]} </span>
+                        <span className="font-mono" style={{ color: r === 'E' ? '#64748b' : r.startsWith('-') ? '#34d399' : '#f87171' }}>{r}</span>
+                      </span>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
             {!pending && (
               <div className="text-right shrink-0 w-8">
@@ -678,6 +697,7 @@ function FieldLeaderboard({
   cutLine: number;
 }) {
   const [showCut, setShowCut] = React.useState(false);
+  const [search, setSearch] = React.useState('');
 
   if (Object.keys(players).length === 0) {
     return (
@@ -704,8 +724,9 @@ function FieldLeaderboard({
     return a.position - b.position;
   });
 
-  const active = sorted.filter(p => p.status !== 'cut' && p.status !== 'wd' && p.status !== 'dq');
-  const cut    = sorted.filter(p => p.status === 'cut' || p.status === 'wd' || p.status === 'dq');
+  const matchSearch = (p: Player) => search === '' || p.name.toLowerCase().includes(search.toLowerCase());
+  const active = sorted.filter(p => p.status !== 'cut' && p.status !== 'wd' && p.status !== 'dq' && matchSearch(p));
+  const cut    = sorted.filter(p => (p.status === 'cut' || p.status === 'wd' || p.status === 'dq') && matchSearch(p));
 
   const normName = (n: string) =>
     n.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\./g,'').replace(/[-\u2013]/g,' ').replace(/\s+/g,' ').trim();
@@ -777,6 +798,17 @@ function FieldLeaderboard({
       border: '1px solid rgba(255,255,255,0.07)',
       background: 'rgba(255,255,255,0.02)',
     }}>
+      {/* Search bar */}
+      <div className="px-3 py-2.5" style={{ borderBottom: '1px solid rgba(255,255,255,0.07)', background: 'rgba(0,0,0,0.15)' }}>
+        <input
+          type="text"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search players…"
+          className="input w-full text-sm"
+          style={{ padding: '6px 10px' }}
+        />
+      </div>
       {/* Column headers */}
       <div className="flex items-center px-3 py-2 gap-2 text-xs font-medium"
         style={{ color: '#475569', borderBottom: '1px solid rgba(255,255,255,0.07)', background: 'rgba(0,0,0,0.2)' }}>
@@ -962,6 +994,79 @@ function OddsPanel({
   );
 }
 
+// ─── Rosters View ─────────────────────────────────────────────────────────────
+
+function RostersView({ teams, myUserId }: { teams: TeamScore[]; myUserId: string }) {
+  if (teams.length === 0) {
+    return (
+      <div className="text-center py-16 text-slate-600 text-sm">
+        No roster data yet — check back once the draft is complete.
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      {teams.map((team) => {
+        const isMe = team.userId === myUserId;
+        const sorted = [...team.players].sort((a, b) => (a.round ?? 99) - (b.round ?? 99));
+        return (
+          <div key={team.userId} className="rounded-xl overflow-hidden"
+            style={{
+              border: isMe ? '1px solid rgba(212,175,55,0.35)' : '1px solid rgba(255,255,255,0.07)',
+              background: isMe ? 'rgba(212,175,55,0.04)' : 'rgba(255,255,255,0.02)',
+            }}>
+            {/* Team header */}
+            <div className="px-4 py-2.5 flex items-center justify-between"
+              style={{ borderBottom: '1px solid rgba(255,255,255,0.07)', background: isMe ? 'rgba(212,175,55,0.07)' : 'rgba(0,0,0,0.2)' }}>
+              <div className="flex items-center gap-2">
+                <RankBadge rank={team.rank} />
+                <span className="font-bebas text-base tracking-wider" style={{ color: isMe ? '#D4AF37' : 'white' }}>{team.username}</span>
+                {isMe && <span className="text-xs font-bold px-1 py-0.5 rounded" style={{ background: 'rgba(212,175,55,0.15)', color: '#D4AF37', fontSize: '10px' }}>YOU</span>}
+              </div>
+              <span className="font-mono font-bold text-sm" style={{ color: ptsColor(team.top3Score) }}>
+                {fmtPts(team.top3Score)}
+              </span>
+            </div>
+            {/* Picks */}
+            {sorted.map((p, idx) => {
+              const pending = p.points >= 9000;
+              const isCounting = p.countsInTop3;
+              return (
+                <div key={p.playerId}
+                  className="flex items-center gap-2 px-3 py-2"
+                  style={{
+                    borderBottom: idx < sorted.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none',
+                    opacity: isCounting ? 1 : 0.5,
+                  }}>
+                  <div className="w-4 shrink-0 text-center">
+                    {isCounting
+                      ? <span style={{ color: 'rgba(212,175,55,0.7)', fontSize: '10px' }}>★</span>
+                      : <span className="text-slate-700" style={{ fontSize: '10px' }}>·</span>}
+                  </div>
+                  <span className="text-sm flex-1 truncate" style={{ color: pending ? '#94a3b8' : 'white', fontWeight: isCounting ? 600 : 400 }}>
+                    {p.playerName}
+                  </span>
+                  <StatusPill status={p.status} />
+                  {!pending && (
+                    <span className="text-xs font-bold shrink-0"
+                      style={{ color: p.status !== 'active' ? '#fb923c' : p.position !== null && p.position <= 5 ? '#34d399' : '#cbd5e1' }}>
+                      {p.status === 'cut' ? 'CUT' : p.status === 'wd' ? 'WD' : p.status === 'dq' ? 'DQ' : (p.positionDisplay || '—')}
+                    </span>
+                  )}
+                  <span className="text-xs font-mono shrink-0 w-8 text-right" style={{ color: ptsColor(p.points) }}>
+                    {fmtPts(p.points)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function LeaderboardPage() {
@@ -975,7 +1080,7 @@ export default function LeaderboardPage() {
   const [users,              setUsers]              = useState<AppUser[]>([]);
   const [lastUpdated,        setLastUpdated]        = useState<Date | null>(null);
   const [refreshing,         setRefreshing]         = useState(false);
-  const [view,               setView]               = useState<'simple' | 'detailed' | 'trend' | 'movers' | 'field' | 'odds'>('simple');
+  const [view,               setView]               = useState<'simple' | 'detailed' | 'trend' | 'movers' | 'field' | 'odds' | 'rosters'>('simple');
   const [roundStartScores,   setRoundStartScores]   = useState<Record<string, { score: number; rank: number }> | null>(null);
   const [fieldPlayers,       setFieldPlayers]       = useState<Record<string, Player>>({});
   const [draftedMap,         setDraftedMap]         = useState<Record<string, string>>({});  // playerName.lower → username
@@ -998,6 +1103,16 @@ export default function LeaderboardPage() {
   const confettiFiredRef    = useRef(false);
   const prevScoresRef       = useRef<Record<string, number>>({});
   const [scoreFlashes,      setScoreFlashes] = useState<Record<string, 'up' | 'down'>>({});
+  const [secAgo,            setSecAgo]       = useState(0);
+
+  // Live "Updated Xs ago" counter
+  useEffect(() => {
+    if (!lastUpdated) return;
+    const tick = () => setSecAgo(Math.floor((Date.now() - lastUpdated.getTime()) / 1000));
+    tick();
+    const id = setInterval(tick, 5000);
+    return () => clearInterval(id);
+  }, [lastUpdated]);
 
   useEffect(() => {
     if (!loading && !appUser) router.push('/');
@@ -1261,7 +1376,7 @@ export default function LeaderboardPage() {
           year={tournament?.year ?? new Date().getFullYear()}
           subtitle={[
             tournament?.startDate,
-            lastUpdated ? `Updated ${lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : null,
+            lastUpdated ? (secAgo < 8 ? 'Just updated' : `Updated ${secAgo < 60 ? `${secAgo}s` : `${Math.floor(secAgo/60)}m`} ago`) : null,
           ].filter(Boolean).join(' · ')}
           rightSlot={
             <button
@@ -1278,7 +1393,7 @@ export default function LeaderboardPage() {
         {/* Tab row — scrollable */}
         <div className="overflow-x-auto scrollbar-hide mb-4" style={{ WebkitOverflowScrolling: 'touch' }}>
           <div className="flex gap-1 min-w-max p-1 rounded-xl" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
-            {([['simple','Board',<List size={11}/>], ['detailed','Detail',<BarChart2 size={11}/>], ['trend','Trend',<TrendingUp size={11}/>], ['movers','Movers',<Activity size={11}/>], ['field','Field',<Globe size={11}/>], ['odds','Odds',<Percent size={11}/>]] as const).map(([v, label, icon]) => (
+            {([['simple','Board',<List size={11}/>], ['detailed','Detail',<BarChart2 size={11}/>], ['trend','Trend',<TrendingUp size={11}/>], ['movers','Movers',<Activity size={11}/>], ['field','Field',<Globe size={11}/>], ['rosters','Rosters',<Users size={11}/>], ['odds','Odds',<Percent size={11}/>]] as const).map(([v, label, icon]) => (
               <button key={v} onClick={() => setView(v as any)}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition-all whitespace-nowrap rounded-lg"
                 style={view === v
@@ -1373,6 +1488,7 @@ export default function LeaderboardPage() {
                       team={team} isMe={isMe} hasScores={hasLiveScores}
                       expanded={isExp} cutLine={cutLine}
                       winPct={liveOdds?.odds.find(o => o.userId === team.userId)?.winPct}
+                      trend={liveOdds?.odds.find(o => o.userId === team.userId)?.trend}
                       flashClass={scoreFlashes[team.userId] === 'up' ? 'score-improved' : scoreFlashes[team.userId] === 'down' ? 'score-worsened' : undefined}
                       snapshots={trendSnapshots}
                       playersMap={fieldPlayers}
@@ -1447,6 +1563,11 @@ export default function LeaderboardPage() {
               />
             </div>
           </div>
+        )}
+
+        {/* ROSTERS view */}
+        {view === 'rosters' && (
+          <RostersView teams={teamScores} myUserId={appUser.uid} />
         )}
 
         {/* ODDS view */}
