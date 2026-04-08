@@ -466,79 +466,94 @@ export default function AdminPage() {
 
               return (
                 <div key={t.id} className="card">
-                  <div className="flex items-start justify-between gap-2 flex-wrap">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="font-bold text-white">{t.name}</h3>
-                        <span className="text-xs px-2 py-0.5 rounded-full font-semibold" style={{ background: 'rgba(255,255,255,0.08)', color: statusColor }}>
-                          {t.status.toUpperCase()}
-                        </span>
-                      </div>
-                      <p className="text-slate-400 text-xs mt-1">
-                        📅 {t.startDate}
-                        {(t as any).draftDate && <span className="text-slate-500"> · Draft: {(t as any).draftDate}</span>}
-                      </p>
-                      <p className="text-slate-500 text-xs mt-0.5">
-                        ESPN ID: <span className="font-mono" style={{ color: t.espnEventId ? '#4ade80' : '#f87171' }}>{t.espnEventId || '⚠ not set'}</span>
-                        {' · '}Cut: {t.cutLine}
-                        {' · '}Draft order: <span style={{ color: t.draftOrder?.length ? '#4ade80' : '#f87171' }}>{t.draftOrder?.length ? `${t.draftOrder.length} users ✓` : '⚠ not set'}</span>
-                      </p>
+                  {/* Tournament info — always full width */}
+                  <div className="mb-3">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="font-bold text-white">{t.name}</h3>
+                      <span className="text-xs px-2 py-0.5 rounded-full font-semibold" style={{ background: 'rgba(255,255,255,0.08)', color: statusColor }}>
+                        {t.status.toUpperCase()}
+                      </span>
                     </div>
+                    <p className="text-slate-400 text-xs mt-1">
+                      📅 {t.startDate}
+                      {(t as any).draftDate && <span className="text-slate-500"> · Draft: {(t as any).draftDate}</span>}
+                    </p>
+                    <p className="text-slate-500 text-xs mt-0.5">
+                      ESPN ID: <span className="font-mono" style={{ color: t.espnEventId ? '#4ade80' : '#f87171' }}>{t.espnEventId || '⚠ not set'}</span>
+                      {' · '}Cut: {t.cutLine}
+                      {' · '}Draft order: <span style={{ color: t.draftOrder?.length ? '#4ade80' : '#f87171' }}>{t.draftOrder?.length ? `${t.draftOrder.length} users ✓` : '⚠ not set'}</span>
+                    </p>
+                  </div>
 
-                    <div className="flex gap-2 flex-wrap justify-end shrink-0">
-                      {/* Edit is always available */}
-                      <button onClick={() => startEdit(t)} className="btn-secondary text-xs py-1.5 px-3">
-                        ✏️ Edit
+                  {/* Action buttons — wrap on mobile */}
+                  <div className="flex gap-2 flex-wrap">
+                    <button onClick={() => startEdit(t)} className="btn-secondary text-xs py-1.5 px-3">
+                      ✏️ Edit
+                    </button>
+
+                    {t.status === 'upcoming' && t.draftOrder?.length > 0 && (
+                      <button onClick={() => openDraft(t)} disabled={saving}
+                        className="text-xs py-1.5 px-3 rounded-lg font-bold transition-all disabled:opacity-40"
+                        style={{ background: '#C9A227', color: '#0D1F38' }}>
+                        Open Draft
                       </button>
+                    )}
 
-                      {/* Open Draft — only when upcoming AND draft order set */}
-                      {t.status === 'upcoming' && t.draftOrder?.length > 0 && (
-                        <button onClick={() => openDraft(t)} disabled={saving}
-                          className="text-xs py-1.5 px-3 rounded-lg font-bold transition-all disabled:opacity-40"
+                    {t.status === 'drafting' && (
+                      <button onClick={() => setTournamentStatus(t, 'active')} disabled={saving}
+                        className="btn-primary text-xs py-1.5 px-3">Set Live</button>
+                    )}
+                    {t.status === 'active' && (
+                      <>
+                        <button onClick={() => lockTournamentScores(t)} disabled={saving}
+                          className="text-xs py-1.5 px-3 rounded-lg font-bold disabled:opacity-40"
                           style={{ background: '#C9A227', color: '#0D1F38' }}>
-                          Open Draft
+                          🔒 Lock Scores
                         </button>
-                      )}
-
-                      {/* Status transitions */}
-                      {t.status === 'drafting' && (
-                        <button onClick={() => setTournamentStatus(t, 'active')} disabled={saving}
-                          className="btn-primary text-xs py-1.5 px-3">Set Live</button>
-                      )}
-                      {t.status === 'active' && (
-                        <>
-                          <button onClick={() => lockTournamentScores(t)} disabled={saving}
-                            className="text-xs py-1.5 px-3 rounded-lg font-bold disabled:opacity-40"
-                            style={{ background: '#C9A227', color: '#0D1F38' }}>
-                            🔒 Lock Scores
-                          </button>
-                          <button onClick={() => markFinal(t)} disabled={saving}
-                            className="btn-secondary text-xs py-1.5 px-3 disabled:opacity-50">
-                            Mark Final
-                          </button>
-                        </>
-                      )}
-
-                      <Link href={`/admin/rosters/${t.id}`} className="btn-secondary text-xs py-1.5 px-3">
-                        👥 Rosters
-                      </Link>
-
-                      {/* Reset controls — always visible */}
-                      {(t.status === 'drafting' || t.status === 'active') && (
-                        <button onClick={() => handleClearPicks(t)} disabled={saving}
-                          className="text-xs py-1.5 px-3 rounded-lg font-bold transition-all disabled:opacity-40"
-                          style={{ background: 'rgba(251,191,36,0.15)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.3)' }}>
-                          ↺ Clear Picks
+                        <button onClick={() => markFinal(t)} disabled={saving}
+                          className="btn-secondary text-xs py-1.5 px-3 disabled:opacity-50">
+                          Mark Final
                         </button>
-                      )}
-                      {t.status !== 'upcoming' && (
-                        <button onClick={() => handleResetDraft(t)} disabled={saving}
-                          className="text-xs py-1.5 px-3 rounded-lg font-bold transition-all disabled:opacity-40"
-                          style={{ background: 'rgba(239,68,68,0.15)', color: '#f87171', border: '1px solid rgba(239,68,68,0.3)' }}>
-                          🗑 Full Reset
-                        </button>
-                      )}
-                    </div>
+                      </>
+                    )}
+
+                    <Link href={`/admin/rosters/${t.id}`} className="btn-secondary text-xs py-1.5 px-3">
+                      👥 Rosters
+                    </Link>
+
+                    {/* Generate Draft Grades — available once draft is complete */}
+                    {t.draftComplete && (
+                      <button
+                        disabled={saving}
+                        onClick={async () => {
+                          setSaving(true);
+                          try {
+                            const res = await fetch(`/api/ai/draft-grades?tournamentId=${t.id}`);
+                            const data = await res.json();
+                            alert(res.ok ? `✅ Grades generated for ${Object.keys(data.grades ?? {}).length} teams` : `❌ ${data.error ?? 'Failed'}`);
+                          } catch { alert('❌ Request failed'); }
+                          finally { setSaving(false); }
+                        }}
+                        className="text-xs py-1.5 px-3 rounded-lg font-bold disabled:opacity-40"
+                        style={{ background: 'rgba(139,92,246,0.2)', color: '#c4b5fd', border: '1px solid rgba(139,92,246,0.4)' }}>
+                        🎓 Gen Grades
+                      </button>
+                    )}
+
+                    {(t.status === 'drafting' || t.status === 'active') && (
+                      <button onClick={() => handleClearPicks(t)} disabled={saving}
+                        className="text-xs py-1.5 px-3 rounded-lg font-bold transition-all disabled:opacity-40"
+                        style={{ background: 'rgba(251,191,36,0.15)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.3)' }}>
+                        ↺ Clear Picks
+                      </button>
+                    )}
+                    {t.status !== 'upcoming' && (
+                      <button onClick={() => handleResetDraft(t)} disabled={saving}
+                        className="text-xs py-1.5 px-3 rounded-lg font-bold transition-all disabled:opacity-40"
+                        style={{ background: 'rgba(239,68,68,0.15)', color: '#f87171', border: '1px solid rgba(239,68,68,0.3)' }}>
+                        🗑 Full Reset
+                      </button>
+                    )}
                   </div>
 
                   {/* Edit form */}
