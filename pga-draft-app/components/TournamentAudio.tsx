@@ -53,7 +53,12 @@ export default function TournamentAudio({ trackUrl, label, accent, accentMid }: 
     if (!iframeRef.current || !window.SC) return;
     const w = window.SC.Widget(iframeRef.current);
     widgetRef.current = w;
-    w.bind('ready',  () => setReady(true));
+    w.bind('ready', () => {
+      setReady(true);
+      // Attempt autoplay — works on Android/desktop; iOS PWA may still block
+      // but the iframe auto_play=true above handles that case
+      try { w.play(); } catch { /* blocked — user must tap */ }
+    });
     w.bind('play',   () => setPlaying(true));
     w.bind('pause',  () => setPlaying(false));
     w.bind('finish', () => setPlaying(false));
@@ -89,7 +94,7 @@ export default function TournamentAudio({ trackUrl, label, accent, accentMid }: 
     'https://w.soundcloud.com/player/',
     `?url=${encodeURIComponent(trackUrl)}`,
     `&color=${encodeURIComponent(accent)}`,
-    '&auto_play=false&hide_related=true&show_comments=false',
+    '&auto_play=true&hide_related=true&show_comments=false',
     '&show_user=false&show_reposts=false&show_teaser=false',
   ].join('');
 
@@ -135,11 +140,11 @@ export default function TournamentAudio({ trackUrl, label, accent, accentMid }: 
         <button
           onClick={togglePlay}
           disabled={!ready}
-          className="flex items-center gap-1.5 text-xs font-bold tracking-wide transition-opacity disabled:opacity-40"
+          className="flex items-center gap-1.5 text-xs font-bold tracking-wide transition-all disabled:opacity-40"
           style={{ color: playing ? accentMid : accent }}
         >
           <span style={{ fontSize: '0.85rem' }}>{playing ? '⏸' : '▶'}</span>
-          <span className="hidden sm:inline">{label}</span>
+          <span>{ready && !playing ? 'Tap to play' : label}</span>
           {!ready && <span className="opacity-50 text-slate-400">…</span>}
         </button>
 
