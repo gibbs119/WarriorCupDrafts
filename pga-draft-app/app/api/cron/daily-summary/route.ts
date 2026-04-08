@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ref, get, set } from 'firebase/database';
 import { db } from '@/lib/firebase';
 import { TOP_10_POINTS } from '@/lib/constants';
+import { getAdminServices, pushToAllUsers } from '@/lib/fcm-admin';
 
 // Cron: runs at 8 PM ET every day (0 0 * * * = midnight UTC = 8 PM ET)
 // Generates a daily AI summary of tournament activity and stores it in Firebase.
@@ -231,6 +232,21 @@ Respond ONLY with valid JSON — no markdown, no backticks, no extra text:
     };
 
     await set(ref(db, `dailySummaries/${tournamentId}/${today}`), summary);
+
+    // Push notification to all users
+    try {
+      const { messaging, db: adminDb } = getAdminServices();
+      const dayLabel = (summary as { dayLabel?: string }).dayLabel ?? 'Today\'s';
+      const url = `${process.env.NEXT_PUBLIC_APP_URL ?? ''}/recaps`;
+      await pushToAllUsers(
+        messaging, adminDb,
+        `📋 ${dayLabel} Recap — ${activeTournament.name}`,
+        'The round summary and standings breakdown are ready. Check Recaps.',
+        url,
+      );
+    } catch (e) {
+      console.warn('[daily-summary] push notification failed:', e);
+    }
 
     return NextResponse.json({ ok: true, date: today, summary });
   } catch (err) {
