@@ -101,6 +101,17 @@ export default function WDReplacementPage() {
         status: 'pending',
       };
       await submitWDRequest(tournamentId, request);
+      // Notify admin — fire and forget
+      fetch('/api/notify-wd', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tournamentId,
+          username: appUser.username,
+          droppedPlayerName: selectedDrop.playerName,
+          replacementPlayerName: selectedReplacement.espnName ?? selectedReplacement.name,
+        }),
+      }).catch(() => {});
       toast.success('Request submitted! Gibbs will approve it shortly.');
       setSelectedDrop(null);
       setSelectedReplacement(null);

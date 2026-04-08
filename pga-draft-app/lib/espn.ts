@@ -189,21 +189,28 @@ export function parseLeaderboard(data: ESPNLeaderboardResponse): {
       ? (parseInt(rankStat.displayValue ?? '', 10) || null)
       : null;
 
-    // Tee time — ESPN sometimes puts it on comp directly, sometimes in status
+    // Tee time
     const teeTime = comp.teeTime ?? comp.status?.teeTime ?? null;
+
+    // Round-by-round scores — try linescores first, then statistics R1/R2/R3/R4
+    const roundScores: (string | null)[] = [null, null, null, null];
+    if (comp.linescores?.length) {
+      for (const ls of comp.linescores) {
+        const rnd = (ls.period?.number ?? 1) - 1;
+        if (rnd >= 0 && rnd < 4 && ls.displayValue) roundScores[rnd] = ls.displayValue;
+      }
+    } else if (comp.statistics?.length) {
+      for (const s of comp.statistics) {
+        const m = (s.abbreviation ?? '').toUpperCase().match(/^R([1-4])$/);
+        if (m && s.displayValue) roundScores[parseInt(m[1]) - 1] = s.displayValue;
+      }
+    }
 
     if (id) {
       players[id] = {
-        id,
-        name,
-        position,
-        positionDisplay,
-        score: scoreVal,
-        status,
-        thru: thruDisplay,
-        currentRound,
-        worldRanking,
-        teeTime,
+        id, name, position, positionDisplay,
+        score: scoreVal, status, thru: thruDisplay,
+        currentRound, worldRanking, teeTime, roundScores,
       };
     }
   }
@@ -270,7 +277,8 @@ interface ESPNCompetitor {
     fullName?: string;
   };
   sortOrder?: number;
-  teeTime?: string;  // ISO 8601 string e.g. "2026-04-09T13:30:00.000Z"
+  teeTime?: string;
+  linescores?: { displayValue?: string; value?: number; period?: { number?: number } }[];
   score?: { displayValue?: string };
   statistics?: { name?: string; abbreviation?: string; displayValue?: string }[];
   status?: {
