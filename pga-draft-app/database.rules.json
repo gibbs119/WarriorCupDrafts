@@ -84,8 +84,9 @@
 
     "dailySummaries": {
       "$tournamentId": {
+        // Allow reading all summaries for a tournament at once (needed by recaps page)
+        ".read": "auth != null",
         "$date": {
-          ".read": "auth != null",
           // Cron writes the full summary node via Admin SDK (bypasses rules — fine)
           // Block direct client writes to the summary itself
           ".write": false,
@@ -102,6 +103,12 @@
     "draftGrades": {
       ".read": "auth != null",
       // Written only by Firebase Admin SDK (AI draft-grades route) — block client writes
+      ".write": false
+    },
+
+    "notifiedTeeTimes": {
+      // Written only by tee-time-notify cron via Admin SDK — no client access needed
+      ".read": false,
       ".write": false
     },
 
