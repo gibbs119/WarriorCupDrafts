@@ -189,6 +189,9 @@ export function parseLeaderboard(data: ESPNLeaderboardResponse): {
       ? (parseInt(rankStat.displayValue ?? '', 10) || null)
       : null;
 
+    // Tee time — ESPN sometimes puts it on comp directly, sometimes in status
+    const teeTime = comp.teeTime ?? comp.status?.teeTime ?? null;
+
     if (id) {
       players[id] = {
         id,
@@ -200,6 +203,7 @@ export function parseLeaderboard(data: ESPNLeaderboardResponse): {
         thru: thruDisplay,
         currentRound,
         worldRanking,
+        teeTime,
       };
     }
   }
@@ -266,12 +270,14 @@ interface ESPNCompetitor {
     fullName?: string;
   };
   sortOrder?: number;
+  teeTime?: string;  // ISO 8601 string e.g. "2026-04-09T13:30:00.000Z"
   score?: { displayValue?: string };
   statistics?: { name?: string; abbreviation?: string; displayValue?: string }[];
   status?: {
     displayValue?: string;
     thru?: number | string;
     period?: number;
+    teeTime?: string;  // alternate location ESPN sometimes uses
     position?: { id?: string; displayName?: string; displayValue?: string; isTie?: boolean };
     type?: { name?: string; detail?: string };
   };

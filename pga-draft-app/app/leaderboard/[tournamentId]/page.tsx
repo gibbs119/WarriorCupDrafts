@@ -177,8 +177,17 @@ function ScoreRow({
 
 // ─── Detail panel ─────────────────────────────────────────────────────────────
 
-function DetailPanel({ team, isMe, cutLine, standalone }: {
+function fmtTeeTime(iso: string): string {
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
+  } catch { return ''; }
+}
+
+function DetailPanel({ team, isMe, cutLine, standalone, playersMap }: {
   team: TeamScore; isMe: boolean; cutLine: number; standalone?: boolean;
+  playersMap?: Record<string, Player>;
 }) {
   const sorted = [...team.players].sort((a, b) => a.points - b.points);
   const hasAnyLiveScore = sorted.some(p => p.points < 9000);
@@ -240,7 +249,11 @@ function DetailPanel({ team, isMe, cutLine, standalone }: {
                 {isCounting && <span className="text-xs" style={{ color: 'rgba(212,175,55,0.65)' }}>★</span>}
               </div>
               <div className="text-xs text-slate-600 mt-0.5">
-                {pending ? 'Not yet started'
+                {pending ? (() => {
+                  const raw = playersMap?.[p.playerId]?.teeTime;
+                  const formatted = raw ? fmtTeeTime(raw) : '';
+                  return formatted ? `Tees off ${formatted}` : 'Not yet started';
+                })()
                   : p.status === 'cut' ? `Cut line — scores ${cutLine + 1} pts`
                   : p.status === 'wd' || p.status === 'dq' ? `${p.status.toUpperCase()} — scores ${cutLine + 1} pts`
                   : p.thru === 'F' ? 'Round complete'
@@ -1345,7 +1358,7 @@ export default function LeaderboardPage() {
                       snapshots={trendSnapshots}
                       onToggle={() => setExpandedTeam(isExp ? null : team.userId)}
                     />
-                    {isExp && <DetailPanel team={team} isMe={isMe} cutLine={cutLine} />}
+                    {isExp && <DetailPanel team={team} isMe={isMe} cutLine={cutLine} playersMap={fieldPlayers} />}
                   </div>
                 );
               })}
@@ -1366,7 +1379,7 @@ export default function LeaderboardPage() {
             <div className="space-y-4">
               {teamScores.map((team) => (
                 <React.Fragment key={team.userId}>
-                  <DetailPanel team={team} isMe={team.userId === appUser.uid} cutLine={cutLine} standalone />
+                  <DetailPanel team={team} isMe={team.userId === appUser.uid} cutLine={cutLine} standalone playersMap={fieldPlayers} />
                 </React.Fragment>
               ))}
             </div>

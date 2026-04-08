@@ -60,6 +60,7 @@ export interface Player {
   thru: string;             // e.g. "F", "14", "-"
   currentRound?: number;         // ESPN round number (1-4)
   worldRanking?: number | null;  // Official World Golf Ranking (from ESPN stats)
+  teeTime?: string | null;       // ISO string from ESPN, null when unavailable
 }
 
 export interface PlayerScore {

@@ -106,6 +106,12 @@
       ".write": false
     },
 
+    "notifiedTeeTimes": {
+      // Written only by tee-time-notify cron via Admin SDK — no client access needed
+      ".read": false,
+      ".write": false
+    },
+
     "trendSnapshots": {
       // Leaderboard page reads and writes hourly score snapshots
       ".read": "auth != null",
