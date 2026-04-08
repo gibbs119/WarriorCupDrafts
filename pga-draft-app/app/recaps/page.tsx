@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import Navigation from '@/components/Navigation';
 import { getAllTournaments, getAllDailySummaries, getDraftGrades } from '@/lib/db';
+import { getTournamentTheme } from '@/lib/tournament-theme';
 import { TOURNAMENTS } from '@/lib/constants';
 import type { Tournament } from '@/lib/types';
 import React from 'react';
@@ -291,17 +292,35 @@ export default function RecapsPage() {
           <div className="space-y-8">
             {recaps.map(({ tournament, summaries, grades }) => {
               const isActive = activeTournament === tournament.id;
+              const tTheme = getTournamentTheme(tournament.id);
 
               return (
                 <div key={tournament.id}>
                   {/* Tournament header toggle */}
                   <button
-                    className="w-full flex items-center justify-between mb-4 group"
+                    className="w-full flex items-center justify-between mb-4 group rounded-2xl px-4 py-3 transition-all"
+                    style={{
+                      background: isActive ? tTheme.accentLight : 'rgba(255,255,255,0.02)',
+                      border: `1px solid ${isActive ? tTheme.cardBorder : 'rgba(255,255,255,0.06)'}`,
+                    }}
                     onClick={() => setActiveTournament(isActive ? null : tournament.id)}
                   >
                     <div className="flex items-center gap-3">
-                      <div className="h-px flex-1 w-8" style={{ background: 'linear-gradient(90deg, #C9A227, transparent)' }} />
-                      <h2 className="font-bebas text-2xl tracking-wider text-white group-hover:text-yellow-300 transition-colors">
+                      {/* Tournament logo (small) or accent line */}
+                      {tTheme.logoPath ? (
+                        <img
+                          src={tTheme.logoPath}
+                          alt={tTheme.label}
+                          className="w-auto object-contain shrink-0"
+                          style={{ height: '36px', filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.6))' }}
+                          draggable={false}
+                        />
+                      ) : (
+                        <div className="h-6 w-1 rounded-full shrink-0"
+                          style={{ background: tTheme.accent }} />
+                      )}
+                      <h2 className="font-bebas text-2xl tracking-wider text-white transition-colors"
+                        style={{ color: isActive ? tTheme.accentMid : '#fff' }}>
                         {tournament.name}
                       </h2>
                       <span className="text-slate-500 text-xs font-mono">{tournament.year}</span>
@@ -325,7 +344,7 @@ export default function RecapsPage() {
                       {grades.length > 0 && (
                         <section>
                           <div className="flex items-center gap-2 mb-3">
-                            <Sparkles size={14} style={{ color: '#C9A227' }} />
+                            <Sparkles size={14} style={{ color: tTheme.accentMid }} />
                             <h3 className="font-bebas text-lg tracking-wider text-white">Draft Report Cards</h3>
                             <span className="text-slate-600 text-xs">— generated after draft</span>
                           </div>
@@ -345,7 +364,7 @@ export default function RecapsPage() {
                       {summaries.length > 0 && (
                         <section>
                           <div className="flex items-center gap-2 mb-3">
-                            <Calendar size={14} style={{ color: '#C9A227' }} />
+                            <Calendar size={14} style={{ color: tTheme.accentMid }} />
                             <h3 className="font-bebas text-lg tracking-wider text-white">Round Recaps</h3>
                             <span className="text-slate-600 text-xs">— {summaries.length} round{summaries.length !== 1 ? 's' : ''}</span>
                           </div>

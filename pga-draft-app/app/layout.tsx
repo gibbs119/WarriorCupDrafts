@@ -7,23 +7,29 @@ import { Toaster } from 'react-hot-toast';
 export const metadata: Metadata = {
   title: 'Warrior Cup Drafts',
   description: 'Snake draft fantasy golf — The Players & all 4 Majors',
-  // Makes app installable / full-screen on iOS home screen
+  manifest: '/manifest.webmanifest',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
     title: 'Warrior Cup',
+    startupImage: [],
+  },
+  formatDetection: {
+    telephone: false, // prevent iOS auto-linking phone numbers
   },
 };
 
 export const viewport: Viewport = {
-  // "viewport-fit=cover" lets content extend under iPhone notch/Dynamic Island
-  // and home indicator — we then use env(safe-area-inset-*) in CSS to pad correctly
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,        // prevents accidental pinch-zoom on form inputs
+  maximumScale: 1,
   userScalable: false,
-  viewportFit: 'cover',
-  themeColor: '#030912',  // colors the iOS status bar area
+  viewportFit: 'cover',   // extend under notch/Dynamic Island + home indicator
+  themeColor: [
+    { media: '(prefers-color-scheme: dark)',  color: '#030912' },
+    { media: '(prefers-color-scheme: light)', color: '#030912' },
+  ],
+  interactiveWidget: 'resizes-content', // prevents keyboard pushing layout on mobile
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
