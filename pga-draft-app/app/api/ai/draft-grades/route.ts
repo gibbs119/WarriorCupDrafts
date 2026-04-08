@@ -22,7 +22,7 @@ async function callGemini(prompt: string): Promise<string | null> {
     console.error('[draft-grades] GEMINI_API_KEY not set');
     return null;
   }
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`;
   const body = JSON.stringify({
     contents: [{ parts: [{ text: prompt }] }],
     generationConfig: { maxOutputTokens: 2000, temperature: 0.9 },
@@ -41,18 +41,19 @@ async function callGemini(prompt: string): Promise<string | null> {
         continue;
       }
       if (!res.ok) {
-        console.error('[draft-grades] Gemini error:', res.status, await res.text());
-        return null;
+        const errText = await res.text();
+        console.error('[draft-grades] Gemini error:', res.status, errText);
+        throw new Error(`Gemini ${res.status}: ${errText.slice(0, 300)}`);
       }
       const data = await res.json();
       return data.candidates?.[0]?.content?.parts?.[0]?.text ?? null;
     } catch (e) {
+      if (attempt < 2) continue; // retry on any transient error
       console.error('[draft-grades] Gemini fetch error:', e);
-      return null;
+      throw e;
     }
   }
-  console.error('[draft-grades] Gemini 429 — all retries exhausted');
-  return null;
+  throw new Error('Gemini 429 — rate limit hit on all 3 attempts');
 }
 
 // ── POST — generate grades ────────────────────────────────────────────────────
@@ -149,11 +150,6 @@ Respond ONLY with valid JSON array — no markdown, no backticks, no extra text:
 [{"username":"...","grade":"B+","winPct":18,"summary":"..."}]`;
 
     const text = await callGemini(prompt);
-    if (!text) {
-      return NextResponse.json({
-        error: 'AI generation failed. Check GEMINI_API_KEY env variable at https://aistudio.google.com/app/apikey',
-      }, { status: 500 });
-    }
 
     let parsed: Array<{ username: string; grade: string; winPct: number; summary: string }>;
     try {
