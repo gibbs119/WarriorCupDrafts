@@ -4,7 +4,7 @@ import { getAdminServices, pushToAllUsers } from '@/lib/fcm-admin';
 
 // Generates AI draft grades for all teams and caches them in Firebase.
 // Uses Firebase Admin SDK (bypasses DB security rules — server only).
-// Uses Google Gemini API (free tier).
+// Uses OpenAI API (gpt-4o-mini).
 
 export interface DraftGrade {
   userId: string;
@@ -15,45 +15,34 @@ export interface DraftGrade {
   generatedAt: number;
 }
 
-// ── Google Gemini ─────────────────────────────────────────────────────────────
-async function callGemini(prompt: string): Promise<string | null> {
-  const apiKey = process.env.GEMINI_API_KEY ?? process.env.NEXT_PUBLIC_GEMINI_API_KEY ?? '';
-  if (!apiKey) {
-    console.error('[draft-grades] GEMINI_API_KEY not set');
-    return null;
-  }
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`;
-  const body = JSON.stringify({
-    contents: [{ parts: [{ text: prompt }] }],
-    generationConfig: { maxOutputTokens: 2000, temperature: 0.9 },
+// ── OpenAI ────────────────────────────────────────────────────────────────────
+async function callAI(prompt: string): Promise<string> {
+  const apiKey = process.env.OPENAI_API_KEY ?? '';
+  if (!apiKey) throw new Error('OPENAI_API_KEY not set in environment variables');
+
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 2000,
+      temperature: 0.9,
+    }),
   });
 
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      if (attempt > 0) await new Promise((r) => setTimeout(r, attempt * 10000)); // 10s, 20s
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body,
-      });
-      if (res.status === 429) {
-        console.warn(`[draft-grades] Gemini 429 — retry ${attempt + 1}/3`);
-        continue;
-      }
-      if (!res.ok) {
-        const errText = await res.text();
-        console.error('[draft-grades] Gemini error:', res.status, errText);
-        throw new Error(`Gemini ${res.status}: ${errText.slice(0, 300)}`);
-      }
-      const data = await res.json();
-      return data.candidates?.[0]?.content?.parts?.[0]?.text ?? null;
-    } catch (e) {
-      if (attempt < 2) continue; // retry on any transient error
-      console.error('[draft-grades] Gemini fetch error:', e);
-      throw e;
-    }
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`OpenAI ${res.status}: ${errText.slice(0, 300)}`);
   }
-  throw new Error('Gemini 429 — rate limit hit on all 3 attempts');
+
+  const data = await res.json();
+  const text = data.choices?.[0]?.message?.content;
+  if (!text) throw new Error('OpenAI returned empty response');
+  return text;
 }
 
 // ── POST — generate grades ────────────────────────────────────────────────────
@@ -149,7 +138,7 @@ For each team give:
 Respond ONLY with valid JSON array — no markdown, no backticks, no extra text:
 [{"username":"...","grade":"B+","winPct":18,"summary":"..."}]`;
 
-    const text = await callGemini(prompt);
+    const text = await callAI(prompt);
 
     let parsed: Array<{ username: string; grade: string; winPct: number; summary: string }>;
     try {

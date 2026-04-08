@@ -7,48 +7,43 @@ import { getAdminServices, pushToAllUsers } from '@/lib/fcm-admin';
 // Cron: runs at 8 PM ET every day (0 0 * * * = midnight UTC = 8 PM ET)
 // Generates a daily AI summary of tournament activity and stores it in Firebase.
 // Users see it as a modal the next time they open the app.
-// Uses Google Gemini API (free tier — https://aistudio.google.com/app/apikey)
+// Uses OpenAI API (gpt-4o-mini).
 
-// ── Google Gemini free API ────────────────────────────────────────────────────
-async function callGemini(prompt: string): Promise<string | null> {
-  const apiKey = process.env.GEMINI_API_KEY ?? process.env.NEXT_PUBLIC_GEMINI_API_KEY ?? '';
+// ── OpenAI ────────────────────────────────────────────────────────────────────
+async function callAI(prompt: string): Promise<string | null> {
+  const apiKey = process.env.OPENAI_API_KEY ?? '';
   if (!apiKey) {
-    console.error('[daily-summary] GEMINI_API_KEY not set');
+    console.error('[daily-summary] OPENAI_API_KEY not set');
     return null;
   }
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`;
-  const body = JSON.stringify({
-    contents: [{ parts: [{ text: prompt }] }],
-    generationConfig: { maxOutputTokens: 1500, temperature: 0.95 },
-  });
+  try {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 1500,
+        temperature: 0.95,
+      }),
+    });
 
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      if (attempt > 0) await new Promise((r) => setTimeout(r, attempt * 10000)); // 10s, 20s
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body,
-      });
-      if (res.status === 429) {
-        console.warn(`[daily-summary] Gemini 429 — retry ${attempt + 1}/3`);
-        continue;
-      }
-      if (!res.ok) {
-        const err = await res.text();
-        console.error('[daily-summary] Gemini error:', res.status, err);
-        return null;
-      }
-      const data = await res.json();
-      return data.candidates?.[0]?.content?.parts?.[0]?.text ?? null;
-    } catch (e) {
-      console.error('[daily-summary] Gemini fetch error:', e);
+    if (!res.ok) {
+      const err = await res.text();
+      console.error('[daily-summary] OpenAI error:', res.status, err);
       return null;
     }
+
+    const data = await res.json();
+    return data.choices?.[0]?.message?.content ?? null;
+  } catch (e) {
+    console.error('[daily-summary] OpenAI fetch error:', e);
+    return null;
   }
-  console.error('[daily-summary] Gemini 429 — all retries exhausted');
-  return null;
 }
 
 export async function GET(req: NextRequest) {
@@ -217,7 +212,7 @@ Respond ONLY with valid JSON — no markdown, no backticks, no extra text:
   "outlook": "..."
 }`;
 
-    const text = await callGemini(prompt);
+    const text = await callAI(prompt);
     if (!text) {
       return NextResponse.json({
         error: 'AI generation failed — check GEMINI_API_KEY env variable. Get a free key at https://aistudio.google.com/app/apikey',
