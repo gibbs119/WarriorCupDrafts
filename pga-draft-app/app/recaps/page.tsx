@@ -222,14 +222,14 @@ export default function RecapsPage() {
 
         const results = await Promise.all(
           relevant.map(async (t) => {
-            const [summaries, grades] = await Promise.all([
+            const [summariesResult, gradesResult] = await Promise.allSettled([
               getAllDailySummaries(t.id),
               getDraftGrades(t.id),
             ]);
             return {
               tournament: t,
-              summaries: summaries as DailySummary[],
-              grades: grades as DraftGrade[],
+              summaries: summariesResult.status === 'fulfilled' ? summariesResult.value as DailySummary[] : [],
+              grades: gradesResult.status === 'fulfilled' ? gradesResult.value as DraftGrade[] : [],
             };
           })
         );
