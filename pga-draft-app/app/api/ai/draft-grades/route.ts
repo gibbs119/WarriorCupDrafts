@@ -22,26 +22,37 @@ async function callGemini(prompt: string): Promise<string | null> {
     console.error('[draft-grades] GEMINI_API_KEY not set');
     return null;
   }
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
-  try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: 2000, temperature: 0.9 },
-      }),
-    });
-    if (!res.ok) {
-      console.error('[draft-grades] Gemini error:', res.status, await res.text());
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+  const body = JSON.stringify({
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: { maxOutputTokens: 2000, temperature: 0.9 },
+  });
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      if (attempt > 0) await new Promise((r) => setTimeout(r, attempt * 10000)); // 10s, 20s
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+      });
+      if (res.status === 429) {
+        console.warn(`[draft-grades] Gemini 429 — retry ${attempt + 1}/3`);
+        continue;
+      }
+      if (!res.ok) {
+        console.error('[draft-grades] Gemini error:', res.status, await res.text());
+        return null;
+      }
+      const data = await res.json();
+      return data.candidates?.[0]?.content?.parts?.[0]?.text ?? null;
+    } catch (e) {
+      console.error('[draft-grades] Gemini fetch error:', e);
       return null;
     }
-    const data = await res.json();
-    return data.candidates?.[0]?.content?.parts?.[0]?.text ?? null;
-  } catch (e) {
-    console.error('[draft-grades] Gemini fetch error:', e);
-    return null;
   }
+  console.error('[draft-grades] Gemini 429 — all retries exhausted');
+  return null;
 }
 
 // ── POST — generate grades ────────────────────────────────────────────────────
