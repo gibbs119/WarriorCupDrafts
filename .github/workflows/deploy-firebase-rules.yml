@@ -1,0 +1,22 @@
+name: Deploy Firebase Database Rules
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'pga-draft-app/database.rules.json'
+
+jobs:
+  deploy-rules:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy database rules
+        run: |
+          npx firebase-tools@latest deploy --only database \
+            --project ${{ secrets.FIREBASE_PROJECT_ID }} \
+            --token ${{ secrets.FIREBASE_TOKEN }} \
+            --non-interactive
+        working-directory: pga-draft-app
