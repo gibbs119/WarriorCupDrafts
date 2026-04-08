@@ -402,6 +402,12 @@ button, .btn-primary, .btn-gold, .btn-secondary, .btn-danger {
   .page { padding-bottom: max(2rem, env(safe-area-inset-bottom)); }
 }
 
+/* ─── Equalizer bar animation (TournamentAudio) ──────────────────────────── */
+@keyframes eq-bar {
+  from { transform: scaleY(0.3); }
+  to   { transform: scaleY(1.0); }
+}
+
 /* ─── Consistent card depth ──────────────────────────────────────────────── */
 .card {
   background: rgba(255,255,255,0.04);

@@ -8,6 +8,7 @@ export interface TournamentTheme {
   venue: string;       // venue tagline shown in hero
   icon: string;        // emoji icon
   logoPath?: string;   // path to official tournament logo (in /public/)
+  musicUrl?: string;   // SoundCloud track URL for ambient theme music
 
   // Primary accent color (replaces royal blue in active states)
   accent: string;      // e.g. #006747
@@ -41,6 +42,7 @@ const THEMES: Record<string, TournamentTheme> = {
     venue:    'Augusta National Golf Club',
     icon:     '⛳',
     logoPath: '/masters-logo.png',
+    musicUrl: 'https://soundcloud.com/user-543843379-262071282/the-masters-theme-full-tv-version-revised-clear-intro',
     accent:      '#006747',           // Augusta National green
     accentMid:   '#E8C94A',           // Masters logo gold (the yellow US map)
     accentLight: 'rgba(0, 103, 71, 0.18)',
