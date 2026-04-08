@@ -528,9 +528,13 @@ export default function AdminPage() {
                         onClick={async () => {
                           setSaving(true);
                           try {
-                            const res = await fetch(`/api/ai/draft-grades?tournamentId=${t.id}`);
+                            const res = await fetch('/api/ai/draft-grades', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ tournamentId: t.id, force: false }),
+                            });
                             const data = await res.json();
-                            alert(res.ok ? `✅ Grades generated for ${Object.keys(data.grades ?? {}).length} teams` : `❌ ${data.error ?? 'Failed'}`);
+                            alert(res.ok ? `✅ Grades generated for ${Array.isArray(data.grades) ? data.grades.length : '?'} teams${data.cached ? ' (cached)' : ''}` : `❌ ${data.error ?? 'Failed'}`);
                           } catch { alert('❌ Request failed'); }
                           finally { setSaving(false); }
                         }}
