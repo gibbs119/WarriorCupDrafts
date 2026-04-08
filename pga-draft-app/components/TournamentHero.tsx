@@ -52,15 +52,23 @@ export default function TournamentHero({ theme, year, subtitle, rightSlot }: Pro
         }}
       />
 
+      {/* Golden bloom from top-right when logo is present */}
+      {theme.logoPath && (
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background: `radial-gradient(ellipse 45% 80% at 100% 0%, rgba(232,201,74,0.10) 0%, transparent 65%)`,
+          }}
+        />
+      )}
+
       {/* Content */}
-      <div className="relative z-10 px-5 pt-5 pb-4 flex items-end justify-between gap-3">
-        <div className="min-w-0">
+      <div className="relative z-10 px-5 pt-5 pb-4 flex items-center justify-between gap-4">
+        <div className="min-w-0 flex-1">
           {/* Venue tagline */}
           {theme.venue && (
-            <div
-              className="flex items-center gap-2 mb-2"
-            >
-              <span className="text-sm leading-none">{theme.icon}</span>
+            <div className="flex items-center gap-2 mb-2">
+              {!theme.logoPath && <span className="text-sm leading-none">{theme.icon}</span>}
               <span
                 className="text-xs font-semibold tracking-[0.18em] uppercase"
                 style={{ color: theme.accentMid }}
@@ -86,16 +94,30 @@ export default function TournamentHero({ theme, year, subtitle, rightSlot }: Pro
           )}
         </div>
 
-        {/* Right slot — year watermark + optional content */}
+        {/* Right slot — logo (preferred) or year watermark */}
         <div className="flex flex-col items-end gap-2 shrink-0">
           {rightSlot}
-          {/* Year watermark — large, translucent */}
-          <span
-            className="font-bebas tracking-widest leading-none select-none hidden sm:block"
-            style={{ fontSize: '3.5rem', color: 'rgba(255,255,255,0.07)' }}
-          >
-            {year}
-          </span>
+          {theme.logoPath ? (
+            /* Official tournament logo */
+            <img
+              src={theme.logoPath}
+              alt={theme.label}
+              className="w-auto object-contain select-none"
+              style={{
+                height: 'clamp(64px, 11vw, 96px)',
+                filter: 'drop-shadow(0 4px 20px rgba(0,0,0,0.7)) drop-shadow(0 0 8px rgba(0,0,0,0.5))',
+              }}
+              draggable={false}
+            />
+          ) : (
+            /* Fallback: year watermark */
+            <span
+              className="font-bebas tracking-widest leading-none select-none hidden sm:block"
+              style={{ fontSize: '3.5rem', color: 'rgba(255,255,255,0.07)' }}
+            >
+              {year}
+            </span>
+          )}
         </div>
       </div>
 

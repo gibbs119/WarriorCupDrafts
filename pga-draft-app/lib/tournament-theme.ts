@@ -7,6 +7,7 @@ export interface TournamentTheme {
   label: string;       // display name (may differ from tournament.name)
   venue: string;       // venue tagline shown in hero
   icon: string;        // emoji icon
+  logoPath?: string;   // path to official tournament logo (in /public/)
 
   // Primary accent color (replaces royal blue in active states)
   accent: string;      // e.g. #006747
@@ -33,23 +34,25 @@ export interface TournamentTheme {
 const THEMES: Record<string, TournamentTheme> = {
 
   // ── The Masters — Augusta National ────────────────────────────────────────
-  // Signature Augusta green with elegant dark forest backdrop.
-  // Colors match the Masters Tournament logo and broadcast graphics.
+  // Augusta green + Masters gold — matches the official logo palette exactly.
+  // Deep forest backdrop with golden-yellow accents from the logo map color.
   'masters': {
-    label:   'THE MASTERS',
-    venue:   'Augusta National Golf Club',
-    icon:    '⛳',
-    accent:      '#006747',
-    accentMid:   '#2D9E6B',
-    accentLight: 'rgba(0, 103, 71, 0.15)',
-    heroBg: 'linear-gradient(160deg, #001810 0%, #003525 45%, #001A10 100%)',
-    heroPatternColor: 'rgba(0, 103, 71, 0.12)',
-    heroGlow: '0 8px 48px rgba(0, 103, 71, 0.35)',
-    cardBorder: 'rgba(0, 103, 71, 0.45)',
-    cardGlow:   '0 0 32px rgba(0, 103, 71, 0.2)',
-    activeBg:     'rgba(0, 103, 71, 0.25)',
+    label:    'THE MASTERS',
+    venue:    'Augusta National Golf Club',
+    icon:     '⛳',
+    logoPath: '/masters-logo.png',
+    accent:      '#006747',           // Augusta National green
+    accentMid:   '#E8C94A',           // Masters logo gold (the yellow US map)
+    accentLight: 'rgba(0, 103, 71, 0.18)',
+    // Deep forest green with a warm golden bloom from the top-right
+    heroBg: 'linear-gradient(160deg, #001208 0%, #003020 50%, #001208 100%)',
+    heroPatternColor: 'rgba(0, 103, 71, 0.14)',
+    heroGlow: '0 8px 56px rgba(0, 103, 71, 0.45), 0 0 0 1px rgba(0,103,71,0.2)',
+    cardBorder: 'rgba(0, 103, 71, 0.5)',
+    cardGlow:   '0 0 32px rgba(0, 103, 71, 0.25), inset 0 1px 0 rgba(232,201,74,0.08)',
+    activeBg:     'rgba(0, 103, 71, 0.28)',
     activeBorder: '#006747',
-    activeText:   '#2D9E6B',
+    activeText:   '#E8C94A',          // gold text on active — matches logo
   },
 
   // ── The Players Championship — TPC Sawgrass ───────────────────────────────
