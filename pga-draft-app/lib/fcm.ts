@@ -4,7 +4,7 @@
 // Works on:  Android Chrome, desktop Chrome/Firefox, iOS 16.4+ PWA (home screen)
 
 import { getMessaging, getToken, onMessage, type Messaging } from 'firebase/messaging';
-import { app } from './firebase';
+import app from './firebase';
 
 const VAPID_KEY = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY;
 
