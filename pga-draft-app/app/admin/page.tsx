@@ -521,8 +521,8 @@ export default function AdminPage() {
                       👥 Rosters
                     </Link>
 
-                    {/* Generate Draft Grades — available once draft is complete */}
-                    {t.draftComplete && (
+                    {/* Generate Draft Grades — show once draft is done (draftComplete flag or active/completed status) */}
+                    {(t.draftComplete || t.status === 'active' || t.status === 'completed') && (
                       <button
                         disabled={saving}
                         onClick={async () => {
