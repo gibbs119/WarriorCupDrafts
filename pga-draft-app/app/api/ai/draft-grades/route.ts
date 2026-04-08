@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ref, get, set } from 'firebase/database';
 import { db } from '@/lib/firebase';
 import { TOURNAMENTS, TOP_10_POINTS } from '@/lib/constants';
+import { getAdminServices, pushToAllUsers } from '@/lib/fcm-admin';
 
 // Generates AI draft grades for all teams and caches them in Firebase.
 // Called once after the draft completes; cached forever (grades don't change).
@@ -160,6 +161,21 @@ Respond ONLY with valid JSON — no markdown, no backticks, no extra text:
       gradesMap[g.userId] = g;
     }
     await set(ref(db, `draftGrades/${tournamentId}`), gradesMap);
+
+    // Push notification to all users
+    try {
+      const { messaging, db: adminDb } = getAdminServices();
+      const tourName = TOURNAMENTS.find((t) => t.id === tournamentId)?.name ?? 'Tournament';
+      const url = `${process.env.NEXT_PUBLIC_APP_URL ?? ''}/recaps`;
+      await pushToAllUsers(
+        messaging, adminDb,
+        `🎓 Draft Report Cards — ${tourName}`,
+        'AI draft grades are in. See how your team stacks up in Recaps.',
+        url,
+      );
+    } catch (e) {
+      console.warn('[draft-grades] push notification failed:', e);
+    }
 
     return NextResponse.json({ grades, cached: false });
   } catch (err) {
