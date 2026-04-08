@@ -533,9 +533,13 @@ export default function AdminPage() {
                               headers: { 'Content-Type': 'application/json' },
                               body: JSON.stringify({ tournamentId: t.id, force: false }),
                             });
-                            const data = await res.json();
-                            alert(res.ok ? `✅ Grades generated for ${Array.isArray(data.grades) ? data.grades.length : '?'} teams${data.cached ? ' (cached)' : ''}` : `❌ ${data.error ?? 'Failed'}`);
-                          } catch { alert('❌ Request failed'); }
+                            const data = await res.json().catch(() => ({}));
+                            if (res.ok) {
+                              alert(`✅ Grades ${data.cached ? 'loaded from cache' : 'generated'} for ${Array.isArray(data.grades) ? data.grades.length : '?'} teams`);
+                            } else {
+                              alert(`❌ ${data.error ?? `HTTP ${res.status}`}`);
+                            }
+                          } catch (e) { alert(`❌ ${e instanceof Error ? e.message : 'Network error'}`); }
                           finally { setSaving(false); }
                         }}
                         className="text-xs py-1.5 px-3 rounded-lg font-bold disabled:opacity-40"
