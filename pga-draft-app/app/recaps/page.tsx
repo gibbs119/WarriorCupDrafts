@@ -6,6 +6,7 @@ import { useAuth } from '@/lib/AuthContext';
 import Navigation from '@/components/Navigation';
 import { getAllTournaments, getAllDailySummaries, getDraftGrades } from '@/lib/db';
 import { getTournamentTheme } from '@/lib/tournament-theme';
+import TournamentAudio from '@/components/TournamentAudio';
 import { TOURNAMENTS } from '@/lib/constants';
 import type { Tournament } from '@/lib/types';
 import React from 'react';
@@ -296,6 +297,16 @@ export default function RecapsPage() {
 
               return (
                 <div key={tournament.id}>
+                  {/* Tournament ambient audio — plays when this section is expanded */}
+                  {isActive && tTheme.musicUrl && (
+                    <TournamentAudio
+                      trackUrl={tTheme.musicUrl}
+                      label={`${tTheme.label} Theme`}
+                      accent={tTheme.accent}
+                      accentMid={tTheme.accentMid}
+                    />
+                  )}
+
                   {/* Tournament header toggle */}
                   <button
                     className="w-full flex items-center justify-between mb-4 group rounded-2xl px-4 py-3 transition-all"

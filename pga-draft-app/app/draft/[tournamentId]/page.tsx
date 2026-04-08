@@ -7,6 +7,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import Navigation from '@/components/Navigation';
 import TournamentHero from '@/components/TournamentHero';
+import TournamentAudio from '@/components/TournamentAudio';
 import { getTournamentTheme } from '@/lib/tournament-theme';
 import {
   getTournament,
@@ -524,6 +525,16 @@ export default function DraftRoomPage() {
   return (
     <div className="min-h-screen page">
       <Navigation />
+
+      {/* Tournament ambient audio */}
+      {theme.musicUrl && (
+        <TournamentAudio
+          trackUrl={theme.musicUrl}
+          label={`${theme.label} Theme`}
+          accent={theme.accent}
+          accentMid={theme.accentMid}
+        />
+      )}
 
       {/* ── "Your turn" alert banner — pulses, tap to dismiss ── */}
       {myTurnAlert && (
