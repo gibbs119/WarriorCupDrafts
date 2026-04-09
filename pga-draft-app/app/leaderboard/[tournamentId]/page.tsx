@@ -1489,13 +1489,15 @@ export default function LeaderboardPage() {
               return [...deduped, snap].sort((a, b) => a.timestamp - b.timestamp);
             });
 
-            // Also regenerate live odds alongside each hourly snapshot
+            // Also regenerate live odds alongside each hourly snapshot.
+            // Always force:true — the 25-min cache is for manual refreshes only;
+            // the scheduled hourly auto-gen should always produce fresh odds.
             if (hourKey !== lastOddsHourRef.current) {
               lastOddsHourRef.current = hourKey;
               fetch('/api/ai/live-odds', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ tournamentId }),
+                body: JSON.stringify({ tournamentId, force: true }),
               }).then(r => r.ok ? r.json() : null)
                 .then(d => {
                   if (d?.odds?.length > 0) {
