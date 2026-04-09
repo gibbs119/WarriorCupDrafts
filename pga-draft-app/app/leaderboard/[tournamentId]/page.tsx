@@ -720,10 +720,16 @@ function FieldLeaderboard({
     return true;
   });
 
-  // Sort by position, put null/WD/DQ last
+  // Sort by position; unstarted players sorted by tee time; WD/DQ last
   const sorted = unique.sort((a, b) => {
     if (a.status === 'wd' || a.status === 'dq') return 1;
     if (b.status === 'wd' || b.status === 'dq') return -1;
+    // Both not yet started → sort by tee time ascending
+    if (a.position === null && b.position === null) {
+      const ta = a.teeTime ? new Date(a.teeTime).getTime() : Infinity;
+      const tb = b.teeTime ? new Date(b.teeTime).getTime() : Infinity;
+      return ta - tb;
+    }
     if (a.position === null) return 1;
     if (b.position === null) return -1;
     return a.position - b.position;
