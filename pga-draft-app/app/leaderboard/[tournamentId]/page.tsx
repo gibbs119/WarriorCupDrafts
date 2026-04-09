@@ -58,6 +58,14 @@ function ptsColor(pts: number): string {
   return '#cbd5e1';
 }
 
+// Standard golf scorecard convention: red = under par, white = even, green = over par
+function golfScoreColor(score: string | null | undefined): string {
+  if (!score || score === '—' || score === '-') return '#475569';
+  if (score === 'E') return '#e2e8f0';
+  if (score.startsWith('-')) return '#f87171';  // under par → red
+  return '#34d399';                              // over par → green
+}
+
 function RankBadge({ rank }: { rank: number }) {
   const base = 'flex items-center justify-center w-10 h-10 rounded-full font-bebas text-xl tracking-wide shrink-0';
   if (rank === 1) return <div className={base} style={{ background: '#D4AF37', color: '#0a0f1e' }}>1</div>;
@@ -285,7 +293,7 @@ function DetailPanel({ team, isMe, cutLine, standalone, playersMap }: {
                     {rs.map((r, i) => r === null ? null : (
                       <span key={i} className="text-xs">
                         <span className="text-slate-700">{labels[i]} </span>
-                        <span className="font-mono" style={{ color: r === 'E' ? '#64748b' : r.startsWith('-') ? '#34d399' : '#f87171' }}>{r}</span>
+                        <span className="font-mono" style={{ color: golfScoreColor(r) }}>{r}</span>
                       </span>
                     ))}
                   </div>
@@ -303,10 +311,7 @@ function DetailPanel({ team, isMe, cutLine, standalone, playersMap }: {
             {!pending && (
               <div className="text-right shrink-0 w-10">
                 <div className="text-sm font-bold font-mono" style={{
-                  color: p.score === 'E' ? '#64748b'
-                       : p.score === '—' ? '#475569'
-                       : p.score.startsWith('-') ? '#34d399'
-                       : '#f87171',
+                  color: golfScoreColor(p.score),
                 }}>
                   {p.score}
                 </div>
@@ -734,10 +739,7 @@ function FieldLeaderboard({
   function PlayerRow({ p, idx, total }: { p: Player; idx: number; total: number }) {
     const owner = draftedMap[normName(p.name)];
     const isDrafted = !!owner;
-    const scoreColor = !p.score || p.score === '—' || p.score === '-' ? '#475569'
-      : p.score === 'E' ? '#64748b'
-      : p.score.startsWith('-') ? '#34d399'
-      : '#f87171';
+    const scoreColor = golfScoreColor(p.score);
     const isCut = p.status === 'cut';
     const isWdDq = p.status === 'wd' || p.status === 'dq';
 
