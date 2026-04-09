@@ -18,6 +18,7 @@ import {
   saveTrendSnapshot,
   getTrendSnapshots,
   getLiveOdds,
+  getReedRuleStatus,
   type TrendSnapshot,
 } from '@/lib/db';
 import { calculateLeaderboard } from '@/lib/scoring';
@@ -1123,6 +1124,7 @@ export default function LeaderboardPage() {
   const [prevRoundPositions, setPrevRoundPositions] = useState<Record<string, number | null> | null>(null);
   const [liveOdds,           setLiveOdds]           = useState<LiveOdds | null>(null);
   const [oddsLoading,        setOddsLoading]        = useState(false);
+  const [reedRuleActive,     setReedRuleActive]     = useState(false);
 
   const consecutiveFailures = useRef(0);
   const intervalRef         = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1152,16 +1154,18 @@ export default function LeaderboardPage() {
   useEffect(() => {
     if (!appUser) return;
     async function load() {
-      const [t, allUsers, snaps, cachedOdds] = await Promise.all([
+      const [t, allUsers, snaps, cachedOdds, reedRule] = await Promise.all([
         getTournament(tournamentId),
         getAllUsers(),
         getTrendSnapshots(tournamentId),
         getLiveOdds(tournamentId),
+        getReedRuleStatus(tournamentId),
       ]);
       setTournament(t);
       setUsers(allUsers);
       if (snaps.length > 0) setTrendSnapshots(snaps);
       if (cachedOdds) setLiveOdds(cachedOdds as LiveOdds);
+      setReedRuleActive(reedRule);
     }
     load();
   }, [appUser, tournamentId]);
@@ -1244,7 +1248,7 @@ export default function LeaderboardPage() {
           if (fetched) { setPrevRoundPositions(fetched); currentPrevPositions = fetched; }
         }
 
-        const scores = calculateLeaderboard(userPicksMap, mergedMap, cutLine ?? t.cutLine ?? 65, currentPrevPositions);
+        const scores = calculateLeaderboard(userPicksMap, mergedMap, cutLine ?? t.cutLine ?? 65, currentPrevPositions, reedRuleActive);
         setTeamScores(scores);
 
         // ── Score change flash detection ──────────────────────────────────

@@ -189,7 +189,8 @@ export function calculateLeaderboard(
   userPicksMap: Record<string, { username: string; picks: DraftPick[] }>,
   playersMap: Record<string, Player>,
   cutLine: number,
-  prevRoundPositions: Record<string, number | null> | null = null
+  prevRoundPositions: Record<string, number | null> | null = null,
+  reedRuleActive = false   // admin manual override — bypasses ESPN DQ check
 ): TeamScore[] {
   const teams: TeamScore[] = Object.entries(userPicksMap).map(
     ([userId, { username, picks }]) => {
@@ -221,7 +222,7 @@ export function calculateLeaderboard(
     (p) => normalizeName(p.name) === 'patrick reed'
   );
 
-  if (reedPlayer?.status === 'dq') {
+  if (reedRuleActive || reedPlayer?.status === 'dq') {
     for (const team of teams) {
       const hasReed = team.players.some(
         (p) => normalizeName(p.playerName) === 'patrick reed'

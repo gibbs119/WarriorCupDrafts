@@ -8,7 +8,7 @@ import Navigation from '@/components/Navigation';
 import {
   getAllTournaments, updateTournament, initializeDraft,
   getAllUsers, getDraftState, getDraftOrderFromResults, saveRankedOrder,
-  resetDraft, clearDraftPicks,
+  resetDraft, clearDraftPicks, getReedRuleStatus, setReedRuleStatus,
 } from '@/lib/db';
 import { buildSnakeDraftOrder, calculateLeaderboard } from '@/lib/scoring';
 import { parseLeaderboard } from '@/lib/espn';
@@ -42,6 +42,8 @@ export default function AdminPage() {
   const [draftOrderInput, setDraftOrderInput] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [seeding, setSeeding] = useState(false);
+  const [reedRuleStates, setReedRuleStates] = useState<Record<string, boolean>>({});
+  const [reedRuleSaving, setReedRuleSaving] = useState<string | null>(null);
 
   const [newUsername, setNewUsername] = useState('');
   const [newEmail, setNewEmail] = useState('');
@@ -67,6 +69,12 @@ export default function AdminPage() {
       ts.sort((a, b) => TOURNAMENT_SEQUENCE.indexOf(a.id) - TOURNAMENT_SEQUENCE.indexOf(b.id));
       setTournaments(ts);
       setUsers(us);
+      // Load Reed Rule status for all tournaments
+      const reedStates: Record<string, boolean> = {};
+      await Promise.all(ts.map(async (t) => {
+        reedStates[t.id] = await getReedRuleStatus(t.id);
+      }));
+      setReedRuleStates(reedStates);
     }
     load();
   }, [appUser]);
@@ -208,6 +216,20 @@ export default function AdminPage() {
       toast.error('Failed to open draft.');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function toggleReedRule(tournamentId: string) {
+    const next = !reedRuleStates[tournamentId];
+    setReedRuleSaving(tournamentId);
+    try {
+      await setReedRuleStatus(tournamentId, next);
+      setReedRuleStates((prev) => ({ ...prev, [tournamentId]: next }));
+      toast.success(next ? '🚩 Reed Rule ACTIVATED — team is disqualified' : '✅ Reed Rule deactivated — normal scoring restored');
+    } catch {
+      toast.error('Failed to update Reed Rule status.');
+    } finally {
+      setReedRuleSaving(null);
     }
   }
 
@@ -520,6 +542,19 @@ export default function AdminPage() {
                     <Link href={`/admin/rosters/${t.id}`} className="btn-secondary text-xs py-1.5 px-3">
                       👥 Rosters
                     </Link>
+
+                    {/* Reed Rule toggle */}
+                    <button
+                      onClick={() => toggleReedRule(t.id)}
+                      disabled={reedRuleSaving === t.id}
+                      className="text-xs py-1.5 px-3 rounded-lg font-bold transition-all disabled:opacity-40 flex items-center gap-1.5"
+                      style={reedRuleStates[t.id]
+                        ? { background: 'rgba(239,68,68,0.2)', color: '#f87171', border: '1px solid rgba(239,68,68,0.5)' }
+                        : { background: 'rgba(255,255,255,0.06)', color: '#64748b', border: '1px solid rgba(255,255,255,0.1)' }
+                      }
+                      title={reedRuleStates[t.id] ? 'Reed Rule ACTIVE — click to deactivate' : 'Activate Reed Rule to disqualify team with Patrick Reed'}>
+                      🚩 Reed Rule {reedRuleStates[t.id] ? 'ON' : 'OFF'}
+                    </button>
 
                     {/* Generate Draft Grades — show once draft is done (draftComplete flag or active/completed status) */}
                     {(t.draftComplete || t.status === 'active' || t.status === 'completed') && (
