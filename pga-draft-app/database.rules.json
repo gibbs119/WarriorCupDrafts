@@ -76,6 +76,12 @@
       ".write": "auth != null"
     },
 
+    "roundStartScores": {
+      // Leaderboard page reads and writes round-start team score baselines (for Movers panel)
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+
     "liveOdds": {
       ".read": "auth != null",
       // Written only by Firebase Admin SDK (AI odds API route) — block client writes

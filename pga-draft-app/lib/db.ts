@@ -436,6 +436,34 @@ export async function getRoundPositionSnapshot(
   return snap.exists() ? (snap.val() as Record<string, number | null>) : null;
 }
 
+// ─── Round-start team score baseline (for Movers panel) ──────────────────────
+
+/**
+ * Save the team score baseline at the start of a round.
+ * Stored at: roundStartScores/{tournamentId}/round{N} → { userId: { score, rank } }
+ * Called once per round so the Movers panel always compares against the true
+ * round-start state rather than whatever scores were when the page last loaded.
+ */
+export async function saveRoundStartBaseline(
+  tournamentId: string,
+  round: number,
+  baseline: Record<string, { score: number; rank: number }>
+): Promise<void> {
+  await set(ref(db, `roundStartScores/${tournamentId}/round${round}`), baseline);
+}
+
+/**
+ * Get the saved round-start baseline for a given round.
+ * Returns null if no snapshot exists yet.
+ */
+export async function getRoundStartBaseline(
+  tournamentId: string,
+  round: number
+): Promise<Record<string, { score: number; rank: number }> | null> {
+  const snap = await get(ref(db, `roundStartScores/${tournamentId}/round${round}`));
+  return snap.exists() ? (snap.val() as Record<string, { score: number; rank: number }>) : null;
+}
+
 // ─── Live Odds (AI win-probability) ──────────────────────────────────────────
 
 /**
