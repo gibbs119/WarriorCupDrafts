@@ -22,12 +22,13 @@
 }
 
 html {
-  scroll-behavior: smooth;
   height: 100%;
+  overflow-x: hidden;      /* no horizontal scroll */
+  overflow-y: auto;        /* html is the scroll container — iOS position:fixed requires this */
+  overscroll-behavior: none;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
   /* Prevent elastic overscroll revealing raw background behind bottom nav */
-  overscroll-behavior: none;
 }
 
 body {
@@ -36,8 +37,7 @@ body {
   color: #F0F4FF;
   min-height: 100%;
   min-height: 100dvh;
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: visible;       /* body must NOT be a scroll container — let html scroll */
   overscroll-behavior: none;
   /* No padding-bottom here — each .page handles its own safe area */
 }
