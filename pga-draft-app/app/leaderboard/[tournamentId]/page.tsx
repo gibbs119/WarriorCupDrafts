@@ -1028,13 +1028,14 @@ function FieldLeaderboard({
 // ─── Odds Panel ───────────────────────────────────────────────────────────────
 
 function OddsPanel({
-  odds, myUserId, teams, loading, onRefresh,
+  odds, myUserId, teams, loading, onRefresh, isAdmin,
 }: {
   odds: LiveOdds | null;
   myUserId: string;
   teams: TeamScore[];
   loading: boolean;
   onRefresh: () => void;
+  isAdmin: boolean;
 }) {
   if (!odds && !loading) {
     return (
@@ -1044,14 +1045,18 @@ function OddsPanel({
         <div className="text-center">
           <div className="font-bebas text-xl tracking-wider text-white mb-1">Live Odds Not Generated Yet</div>
           <p className="text-slate-500 text-xs max-w-xs mx-auto">
-            Odds are generated automatically each hour alongside score updates. You can also generate them manually.
+            {isAdmin
+              ? 'Odds are generated automatically each hour. You can also generate them manually.'
+              : 'Odds are generated automatically each hour alongside score updates.'}
           </p>
         </div>
-        <button onClick={onRefresh}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
-          style={{ background: 'rgba(201,162,39,0.15)', color: '#C9A227', border: '1px solid rgba(201,162,39,0.3)' }}>
-          <Percent size={13} /> Generate Odds Now
-        </button>
+        {isAdmin && (
+          <button onClick={onRefresh}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
+            style={{ background: 'rgba(201,162,39,0.15)', color: '#C9A227', border: '1px solid rgba(201,162,39,0.3)' }}>
+            <Percent size={13} /> Generate Odds Now
+          </button>
+        )}
       </div>
     );
   }
@@ -1062,7 +1067,7 @@ function OddsPanel({
         <div className="font-bebas text-xl tracking-widest animate-pulse" style={{ color: '#C9A227' }}>
           ANALYZING THE FIELD…
         </div>
-        <p className="text-slate-500 text-xs">Gemini is crunching the numbers</p>
+        <p className="text-slate-500 text-xs">Crunching the numbers…</p>
       </div>
     );
   }
@@ -1091,14 +1096,16 @@ function OddsPanel({
               Updated {new Date(odds.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </p>
           </div>
-          <button
-            onClick={onRefresh}
-            disabled={loading}
-            className="p-1.5 rounded-lg transition-colors"
-            style={{ background: 'rgba(255,255,255,0.05)', color: loading ? '#C9A227' : '#475569' }}
-            title="Regenerate odds">
-            <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
-          </button>
+          {isAdmin && (
+            <button
+              onClick={onRefresh}
+              disabled={loading}
+              className="p-1.5 rounded-lg transition-colors"
+              style={{ background: 'rgba(255,255,255,0.05)', color: loading ? '#C9A227' : '#475569' }}
+              title="Regenerate odds">
+              <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
+            </button>
+          )}
         </div>
         <p className="text-sm text-slate-300 leading-relaxed">{odds.analysis}</p>
       </div>
@@ -1823,6 +1830,7 @@ export default function LeaderboardPage() {
             myUserId={appUser.uid}
             teams={teamScores}
             loading={oddsLoading}
+            isAdmin={appUser.role === 'admin'}
             onRefresh={() => {
               if (oddsLoading) return;
               setOddsLoading(true);

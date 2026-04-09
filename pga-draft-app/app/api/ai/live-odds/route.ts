@@ -85,10 +85,16 @@ export async function POST(req: NextRequest) {
     const users = usersSnap.exists()
       ? (Object.values(usersSnap.val()) as Array<{ uid: string; username: string }>)
       : [];
-    const playersMap = playersSnap.val() as Record<string, { position?: number; positionDisplay?: string; score?: string; thru?: string; status?: string }>;
+    const playersMap = playersSnap.val() as Record<string, { position?: number; positionDisplay?: string; score?: string; thru?: string; status?: string; currentRound?: number }>;
     const tournament = tournamentSnap.exists() ? tournamentSnap.val() : null;
     const cutLine = tournament?.cutLine ?? 65;
     const maxPicks = tournament?.maxPicks ?? 5;
+
+    // Determine actual current round from player data (don't let AI guess)
+    const currentRound = Object.values(playersMap).reduce(
+      (m, p) => Math.max(m, p.currentRound ?? 1), 1
+    );
+    const roundLabel = `Round ${currentRound}`;
 
     const picks = draftState.picks ?? [];
 
@@ -171,7 +177,7 @@ export async function POST(req: NextRequest) {
 
     const prompt = `You are a live fantasy golf odds analyst covering ${tournamentName} for a private ${totalTeams}-person draft league. Based on current live scores and positions, give sharp win-probability odds for each fantasy team.
 
-Scoring: Best 3 of ${maxPicks} drafted players count. Lower score = better. Top 10 bonuses: ${TOP_10_POINTS.slice(0, 10).map((p, i) => `T${i + 1}:${p}`).join(' ')}. Pos 11+: points = position number. Cut/WD/DQ = ${cutLine + 1} pts.
+This is ${roundLabel}. Scoring: Best 3 of ${maxPicks} drafted players count. Lower score = better. Top 10 bonuses: ${TOP_10_POINTS.slice(0, 10).map((p, i) => `T${i + 1}:${p}`).join(' ')}. Pos 11+: points = position number. Cut/WD/DQ = ${cutLine + 1} pts.
 
 Live standings:
 ${teamsBlock}
@@ -240,7 +246,7 @@ Rules:
 
     const result: LiveOdds = {
       generatedAt: now,
-      roundLabel: parsed.roundLabel,
+      roundLabel, // server-computed from player data — don't trust the AI's guess
       analysis: parsed.analysis,
       odds: oddsWithIds,
     };
