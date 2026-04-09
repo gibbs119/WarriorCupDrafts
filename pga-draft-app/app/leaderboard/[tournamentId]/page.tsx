@@ -15,6 +15,8 @@ import {
   savePlayers,
   saveRoundPositionSnapshot,
   getRoundPositionSnapshot,
+  saveRoundStartBaseline,
+  getRoundStartBaseline,
   saveTrendSnapshot,
   getTrendSnapshots,
   getLiveOdds,
@@ -1133,9 +1135,10 @@ export default function LeaderboardPage() {
   const lastGoodUpdateRef   = useRef<Date | null>(null);
   const lastSnapshotHourRef = useRef<string>('');
   const lastOddsHourRef     = useRef<string>('');
-  const detectedRoundRef    = useRef(1);
-  const confettiFiredRef    = useRef(false);
-  const prevScoresRef       = useRef<Record<string, number>>({});
+  const detectedRoundRef             = useRef(1);
+  const confettiFiredRef             = useRef(false);
+  const prevScoresRef                = useRef<Record<string, number>>({});
+  const roundStartBaselineLoadedRef  = useRef(false);
   const [scoreFlashes,      setScoreFlashes] = useState<Record<string, 'up' | 'down'>>({});
   const [secAgo,            setSecAgo]       = useState(0);
 
@@ -1245,6 +1248,9 @@ export default function LeaderboardPage() {
           detectedRoundRef.current = maxRound;
           setPrevRoundPositions(posSnap);
           currentPrevPositions = posSnap;
+          // New round started — reset baseline so Movers tracks from this round's start
+          roundStartBaselineLoadedRef.current = false;
+          setRoundStartScores(null);
         } else if (maxRound > 1 && currentPrevPositions === null) {
           const fetched = await getRoundPositionSnapshot(tournamentId, maxRound - 1);
           if (fetched) { setPrevRoundPositions(fetched); currentPrevPositions = fetched; }
@@ -1277,13 +1283,23 @@ export default function LeaderboardPage() {
           }
         }
         setDraftedMap(dm);
-        // Capture round-start baseline the first time we get real scores
-        setRoundStartScores(prev => {
-          if (prev !== null) return prev;
-          const baseline: Record<string, { score: number; rank: number }> = {};
-          scores.forEach(t => { baseline[t.userId] = { score: t.top3Score, rank: t.rank }; });
-          return baseline;
-        });
+
+        // ── Round-start baseline for Movers panel ─────────────────────────
+        // Load from Firebase once per round so reloading the page doesn't
+        // reset the baseline to mid-round scores.
+        if (!roundStartBaselineLoadedRef.current && scores.some(s => s.top3Score < 9000)) {
+          roundStartBaselineLoadedRef.current = true;
+          const savedBaseline = await getRoundStartBaseline(tournamentId, maxRound);
+          if (savedBaseline) {
+            setRoundStartScores(savedBaseline);
+          } else {
+            // First time in this round — save current scores as the baseline
+            const baseline: Record<string, { score: number; rank: number }> = {};
+            scores.forEach(s => { baseline[s.userId] = { score: s.top3Score, rank: s.rank }; });
+            setRoundStartScores(baseline);
+            saveRoundStartBaseline(tournamentId, maxRound, baseline).catch(() => {});
+          }
+        }
         hasScoresRef.current = true;
         const now = new Date();
         setLastUpdated(now);
