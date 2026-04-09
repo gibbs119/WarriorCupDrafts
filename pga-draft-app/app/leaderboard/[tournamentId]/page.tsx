@@ -666,8 +666,8 @@ function MoversPanel({
             </div>
 
             {/* Current score */}
-            <div className="text-center font-mono font-bold text-sm" style={{ color: team.top3Score < 0 ? '#34d399' : '#cbd5e1' }}>
-              {team.top3Score === 0 ? 'E' : team.top3Score > 0 ? `+${team.top3Score}` : `${team.top3Score}`}
+            <div className="text-center font-mono font-bold text-sm" style={{ color: ptsColor(team.top3Score) }}>
+              {fmtPts(team.top3Score)}
             </div>
 
             {/* Rank delta */}
