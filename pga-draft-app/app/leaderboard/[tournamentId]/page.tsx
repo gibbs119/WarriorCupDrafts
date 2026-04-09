@@ -1284,23 +1284,29 @@ export default function LeaderboardPage() {
         }
         setDraftedMap(dm);
 
+        // Mark scores as loaded BEFORE any optional Firebase calls that might fail,
+        // so a permission-denied on roundStartScores doesn't trigger "Network error".
+        hasScoresRef.current = true;
+
         // ── Round-start baseline for Movers panel ─────────────────────────
         // Load from Firebase once per round so reloading the page doesn't
         // reset the baseline to mid-round scores.
         if (!roundStartBaselineLoadedRef.current && scores.some(s => s.top3Score < 9000)) {
           roundStartBaselineLoadedRef.current = true;
-          const savedBaseline = await getRoundStartBaseline(tournamentId, maxRound);
-          if (savedBaseline) {
-            setRoundStartScores(savedBaseline);
-          } else {
-            // First time in this round — save current scores as the baseline
-            const baseline: Record<string, { score: number; rank: number }> = {};
-            scores.forEach(s => { baseline[s.userId] = { score: s.top3Score, rank: s.rank }; });
-            setRoundStartScores(baseline);
-            saveRoundStartBaseline(tournamentId, maxRound, baseline).catch(() => {});
+          try {
+            const savedBaseline = await getRoundStartBaseline(tournamentId, maxRound);
+            if (savedBaseline) {
+              setRoundStartScores(savedBaseline);
+            } else {
+              const baseline: Record<string, { score: number; rank: number }> = {};
+              scores.forEach(s => { baseline[s.userId] = { score: s.top3Score, rank: s.rank }; });
+              setRoundStartScores(baseline);
+              saveRoundStartBaseline(tournamentId, maxRound, baseline).catch(() => {});
+            }
+          } catch {
+            // Permission denied (rule not yet deployed) or network — fail silently
           }
         }
-        hasScoresRef.current = true;
         const now = new Date();
         setLastUpdated(now);
         lastGoodUpdateRef.current = now;
