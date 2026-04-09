@@ -6,7 +6,7 @@ import { TOP_10_POINTS } from '@/lib/constants';
 // tournament scores. Cached in Firebase; regenerates if > 25 minutes old.
 // Called automatically alongside each hourly trend snapshot (Thu–Sun, 8AM–8PM).
 // Also callable manually from the Odds tab.
-// Uses Google Gemini API (free tier — https://aistudio.google.com/app/apikey)
+// Uses OpenAI API (gpt-4o-mini).
 
 export interface LiveOdds {
   generatedAt: number;
@@ -21,32 +21,33 @@ export interface LiveOdds {
   }[];
 }
 
-// ── Google Gemini free API ────────────────────────────────────────────────────
-async function callGemini(prompt: string): Promise<string | null> {
-  const apiKey = process.env.GEMINI_API_KEY ?? process.env.NEXT_PUBLIC_GEMINI_API_KEY ?? '';
+// ── OpenAI API ───────────────────────────────────────────────────────────────
+async function callOpenAI(prompt: string): Promise<string | null> {
+  const apiKey = process.env.OPENAI_API_KEY ?? '';
   if (!apiKey) {
-    console.error('[live-odds] GEMINI_API_KEY not set');
+    console.error('[live-odds] OPENAI_API_KEY not set');
     return null;
   }
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
   try {
-    const res = await fetch(url, {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: 1500, temperature: 0.85 },
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 1500,
+        temperature: 0.85,
       }),
     });
     if (!res.ok) {
       const err = await res.text();
-      console.error('[live-odds] Gemini error:', res.status, err);
+      console.error('[live-odds] OpenAI error:', res.status, err);
       return null;
     }
     const data = await res.json();
-    return data.candidates?.[0]?.content?.parts?.[0]?.text ?? null;
+    return data.choices?.[0]?.message?.content ?? null;
   } catch (e) {
-    console.error('[live-odds] Gemini fetch error:', e);
+    console.error('[live-odds] OpenAI fetch error:', e);
     return null;
   }
 }
@@ -203,10 +204,10 @@ Rules:
 - Be genuinely analytical — not just roasting, actually assess the situation
 - It's OK to give one team a dominant 50%+ if the gap is large enough`;
 
-    const text = await callGemini(prompt);
+    const text = await callOpenAI(prompt);
     if (!text) {
       return NextResponse.json({
-        error: 'AI generation failed — check GEMINI_API_KEY env variable. Get a free key at https://aistudio.google.com/app/apikey',
+        error: 'AI generation failed — check OPENAI_API_KEY env variable',
       }, { status: 500 });
     }
 
