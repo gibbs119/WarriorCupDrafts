@@ -181,17 +181,26 @@ function ScoreRow({
           </div>
         )}
         <div className="text-right shrink-0">
-          <div className="font-mono font-bold text-2xl" style={{ color: ptsColor(hasScores ? team.top3Score : 9999) }}>
-            {hasScores ? fmtPts(team.top3Score) : '—'}
-          </div>
-          {winPct !== undefined
-            ? <div className="text-xs font-bold flex items-center gap-0.5" style={{ color: trend === 'up' ? '#34d399' : trend === 'down' ? '#f87171' : 'rgba(201,162,39,0.85)' }}>
-                {winPct}% win
-                {trend === 'up' && <span style={{ fontSize: '9px' }}>↑</span>}
-                {trend === 'down' && <span style={{ fontSize: '9px' }}>↓</span>}
+          {team.disqualified ? (
+            <>
+              <div className="font-mono font-bold text-2xl" style={{ color: '#f87171' }}>DQ</div>
+              <div className="text-xs font-bold" style={{ color: '#f87171' }}>🚩 REED RULE</div>
+            </>
+          ) : (
+            <>
+              <div className="font-mono font-bold text-2xl" style={{ color: ptsColor(hasScores ? team.top3Score : 9999) }}>
+                {hasScores ? fmtPts(team.top3Score) : '—'}
               </div>
-            : <div className="text-xs text-slate-600">pts</div>
-          }
+              {winPct !== undefined
+                ? <div className="text-xs font-bold flex items-center gap-0.5" style={{ color: trend === 'up' ? '#34d399' : trend === 'down' ? '#f87171' : 'rgba(201,162,39,0.85)' }}>
+                    {winPct}% win
+                    {trend === 'up' && <span style={{ fontSize: '9px' }}>↑</span>}
+                    {trend === 'down' && <span style={{ fontSize: '9px' }}>↓</span>}
+                  </div>
+                : <div className="text-xs text-slate-600">pts</div>
+              }
+            </>
+          )}
         </div>
         <div className="text-slate-600 text-xs ml-1">{expanded ? '▲' : '▼'}</div>
       </div>
@@ -219,11 +228,18 @@ function DetailPanel({ team, isMe, cutLine, standalone, playersMap }: {
   return (
     <div style={{
       background: standalone ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.25)',
-      border: '1px solid rgba(255,255,255,0.07)',
-      borderTop: standalone ? '1px solid rgba(255,255,255,0.07)' : 'none',
+      border: team.disqualified ? '1px solid rgba(239,68,68,0.4)' : '1px solid rgba(255,255,255,0.07)',
+      borderTop: standalone ? undefined : 'none',
       borderRadius: standalone ? '12px' : '0 0 12px 12px',
       overflow: 'hidden',
     }}>
+      {/* Reed Rule DQ banner */}
+      {team.disqualified && (
+        <div className="px-5 py-2.5 flex items-center gap-2 text-sm font-bold"
+          style={{ background: 'rgba(239,68,68,0.12)', borderBottom: '1px solid rgba(239,68,68,0.25)', color: '#f87171' }}>
+          🚩 REED RULE — Team disqualified · All scores forfeited
+        </div>
+      )}
       {/* Owner header — only in standalone Detail tab */}
       {standalone && (
         <div className="flex items-center justify-between px-5 py-3" style={{
@@ -239,11 +255,14 @@ function DetailPanel({ team, isMe, cutLine, standalone, playersMap }: {
               <span className="text-xs font-bold px-1.5 py-0.5 rounded" style={{ background: 'rgba(27,58,158,0.4)', color: '#93bbfc' }}>YOU</span>
             )}
           </div>
-          {hasAnyLiveScore && (
-            <span className="font-mono font-bold text-xl" style={{ color: ptsColor(team.top3Score) }}>
-              {fmtPts(team.top3Score)}
-            </span>
-          )}
+          {team.disqualified
+            ? <span className="font-mono font-bold text-xl" style={{ color: '#f87171' }}>DQ</span>
+            : hasAnyLiveScore && (
+                <span className="font-mono font-bold text-xl" style={{ color: ptsColor(team.top3Score) }}>
+                  {fmtPts(team.top3Score)}
+                </span>
+              )
+          }
         </div>
       )}
 
@@ -349,11 +368,14 @@ function DetailPanel({ team, isMe, cutLine, standalone, playersMap }: {
         <span className="text-xs text-slate-600">
           <span style={{ color: 'rgba(212,175,55,0.6)' }}>★</span> = counts · best {Math.min(3, sorted.length)} of {sorted.length}
         </span>
-        {hasAnyLiveScore && (
-          <span className="text-xs font-mono font-bold" style={{ color: ptsColor(team.top3Score) }}>
-            {fmtPts(team.top3Score)} team
-          </span>
-        )}
+        {team.disqualified
+          ? <span className="text-xs font-mono font-bold" style={{ color: '#f87171' }}>DQ — forfeited</span>
+          : hasAnyLiveScore && (
+              <span className="text-xs font-mono font-bold" style={{ color: ptsColor(team.top3Score) }}>
+                {fmtPts(team.top3Score)} team
+              </span>
+            )
+        }
       </div>
     </div>
   );
@@ -1021,19 +1043,20 @@ function RostersView({ teams, myUserId }: { teams: TeamScore[]; myUserId: string
         return (
           <div key={team.userId} className="rounded-xl overflow-hidden"
             style={{
-              border: isMe ? '1px solid rgba(212,175,55,0.35)' : '1px solid rgba(255,255,255,0.07)',
-              background: isMe ? 'rgba(212,175,55,0.04)' : 'rgba(255,255,255,0.02)',
+              border: team.disqualified ? '1px solid rgba(239,68,68,0.4)' : isMe ? '1px solid rgba(212,175,55,0.35)' : '1px solid rgba(255,255,255,0.07)',
+              background: team.disqualified ? 'rgba(239,68,68,0.04)' : isMe ? 'rgba(212,175,55,0.04)' : 'rgba(255,255,255,0.02)',
             }}>
             {/* Team header */}
             <div className="px-4 py-2.5 flex items-center justify-between"
-              style={{ borderBottom: '1px solid rgba(255,255,255,0.07)', background: isMe ? 'rgba(212,175,55,0.07)' : 'rgba(0,0,0,0.2)' }}>
+              style={{ borderBottom: '1px solid rgba(255,255,255,0.07)', background: team.disqualified ? 'rgba(239,68,68,0.08)' : isMe ? 'rgba(212,175,55,0.07)' : 'rgba(0,0,0,0.2)' }}>
               <div className="flex items-center gap-2">
                 <RankBadge rank={team.rank} />
-                <span className="font-bebas text-base tracking-wider" style={{ color: isMe ? '#D4AF37' : 'white' }}>{team.username}</span>
-                {isMe && <span className="text-xs font-bold px-1 py-0.5 rounded" style={{ background: 'rgba(212,175,55,0.15)', color: '#D4AF37', fontSize: '10px' }}>YOU</span>}
+                <span className="font-bebas text-base tracking-wider" style={{ color: team.disqualified ? '#f87171' : isMe ? '#D4AF37' : 'white' }}>{team.username}</span>
+                {isMe && !team.disqualified && <span className="text-xs font-bold px-1 py-0.5 rounded" style={{ background: 'rgba(212,175,55,0.15)', color: '#D4AF37', fontSize: '10px' }}>YOU</span>}
+                {team.disqualified && <span className="text-xs font-bold px-1 py-0.5 rounded" style={{ background: 'rgba(239,68,68,0.15)', color: '#f87171', fontSize: '10px' }}>🚩 REED RULE</span>}
               </div>
-              <span className="font-mono font-bold text-sm" style={{ color: ptsColor(team.top3Score) }}>
-                {fmtPts(team.top3Score)}
+              <span className="font-mono font-bold text-sm" style={{ color: team.disqualified ? '#f87171' : ptsColor(team.top3Score) }}>
+                {team.disqualified ? 'DQ' : fmtPts(team.top3Score)}
               </span>
             </div>
             {/* Picks */}
