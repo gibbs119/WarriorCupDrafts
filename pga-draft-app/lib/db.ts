@@ -553,6 +553,29 @@ export async function getTrendSnapshots(tournamentId: string): Promise<TrendSnap
   return Object.values(raw).sort((a, b) => a.timestamp - b.timestamp);
 }
 
+// ─── Hourly Odds Snapshots (for Odds Trend graph) ────────────────────────────
+
+export interface OddsSnapshot {
+  timestamp: number;                // Unix ms
+  hour: string;                     // "Thu 8AM", "Thu 9AM" etc for display
+  odds: Record<string, number>;     // userId → winPct (0–100)
+}
+
+/**
+ * Load all odds snapshots for a tournament, sorted chronologically.
+ * Written server-side by the live-odds API route via Admin SDK.
+ */
+export async function getOddsSnapshots(tournamentId: string): Promise<OddsSnapshot[]> {
+  try {
+    const snap = await get(ref(db, `oddsSnapshots/${tournamentId}`));
+    if (!snap.exists()) return [];
+    const raw = snap.val() as Record<string, OddsSnapshot>;
+    return Object.values(raw).sort((a, b) => a.timestamp - b.timestamp);
+  } catch {
+    return [];
+  }
+}
+
 // ─── Reed Rule ────────────────────────────────────────────────────────────────
 
 export async function getReedRuleStatus(tournamentId: string): Promise<boolean> {
