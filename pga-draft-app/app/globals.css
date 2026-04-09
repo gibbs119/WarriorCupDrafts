@@ -36,7 +36,6 @@ body {
   color: #F0F4FF;
   min-height: 100%;
   min-height: 100dvh;
-  -webkit-overflow-scrolling: touch;
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: none;
@@ -368,6 +367,9 @@ button, .btn-primary, .btn-gold, .btn-secondary, .btn-danger {
   position: fixed;
   bottom: 0; left: 0; right: 0;
   z-index: 50;
+  /* Force own compositor layer so iOS doesn't detach it during scroll */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
   /* Fully opaque so content never bleeds through */
   background: rgba(3,9,18,0.98);
   backdrop-filter: blur(20px);
