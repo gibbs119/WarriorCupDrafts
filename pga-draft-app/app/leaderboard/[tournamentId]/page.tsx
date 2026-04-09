@@ -465,7 +465,7 @@ function TrendChart({ snapshots, teams, myUserId }: {
   for (let v = gridStart; v <= yMax; v += gridInterval) gridLines.push(v);
 
   return (
-    <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' as React.CSSProperties['WebkitOverflowScrolling'], borderRadius: 8 }}>
+    <div style={{ overflowX: 'auto', borderRadius: 8 }}>
       <svg
         width={SVG_W}
         height={SVG_H}
@@ -625,7 +625,7 @@ function OddsTrendChart({ snapshots, teams, myUserId }: {
   for (let v = yMin; v <= yMax; v += 10) gridLines.push(v);
 
   return (
-    <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' as React.CSSProperties['WebkitOverflowScrolling'], borderRadius: 8 }}>
+    <div style={{ overflowX: 'auto', borderRadius: 8 }}>
       <svg width={SVG_W} height={SVG_H} style={{ display: 'block' }} aria-label="Win probability trend chart">
         {/* Grid lines */}
         {gridLines.map(v => {
@@ -1620,7 +1620,7 @@ export default function LeaderboardPage() {
         />
 
         {/* Tab row — scrollable */}
-        <div className="overflow-x-auto scrollbar-hide mb-4" style={{ WebkitOverflowScrolling: 'touch' }}>
+        <div className="overflow-x-auto scrollbar-hide mb-4">
           <div className="flex gap-1 min-w-max p-1 rounded-xl" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
             {([['simple','Board',<List size={11}/>], ['detailed','Detail',<BarChart2 size={11}/>], ['trend','Trend',<TrendingUp size={11}/>], ['movers','Movers',<Activity size={11}/>], ['field','Field',<Globe size={11}/>], ['rosters','Rosters',<Users size={11}/>], ['odds','Odds',<Percent size={11}/>]] as const).map(([v, label, icon]) => (
               <button key={v} onClick={() => setView(v as any)}
