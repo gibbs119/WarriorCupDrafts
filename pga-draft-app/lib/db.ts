@@ -562,15 +562,15 @@ export interface OddsSnapshot {
 }
 
 /**
- * Load all odds snapshots for a tournament, sorted chronologically.
- * Written server-side by the live-odds API route via Admin SDK.
+ * Load all odds snapshots for a tournament via the API route (Admin SDK),
+ * so no direct Firebase client read is needed (avoids rule deployment dependency).
  */
 export async function getOddsSnapshots(tournamentId: string): Promise<OddsSnapshot[]> {
   try {
-    const snap = await get(ref(db, `oddsSnapshots/${tournamentId}`));
-    if (!snap.exists()) return [];
-    const raw = snap.val() as Record<string, OddsSnapshot>;
-    return Object.values(raw).sort((a, b) => a.timestamp - b.timestamp);
+    const res = await fetch(`/api/ai/live-odds?tournamentId=${encodeURIComponent(tournamentId)}&history=true`);
+    if (!res.ok) return [];
+    const data = await res.json() as { snapshots?: OddsSnapshot[] };
+    return data.snapshots ?? [];
   } catch {
     return [];
   }

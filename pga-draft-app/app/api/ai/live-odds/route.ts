@@ -373,6 +373,16 @@ export async function GET(req: NextRequest) {
   if (!tournamentId) return NextResponse.json({ error: 'Missing tournamentId' }, { status: 400 });
 
   const { db: adminDb } = getAdminServices();
+
+  // ?history=true — return all hourly odds snapshots for the Trend chart
+  if (req.nextUrl.searchParams.get('history') === 'true') {
+    const snap = await adminDb.ref(`oddsSnapshots/${tournamentId}`).get();
+    if (!snap.exists()) return NextResponse.json({ snapshots: [] });
+    const raw = snap.val() as Record<string, { timestamp: number; hour: string; odds: Record<string, number> }>;
+    const snapshots = Object.values(raw).sort((a, b) => a.timestamp - b.timestamp);
+    return NextResponse.json({ snapshots });
+  }
+
   const snap = await adminDb.ref(`liveOdds/${tournamentId}`).get();
   if (!snap.exists()) return NextResponse.json({ odds: null });
 
