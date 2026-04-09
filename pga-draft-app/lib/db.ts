@@ -528,8 +528,13 @@ export async function getTrendSnapshots(tournamentId: string): Promise<TrendSnap
 // ─── Reed Rule ────────────────────────────────────────────────────────────────
 
 export async function getReedRuleStatus(tournamentId: string): Promise<boolean> {
-  const snap = await get(ref(db, `reedRule/${tournamentId}`));
-  return snap.exists() ? (snap.val() as boolean) : false;
+  try {
+    const snap = await get(ref(db, `reedRule/${tournamentId}`));
+    return snap.exists() ? (snap.val() as boolean) : false;
+  } catch {
+    // Permission denied or network error — default to inactive so scoring works normally
+    return false;
+  }
 }
 
 export async function setReedRuleStatus(tournamentId: string, active: boolean): Promise<void> {

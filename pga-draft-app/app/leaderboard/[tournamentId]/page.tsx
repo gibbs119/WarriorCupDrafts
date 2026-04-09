@@ -1125,6 +1125,7 @@ export default function LeaderboardPage() {
   const [liveOdds,           setLiveOdds]           = useState<LiveOdds | null>(null);
   const [oddsLoading,        setOddsLoading]        = useState(false);
   const [reedRuleActive,     setReedRuleActive]     = useState(false);
+  const reedRuleRef = useRef(false);
 
   const consecutiveFailures = useRef(0);
   const intervalRef         = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1166,6 +1167,7 @@ export default function LeaderboardPage() {
       if (snaps.length > 0) setTrendSnapshots(snaps);
       if (cachedOdds) setLiveOdds(cachedOdds as LiveOdds);
       setReedRuleActive(reedRule);
+      reedRuleRef.current = reedRule;
     }
     load();
   }, [appUser, tournamentId]);
@@ -1248,7 +1250,7 @@ export default function LeaderboardPage() {
           if (fetched) { setPrevRoundPositions(fetched); currentPrevPositions = fetched; }
         }
 
-        const scores = calculateLeaderboard(userPicksMap, mergedMap, cutLine ?? t.cutLine ?? 65, currentPrevPositions, reedRuleActive);
+        const scores = calculateLeaderboard(userPicksMap, mergedMap, cutLine ?? t.cutLine ?? 65, currentPrevPositions, reedRuleRef.current);
         setTeamScores(scores);
 
         // ── Score change flash detection ──────────────────────────────────

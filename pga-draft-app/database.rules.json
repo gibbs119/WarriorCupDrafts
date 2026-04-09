@@ -118,6 +118,13 @@
       ".write": "auth != null"
     },
 
+    "reedRule": {
+      // All authenticated users can read (leaderboard needs it)
+      ".read": "auth != null",
+      // Only admins can toggle — protects against rogue client writes
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'"
+    },
+
     "scores": {
       ".read": "auth != null",
       ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'"
