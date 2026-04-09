@@ -84,6 +84,7 @@ export interface TeamScore {
   players: PlayerScore[];
   top3Score: number;         // sum of best 3 players' points
   rank: number;
+  disqualified?: boolean;    // Reed Rule: team forfeits all points
 }
 
 // ─── WD Replacements ─────────────────────────────────────────────────────────

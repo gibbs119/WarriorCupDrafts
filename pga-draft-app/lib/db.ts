@@ -524,3 +524,14 @@ export async function getTrendSnapshots(tournamentId: string): Promise<TrendSnap
   const raw = snap.val() as Record<string, TrendSnapshot>;
   return Object.values(raw).sort((a, b) => a.timestamp - b.timestamp);
 }
+
+// ─── Reed Rule ────────────────────────────────────────────────────────────────
+
+export async function getReedRuleStatus(tournamentId: string): Promise<boolean> {
+  const snap = await get(ref(db, `reedRule/${tournamentId}`));
+  return snap.exists() ? (snap.val() as boolean) : false;
+}
+
+export async function setReedRuleStatus(tournamentId: string, active: boolean): Promise<void> {
+  await set(ref(db, `reedRule/${tournamentId}`), active);
+}

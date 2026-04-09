@@ -189,7 +189,8 @@ export function calculateLeaderboard(
   userPicksMap: Record<string, { username: string; picks: DraftPick[] }>,
   playersMap: Record<string, Player>,
   cutLine: number,
-  prevRoundPositions: Record<string, number | null> | null = null
+  prevRoundPositions: Record<string, number | null> | null = null,
+  reedRuleActive = false   // admin manual override — bypasses ESPN DQ check
 ): TeamScore[] {
   const teams: TeamScore[] = Object.entries(userPicksMap).map(
     ([userId, { username, picks }]) => {
@@ -208,6 +209,30 @@ export function calculateLeaderboard(
       };
     }
   );
+
+  // ── Reed Rule ──────────────────────────────────────────────────────────────
+  // If Patrick Reed is on a team and receives a DQ from ESPN, that team
+  // forfeits their entire score for the tournament (all players, not just Reed).
+  // The team scores 99999 — guaranteed last place — and is marked disqualified.
+  const normalizeName = (n: string) =>
+    n.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/\./g, '').replace(/[-–]/g, ' ').replace(/\s+/g, ' ').trim();
+
+  const reedPlayer = Object.values(playersMap).find(
+    (p) => normalizeName(p.name) === 'patrick reed'
+  );
+
+  if (reedRuleActive || reedPlayer?.status === 'dq') {
+    for (const team of teams) {
+      const hasReed = team.players.some(
+        (p) => normalizeName(p.playerName) === 'patrick reed'
+      );
+      if (hasReed) {
+        team.top3Score = 99999;
+        team.disqualified = true;
+      }
+    }
+  }
 
   /**
    * Sort teams by:
