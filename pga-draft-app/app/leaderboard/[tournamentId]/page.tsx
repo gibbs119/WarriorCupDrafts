@@ -58,6 +58,14 @@ function ptsColor(pts: number): string {
   return '#cbd5e1';
 }
 
+// Standard golf scorecard convention: red = under par, white = even, green = over par
+function golfScoreColor(score: string | null | undefined): string {
+  if (!score || score === '—' || score === '-') return '#475569';
+  if (score === 'E') return '#e2e8f0';
+  if (score.startsWith('-')) return '#f87171';  // under par → red
+  return '#34d399';                              // over par → green
+}
+
 function RankBadge({ rank }: { rank: number }) {
   const base = 'flex items-center justify-center w-10 h-10 rounded-full font-bebas text-xl tracking-wide shrink-0';
   if (rank === 1) return <div className={base} style={{ background: '#D4AF37', color: '#0a0f1e' }}>1</div>;
@@ -270,8 +278,8 @@ function DetailPanel({ team, isMe, cutLine, standalone, playersMap }: {
                   const formatted = raw ? fmtTeeTime(raw) : '';
                   return formatted ? `Tees off ${formatted}` : 'Not yet started';
                 })()
-                  : p.status === 'cut' ? `Cut line — scores ${cutLine + 1} pts`
-                  : p.status === 'wd' || p.status === 'dq' ? `${p.status.toUpperCase()} — scores ${cutLine + 1} pts`
+                  : p.status === 'cut' ? `Cut line — scores ${p.points} pts`
+                  : p.status === 'wd' || p.status === 'dq' ? `${p.status.toUpperCase()} — scores ${p.points} pts`
                   : p.thru === 'F' ? 'Round complete'
                   : p.thru !== '-' ? `Thru hole ${p.thru}`
                   : 'Tee time pending'}
@@ -285,7 +293,7 @@ function DetailPanel({ team, isMe, cutLine, standalone, playersMap }: {
                     {rs.map((r, i) => r === null ? null : (
                       <span key={i} className="text-xs">
                         <span className="text-slate-700">{labels[i]} </span>
-                        <span className="font-mono" style={{ color: r === 'E' ? '#64748b' : r.startsWith('-') ? '#34d399' : '#f87171' }}>{r}</span>
+                        <span className="font-mono" style={{ color: golfScoreColor(r) }}>{r}</span>
                       </span>
                     ))}
                   </div>
@@ -303,10 +311,7 @@ function DetailPanel({ team, isMe, cutLine, standalone, playersMap }: {
             {!pending && (
               <div className="text-right shrink-0 w-10">
                 <div className="text-sm font-bold font-mono" style={{
-                  color: p.score === 'E' ? '#64748b'
-                       : p.score.startsWith('-') ? '#f87171'
-                       : p.score === '—' ? '#475569'
-                       : '#cbd5e1',
+                  color: golfScoreColor(p.score),
                 }}>
                   {p.score}
                 </div>
@@ -734,10 +739,7 @@ function FieldLeaderboard({
   function PlayerRow({ p, idx, total }: { p: Player; idx: number; total: number }) {
     const owner = draftedMap[normName(p.name)];
     const isDrafted = !!owner;
-    const scoreColor = !p.score || p.score === '—' || p.score === '-' ? '#475569'
-      : p.score === 'E' ? '#64748b'
-      : p.score.startsWith('-') ? '#34d399'
-      : '#f87171';
+    const scoreColor = golfScoreColor(p.score);
     const isCut = p.status === 'cut';
     const isWdDq = p.status === 'wd' || p.status === 'dq';
 
@@ -1354,6 +1356,23 @@ export default function LeaderboardPage() {
   const cutLine = tournament?.cutLine ?? 65;
   const myTeam  = teamScores.find(t => t.userId === appUser.uid);
 
+  // Pre-tournament: sort board by each team's earliest player tee time so users
+  // can see who tees off first. Once live scores exist, revert to score ranking.
+  const displayedTeams = useMemo(() => {
+    if (hasLiveScores || Object.keys(fieldPlayers).length === 0) return teamScores;
+    return [...teamScores].sort((a, b) => {
+      const earliestMs = (team: TeamScore): number => {
+        const times = team.players
+          .map(p => fieldPlayers[p.playerId]?.teeTime)
+          .filter((t): t is string => !!t)
+          .map(t => new Date(t).getTime())
+          .filter(t => !isNaN(t));
+        return times.length > 0 ? Math.min(...times) : Infinity;
+      };
+      return earliestMs(a) - earliestMs(b);
+    });
+  }, [teamScores, hasLiveScores, fieldPlayers]);
+
   return (
     <div className="min-h-screen page">
       <Navigation />
@@ -1478,8 +1497,15 @@ export default function LeaderboardPage() {
         {/* BOARD view */}
         {view === 'simple' && teamScores.length > 0 && (
           <>
+            {!hasLiveScores && Object.keys(fieldPlayers).length > 0 && (
+              <div className="mb-3 flex items-center gap-2 rounded-lg px-3 py-2 text-xs"
+                style={{ background: 'rgba(99,102,241,0.07)', border: '1px solid rgba(99,102,241,0.2)', color: '#818cf8' }}>
+                <span>⏱</span>
+                Sorted by earliest tee time · will re-sort by score once play begins
+              </div>
+            )}
             <div className="space-y-1.5">
-              {teamScores.map((team) => {
+              {displayedTeams.map((team) => {
                 const isMe  = team.userId === appUser.uid;
                 const isExp = expandedTeam === team.userId;
                 return (
