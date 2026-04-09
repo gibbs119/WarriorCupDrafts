@@ -19,9 +19,11 @@ import {
   getRoundStartBaseline,
   saveTrendSnapshot,
   getTrendSnapshots,
+  getOddsSnapshots,
   getLiveOdds,
   getReedRuleStatus,
   type TrendSnapshot,
+  type OddsSnapshot,
 } from '@/lib/db';
 import { calculateLeaderboard } from '@/lib/scoring';
 import { parseLeaderboard } from '@/lib/espn';
@@ -589,6 +591,139 @@ function TrendChart({ snapshots, teams, myUserId }: {
 }
 
 
+// ─── Odds Trend Chart ─────────────────────────────────────────────────────────
+
+function OddsTrendChart({ snapshots, teams, myUserId }: {
+  snapshots: OddsSnapshot[];
+  teams: TeamScore[];
+  myUserId: string;
+}) {
+  if (snapshots.length === 0) return null;
+
+  const PX_PER_POINT = 44;
+  const PAD = { top: 20, right: 16, bottom: 40, left: 40 };
+  const SVG_H = 200;
+  const plotH = SVG_H - PAD.top - PAD.bottom;
+  const plotW = Math.max(280, (snapshots.length - 1) * PX_PER_POINT);
+  const SVG_W = plotW + PAD.left + PAD.right;
+
+  // Y axis: 0–100 win%, rounded to nearest 10 for grid lines
+  const allPcts = snapshots.flatMap(s => Object.values(s.odds).filter(v => v > 0));
+  if (allPcts.length === 0) return null;
+  const dataMax = Math.min(100, Math.max(...allPcts) + 10);
+  const dataMin = Math.max(0,   Math.min(...allPcts) - 5);
+  const yMin = Math.max(0,   Math.floor(dataMin / 10) * 10);
+  const yMax = Math.min(100, Math.ceil(dataMax  / 10) * 10);
+  const yRange = Math.max(yMax - yMin, 10);
+
+  const toX = (i: number) =>
+    PAD.left + (snapshots.length <= 1 ? plotW / 2 : (i / (snapshots.length - 1)) * plotW);
+  const toY = (pct: number) =>
+    PAD.top + ((yMax - pct) / yRange) * plotH;
+
+  const gridLines: number[] = [];
+  for (let v = yMin; v <= yMax; v += 10) gridLines.push(v);
+
+  return (
+    <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' as React.CSSProperties['WebkitOverflowScrolling'], borderRadius: 8 }}>
+      <svg width={SVG_W} height={SVG_H} style={{ display: 'block' }} aria-label="Win probability trend chart">
+        {/* Grid lines */}
+        {gridLines.map(v => {
+          const y = toY(v);
+          return (
+            <g key={v}>
+              <line
+                x1={PAD.left} y1={y} x2={PAD.left + plotW} y2={y}
+                stroke="rgba(255,255,255,0.05)" strokeWidth={1}
+              />
+              <text x={PAD.left - 6} y={y + 4} textAnchor="end" fontSize="9" fill="#475569">
+                {v}%
+              </text>
+            </g>
+          );
+        })}
+
+        {/* Team lines */}
+        {teams.map((team, ti) => {
+          const color = TEAM_COLORS[ti % TEAM_COLORS.length];
+          const isMe  = team.userId === myUserId;
+
+          const pts: { x: number; y: number }[] = [];
+          snapshots.forEach((snap, si) => {
+            const pct = snap.odds[team.userId];
+            if (pct === undefined) return;
+            pts.push({ x: toX(si), y: toY(pct) });
+          });
+
+          if (pts.length === 0) return null;
+
+          const pathD = pts
+            .map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`)
+            .join(' ');
+
+          return (
+            <g key={team.userId}>
+              <path
+                d={pathD} fill="none" stroke={color}
+                strokeWidth={isMe ? 2.5 : 1.5}
+                strokeOpacity={isMe ? 1 : 0.55}
+                strokeLinecap="round" strokeLinejoin="round"
+              />
+              {pts.map((p, i) => {
+                const isLast = i === pts.length - 1;
+                return (
+                  <circle key={i} cx={p.x} cy={p.y}
+                    r={isLast ? (isMe ? 4.5 : 3.5) : (isMe ? 2.5 : 2)}
+                    fill={color}
+                    fillOpacity={isLast ? (isMe ? 1 : 0.75) : (isMe ? 0.65 : 0.4)}
+                  />
+                );
+              })}
+            </g>
+          );
+        })}
+
+        {/* X-axis labels */}
+        {snapshots.map((snap, i) => {
+          if (snapshots.length > 9 && i % 2 !== 0) return null;
+          const x = toX(i);
+          const [day, time] = snap.hour.split(' ');
+          return (
+            <g key={i}>
+              <line x1={x} y1={PAD.top + plotH} x2={x} y2={PAD.top + plotH + 4}
+                stroke="rgba(255,255,255,0.1)" strokeWidth="1" />
+              <text x={x} y={SVG_H - 20} textAnchor="middle" fontSize="9" fill="#64748b">{day}</text>
+              <text x={x} y={SVG_H - 9}  textAnchor="middle" fontSize="9" fill="#475569">{time}</text>
+            </g>
+          );
+        })}
+      </svg>
+
+      {/* Legend */}
+      <div className="flex flex-wrap gap-x-4 gap-y-1.5 px-2 pt-3 pb-1">
+        {teams.map((team, ti) => {
+          const color  = TEAM_COLORS[ti % TEAM_COLORS.length];
+          const isMe   = team.userId === myUserId;
+          const latest = snapshots.length > 0
+            ? snapshots[snapshots.length - 1].odds[team.userId]
+            : undefined;
+          return (
+            <div key={team.userId} className="flex items-center gap-1.5 text-xs">
+              <div style={{ width: 16, height: 2.5, borderRadius: 2, background: color, opacity: isMe ? 1 : 0.6 }} />
+              <span style={{ color: isMe ? color : '#94a3b8', fontWeight: isMe ? 700 : 400 }}>
+                {team.username}
+              </span>
+              {latest !== undefined && (
+                <span className="font-mono" style={{ color: '#94a3b8' }}>{latest}%</span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ─── Cut Bubble Badge ─────────────────────────────────────────────────────────
 
 function CutBubble({ position, cutLine, status, thru }: {
@@ -1119,6 +1254,7 @@ export default function LeaderboardPage() {
   const [fieldPlayers,       setFieldPlayers]       = useState<Record<string, Player>>({});
   const [draftedMap,         setDraftedMap]         = useState<Record<string, string>>({});  // playerName.lower → username
   const [trendSnapshots,     setTrendSnapshots]     = useState<TrendSnapshot[]>([]);
+  const [oddsSnapshots,      setOddsSnapshots]      = useState<OddsSnapshot[]>([]);
   const [expandedTeam,       setExpandedTeam]       = useState<string | null>(null);
   const [dataSource,         setDataSource]         = useState('');
   const [isStale,            setIsStale]            = useState(false);
@@ -1158,16 +1294,18 @@ export default function LeaderboardPage() {
   useEffect(() => {
     if (!appUser) return;
     async function load() {
-      const [t, allUsers, snaps, cachedOdds, reedRule] = await Promise.all([
+      const [t, allUsers, snaps, oddsSnaps, cachedOdds, reedRule] = await Promise.all([
         getTournament(tournamentId),
         getAllUsers(),
         getTrendSnapshots(tournamentId),
+        getOddsSnapshots(tournamentId),
         getLiveOdds(tournamentId),
         getReedRuleStatus(tournamentId),
       ]);
       setTournament(t);
       setUsers(allUsers);
       if (snaps.length > 0) setTrendSnapshots(snaps);
+      if (oddsSnaps.length > 0) setOddsSnapshots(oddsSnaps);
       if (cachedOdds) setLiveOdds(cachedOdds as LiveOdds);
       setReedRuleActive(reedRule);
       reedRuleRef.current = reedRule;
@@ -1352,7 +1490,13 @@ export default function LeaderboardPage() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ tournamentId }),
               }).then(r => r.ok ? r.json() : null)
-                .then(d => { if (d?.odds?.length > 0) setLiveOdds(d as LiveOdds); })
+                .then(d => {
+                  if (d?.odds?.length > 0) {
+                    setLiveOdds(d as LiveOdds);
+                    // Reload snapshots so the Odds Trend graph picks up the new point
+                    getOddsSnapshots(tournamentId).then(s => { if (s.length > 0) setOddsSnapshots(s); }).catch(() => {});
+                  }
+                })
                 .catch(() => {});
             }
           }
@@ -1632,19 +1776,38 @@ export default function LeaderboardPage() {
 
         {/* TREND view */}
         {view === 'trend' && (
-          <div className="rounded-xl overflow-hidden"
-            style={{ border: '1px solid rgba(255,255,255,0.07)', background: 'rgba(255,255,255,0.02)' }}>
-            <div className="px-4 pt-4 pb-2">
-              <div className="font-bebas text-lg tracking-wider text-white mb-0.5">Score Trend</div>
-              <div className="text-xs text-slate-600">Hourly team scores Thu–Sun · lower is better</div>
+          <div className="space-y-3">
+            <div className="rounded-xl overflow-hidden"
+              style={{ border: '1px solid rgba(255,255,255,0.07)', background: 'rgba(255,255,255,0.02)' }}>
+              <div className="px-4 pt-4 pb-2">
+                <div className="font-bebas text-lg tracking-wider text-white mb-0.5">Score Trend</div>
+                <div className="text-xs text-slate-600">Hourly team scores Thu–Sun · lower is better</div>
+              </div>
+              <div className="px-3 pb-4">
+                <TrendChart
+                  snapshots={trendSnapshots}
+                  teams={teamScores}
+                  myUserId={appUser.uid}
+                />
+              </div>
             </div>
-            <div className="px-3 pb-4">
-              <TrendChart
-                snapshots={trendSnapshots}
-                teams={teamScores}
-                myUserId={appUser.uid}
-              />
-            </div>
+
+            {oddsSnapshots.length > 0 && (
+              <div className="rounded-xl overflow-hidden"
+                style={{ border: '1px solid rgba(255,255,255,0.07)', background: 'rgba(255,255,255,0.02)' }}>
+                <div className="px-4 pt-4 pb-2">
+                  <div className="font-bebas text-lg tracking-wider text-white mb-0.5">Win Probability Trend</div>
+                  <div className="text-xs text-slate-600">AI-generated win % over time · higher is better</div>
+                </div>
+                <div className="px-3 pb-4">
+                  <OddsTrendChart
+                    snapshots={oddsSnapshots}
+                    teams={teamScores}
+                    myUserId={appUser.uid}
+                  />
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -1668,7 +1831,12 @@ export default function LeaderboardPage() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ tournamentId, force: true }),
               }).then(r => r.ok ? r.json() : null)
-                .then(d => { if (d?.odds?.length > 0) setLiveOdds(d as LiveOdds); })
+                .then(d => {
+                  if (d?.odds?.length > 0) {
+                    setLiveOdds(d as LiveOdds);
+                    getOddsSnapshots(tournamentId).then(s => { if (s.length > 0) setOddsSnapshots(s); }).catch(() => {});
+                  }
+                })
                 .catch(() => {})
                 .finally(() => setOddsLoading(false));
             }}

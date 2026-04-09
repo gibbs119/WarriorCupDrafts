@@ -88,6 +88,13 @@
       ".write": false
     },
 
+    "oddsSnapshots": {
+      // Leaderboard page reads hourly win-probability snapshots for the Odds Trend graph
+      ".read": "auth != null",
+      // Written only by Firebase Admin SDK (live-odds API route) — block client writes
+      ".write": false
+    },
+
     "dailySummaries": {
       "$tournamentId": {
         // Allow reading all summaries for a tournament at once (needed by recaps page)

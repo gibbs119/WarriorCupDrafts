@@ -236,14 +236,35 @@ Rules:
       };
     });
 
+    const now = Date.now();
+
     const result: LiveOdds = {
-      generatedAt: Date.now(),
+      generatedAt: now,
       roundLabel: parsed.roundLabel,
       analysis: parsed.analysis,
       odds: oddsWithIds,
     };
 
-    await adminDb.ref(`liveOdds/${tournamentId}`).set(result);
+    // Save current odds and append an hourly snapshot for the Odds Trend graph.
+    // Key uses the same ISO-hour format as trendSnapshots (one entry per hour).
+    const tzOffset = -4; // EDT (Masters week); close enough for label purposes
+    const nowLocal = new Date(now + tzOffset * 60 * 60 * 1000);
+    const hourKey  = new Date(now).toISOString().slice(0, 13); // "2026-04-10T14"
+    const DAYS  = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const dow   = nowLocal.getUTCDay();
+    const h     = nowLocal.getUTCHours() % 12 || 12;
+    const ampm  = nowLocal.getUTCHours() < 12 ? 'AM' : 'PM';
+    const hourLabel = `${DAYS[dow]} ${h}${ampm}`;
+    const oddsSnap = {
+      timestamp: now,
+      hour: hourLabel,
+      odds: Object.fromEntries(oddsWithIds.map(o => [o.userId, o.winPct])),
+    };
+
+    await Promise.all([
+      adminDb.ref(`liveOdds/${tournamentId}`).set(result),
+      adminDb.ref(`oddsSnapshots/${tournamentId}/${hourKey}`).set(oddsSnap),
+    ]);
 
     return NextResponse.json({ ...result, cached: false });
   } catch (err) {
