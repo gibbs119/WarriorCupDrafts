@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { ref, get, set } from 'firebase/database';
-import { db } from '@/lib/firebase';
+import { getAdminServices } from '@/lib/fcm-admin';
 import { TOP_10_POINTS } from '@/lib/constants';
 
 // Generates live AI win-probability odds for each fantasy team based on current
@@ -57,9 +56,11 @@ export async function POST(req: NextRequest) {
     const { tournamentId, force } = await req.json();
     if (!tournamentId) return NextResponse.json({ error: 'Missing tournamentId' }, { status: 400 });
 
+    const { db: adminDb } = getAdminServices();
+
     // Return cached odds if < 25 minutes old (unless force=true)
     if (!force) {
-      const cached = await get(ref(db, `liveOdds/${tournamentId}`));
+      const cached = await adminDb.ref(`liveOdds/${tournamentId}`).get();
       if (cached.exists()) {
         const data = cached.val() as LiveOdds;
         if (Date.now() - data.generatedAt < 25 * 60 * 1000) {
@@ -70,10 +71,10 @@ export async function POST(req: NextRequest) {
 
     // Load all data needed
     const [draftSnap, usersSnap, playersSnap, tournamentSnap] = await Promise.all([
-      get(ref(db, `drafts/${tournamentId}`)),
-      get(ref(db, 'users')),
-      get(ref(db, `players/${tournamentId}`)),
-      get(ref(db, `tournaments/${tournamentId}`)),
+      adminDb.ref(`drafts/${tournamentId}`).get(),
+      adminDb.ref('users').get(),
+      adminDb.ref(`players/${tournamentId}`).get(),
+      adminDb.ref(`tournaments/${tournamentId}`).get(),
     ]);
 
     if (!draftSnap.exists()) return NextResponse.json({ error: 'No draft found' }, { status: 404 });
@@ -241,7 +242,7 @@ Rules:
       odds: oddsWithIds,
     };
 
-    await set(ref(db, `liveOdds/${tournamentId}`), result);
+    await adminDb.ref(`liveOdds/${tournamentId}`).set(result);
 
     return NextResponse.json({ ...result, cached: false });
   } catch (err) {
@@ -254,7 +255,8 @@ export async function GET(req: NextRequest) {
   const tournamentId = req.nextUrl.searchParams.get('tournamentId');
   if (!tournamentId) return NextResponse.json({ error: 'Missing tournamentId' }, { status: 400 });
 
-  const snap = await get(ref(db, `liveOdds/${tournamentId}`));
+  const { db: adminDb } = getAdminServices();
+  const snap = await adminDb.ref(`liveOdds/${tournamentId}`).get();
   if (!snap.exists()) return NextResponse.json({ odds: null });
 
   return NextResponse.json({ ...snap.val(), cached: true });
