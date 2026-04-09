@@ -160,7 +160,7 @@ export default function HistoryPage() {
                             <span className="w-5 text-center shrink-0 text-xs" style={{color:'rgba(148,163,184,0.4)'}}>{i+1}.</span>
                             <span className="flex-1 font-semibold text-white truncate">{s.username}</span>
                             <div className="text-right shrink-0">
-                              <div className="font-mono font-bold text-sm" style={{color: s.total < 0 ? '#f87171' : '#94a3b8'}}>
+                              <div className="font-mono font-bold text-sm" style={{color: s.total < 0 ? '#34d399' : '#94a3b8'}}>
                                 {s.total > 0 ? '+' : ''}{s.total}
                               </div>
                               <div className="text-xs" style={{color:'rgba(148,163,184,0.35)'}}>
