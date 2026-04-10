@@ -51,6 +51,53 @@ const MAX_FAILURES_BEFORE_BACKOFF = 3;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+/**
+ * Derive end-of-round-N positions from cumulative stroke scores in the ESPN data.
+ * This is more reliable than the Firebase position snapshot because:
+ *  - roundScores data is stable once rounds complete (never gets "contaminated")
+ *  - The Firebase snapshot is saved on every page load, so mid-round loads overwrite it
+ * maxRound: the CURRENT round (we derive positions for rounds 1..maxRound-1)
+ */
+function derivePrevRoundPositions(
+  players: Record<string, Player>,
+  maxRound: number
+): Record<string, number | null> {
+  const parse = (s: string | null | undefined): number | null => {
+    if (!s || s === '—' || s === '-' || s === '--') return null;
+    if (s === 'E') return 0;
+    const n = parseInt(s.replace('+', ''), 10);
+    return isNaN(n) ? null : n;
+  };
+
+  const ranked: { id: string; total: number }[] = [];
+  for (const p of Object.values(players)) {
+    // Sum rounds 1 through maxRound-1 (all completed rounds before the current one)
+    let total = 0;
+    let allPresent = true;
+    for (let r = 0; r < maxRound - 1; r++) {
+      const s = parse(p.roundScores?.[r]);
+      if (s === null) { allPresent = false; break; }
+      total += s;
+    }
+    if (allPresent && p.status !== 'wd' && p.status !== 'dq') {
+      ranked.push({ id: p.id, total });
+    }
+  }
+
+  ranked.sort((a, b) => a.total - b.total); // ascending: lower = better
+
+  const posMap: Record<string, number | null> = {};
+  for (let i = 0; i < ranked.length; i++) {
+    posMap[ranked[i].id] = i > 0 && ranked[i].total === ranked[i - 1].total
+      ? posMap[ranked[i - 1].id]!
+      : i + 1;
+  }
+  for (const p of Object.values(players)) {
+    if (!(p.id in posMap)) posMap[p.id] = null;
+  }
+  return posMap;
+}
+
 function fmtPts(pts: number): string {
   if (pts >= 9000) return '—';
   if (pts === 0) return 'E';
@@ -1451,12 +1498,22 @@ export default function LeaderboardPage() {
 
         if (maxRound > detectedRoundRef.current) {
           const prevRound = maxRound - 1;
-          const posSnap: Record<string, number | null> = {};
-          for (const [id, player] of Object.entries(parsed)) posSnap[id] = player.position;
-          await saveRoundPositionSnapshot(tournamentId, prevRound, posSnap);
+          // Derive prev-round positions from completed round-score data.
+          // This is reliable at any point during the new round because roundScores
+          // never change once a round is complete — unlike player.position, which
+          // is mid-round and overwrites a clean snapshot on every page load.
+          const derivedPositions = maxRound > 1
+            ? derivePrevRoundPositions(parsed, maxRound)
+            : {} as Record<string, number | null>;
+          // Only write the snapshot if none exists yet — prevents mid-round page
+          // loads from overwriting a snapshot that was already correctly saved.
+          const existingSnap = await getRoundPositionSnapshot(tournamentId, prevRound);
+          if (!existingSnap || Object.keys(existingSnap).length === 0) {
+            await saveRoundPositionSnapshot(tournamentId, prevRound, derivedPositions);
+          }
           detectedRoundRef.current = maxRound;
-          setPrevRoundPositions(posSnap);
-          currentPrevPositions = posSnap;
+          setPrevRoundPositions(derivedPositions);
+          currentPrevPositions = derivedPositions;
           // New round started — reset baseline so Movers tracks from this round's start
           roundStartBaselineLoadedRef.current = false;
           setRoundStartScores(null);
@@ -1505,50 +1562,32 @@ export default function LeaderboardPage() {
         if (!roundStartBaselineLoadedRef.current) {
           roundStartBaselineLoadedRef.current = true;
           try {
-            const savedBaseline = await getRoundStartBaseline(tournamentId, maxRound);
-            if (savedBaseline) {
-              setRoundStartScores(savedBaseline);
-            } else if (maxRound > 1) {
-              // Round 2+: compute baseline from prev round's position snapshot so
-              // Movers shows "change since R1 end" not "change since page load".
-              const prevSnap = await getRoundPositionSnapshot(tournamentId, maxRound - 1);
-              if (prevSnap && Object.keys(prevSnap).length > 0) {
-                // Build a player map with prev-round positions to get R1-end team scores.
-                // Use parsed (id-keyed only) so name-keyed duplicate entries don't
-                // get position: null and corrupt the name-fallback lookup.
-                const prevPlayers: Record<string, Player> = {};
-                for (const [id, player] of Object.entries(parsed)) {
-                  prevPlayers[id] = { ...player, position: prevSnap[id] ?? null };
-                }
-                const prevScores = calculateLeaderboard(userPicksMap, prevPlayers, cutLine ?? t.cutLine ?? 65, null, reedRuleRef.current);
-                if (prevScores.some(s => s.top3Score < 9000)) {
-                  const baseline: Record<string, { score: number; rank: number }> = {};
-                  prevScores.forEach(s => { baseline[s.userId] = { score: s.top3Score, rank: s.rank }; });
-                  setRoundStartScores(baseline);
-                  saveRoundStartBaseline(tournamentId, maxRound, baseline).catch(() => {});
-                } else {
-                  // Snapshot positions are all null — fall back to current scores
-                  if (scores.some(s => s.top3Score < 9000)) {
-                    const baseline: Record<string, { score: number; rank: number }> = {};
-                    scores.forEach(s => { baseline[s.userId] = { score: s.top3Score, rank: s.rank }; });
-                    setRoundStartScores(baseline);
-                    saveRoundStartBaseline(tournamentId, maxRound, baseline).catch(() => {});
-                  } else {
-                    roundStartBaselineLoadedRef.current = false; // retry next refresh
-                  }
-                }
-              } else if (scores.some(s => s.top3Score < 9000)) {
-                // No position snapshot in Firebase — fall back to current scores
+            if (maxRound > 1) {
+              // Round 2+: derive the prev-round standings directly from round-score data.
+              // We intentionally bypass any saved Firebase baseline here because that
+              // baseline may have been computed from mid-round scores (saved on a page
+              // load that happened after the round had already started).  Round scores
+              // are immutable once a round completes, so this derivation is always correct.
+              const prevPositions = derivePrevRoundPositions(parsed, maxRound);
+              const prevPlayers: Record<string, Player> = {};
+              for (const [id, player] of Object.entries(parsed)) {
+                prevPlayers[id] = { ...player, position: prevPositions[id] ?? null };
+              }
+              const baselineScores = calculateLeaderboard(userPicksMap, prevPlayers, cutLine ?? t.cutLine ?? 65, null, reedRuleRef.current);
+              if (baselineScores.some(s => s.top3Score < 9000)) {
                 const baseline: Record<string, { score: number; rank: number }> = {};
-                scores.forEach(s => { baseline[s.userId] = { score: s.top3Score, rank: s.rank }; });
+                baselineScores.forEach(s => { baseline[s.userId] = { score: s.top3Score, rank: s.rank }; });
                 setRoundStartScores(baseline);
-                saveRoundStartBaseline(tournamentId, maxRound, baseline).catch(() => {});
               } else {
-                roundStartBaselineLoadedRef.current = false; // retry next refresh
+                roundStartBaselineLoadedRef.current = false; // round scores not yet available — retry
               }
             } else {
-              // Round 1: use current scores once they're available
-              if (scores.some(s => s.top3Score < 9000)) {
+              // Round 1: no prior round data exists — use Firebase baseline if saved,
+              // otherwise anchor to the first refresh where real scores appear.
+              const savedBaseline = await getRoundStartBaseline(tournamentId, maxRound);
+              if (savedBaseline) {
+                setRoundStartScores(savedBaseline);
+              } else if (scores.some(s => s.top3Score < 9000)) {
                 const baseline: Record<string, { score: number; rank: number }> = {};
                 scores.forEach(s => { baseline[s.userId] = { score: s.top3Score, rank: s.rank }; });
                 setRoundStartScores(baseline);
