@@ -56,14 +56,14 @@ export async function GET(req: NextRequest) {
 
 // Also allow admin to trigger manually
 export async function POST(req: NextRequest) {
-  const { secret, tournamentId } = await req.json();
+  const { secret, tournamentId, round } = await req.json();
   if (secret !== process.env.CRON_SECRET && secret !== process.env.NEXT_PUBLIC_ADMIN_SEED_SECRET) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-  return generateSummary(tournamentId);
+  return generateSummary(tournamentId, typeof round === 'number' ? round : undefined);
 }
 
-async function generateSummary(forceTournamentId?: string) {
+async function generateSummary(forceTournamentId?: string, forceRound?: number) {
   try {
     // Use Admin SDK for all Firebase operations — bypasses security rules
     const { db: adminDb, messaging } = getAdminServices();
@@ -113,11 +113,16 @@ async function generateSummary(forceTournamentId?: string) {
     const picks = draftState.picks ?? [];
     const cutLine = activeTournament.cutLine;
 
-    // Derive current round from actual player data (not calendar math)
-    const playerValues = Object.values(playersMap) as Array<{ currentRound?: number; round?: number }>;
-    const currentRound = playerValues.length > 0
-      ? Math.max(1, ...playerValues.map(p => p.currentRound ?? p.round ?? 1).filter(r => r > 0 && r <= 4))
-      : 1;
+    // Derive round: admin can override via forceRound; otherwise infer from player data
+    let currentRound: number;
+    if (forceRound && forceRound >= 1 && forceRound <= 4) {
+      currentRound = forceRound;
+    } else {
+      const playerValues = Object.values(playersMap) as Array<{ currentRound?: number; round?: number }>;
+      currentRound = playerValues.length > 0
+        ? Math.max(1, ...playerValues.map(p => p.currentRound ?? p.round ?? 1).filter(r => r > 0 && r <= 4))
+        : 1;
+    }
     const dayLabel = currentRound === 1 ? 'Round 1'
       : currentRound === 2 ? 'Round 2'
       : currentRound === 3 ? 'Round 3'
