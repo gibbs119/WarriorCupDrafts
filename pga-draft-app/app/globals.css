@@ -78,26 +78,26 @@ body {
 }
 
 /* ─── Cards ──────────────────────────────────────────────────────────────── */
+/* backdrop-filter intentionally omitted on all cards: blurring elements that
+   scroll over a position:fixed background layer creates extra GPU compositor
+   layers on iOS Safari which causes position:fixed elements (bottom nav) to
+   detach from the viewport during scroll inertia. */
 .card {
-  background: rgba(255,255,255,0.05);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: rgba(255,255,255,0.06);
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: 1rem;
   padding: 1.25rem;
 }
 
 .card-royal {
-  background: rgba(0,107,182,0.15);
-  backdrop-filter: blur(12px);
+  background: rgba(0,107,182,0.18);
   border: 1px solid rgba(0,107,182,0.35);
   border-radius: 1rem;
   padding: 1.25rem;
 }
 
 .card-gold {
-  background: rgba(201,162,39,0.1);
-  backdrop-filter: blur(12px);
+  background: rgba(201,162,39,0.12);
   border: 1px solid rgba(201,162,39,0.3);
   border-radius: 1rem;
   padding: 1.25rem;
@@ -412,12 +412,6 @@ button, .btn-primary, .btn-gold, .btn-secondary, .btn-danger {
 
 /* ─── Consistent card depth ──────────────────────────────────────────────── */
 .card {
-  background: rgba(255,255,255,0.04);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 1rem;
-  padding: 1.25rem;
   box-shadow: 0 2px 16px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.04);
 }
 .card-royal {
