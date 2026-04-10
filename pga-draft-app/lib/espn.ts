@@ -192,17 +192,28 @@ export function parseLeaderboard(data: ESPNLeaderboardResponse): {
     // Tee time
     const teeTime = comp.teeTime ?? comp.status?.teeTime ?? null;
 
-    // Round-by-round scores — try linescores first, then statistics R1/R2/R3/R4
+    // Round-by-round scores — merge linescores + statistics so both sources fill gaps.
+    // Linescores use period.number (1-indexed) and may include '—'/'-' placeholders for
+    // pending/not-yet-started rounds — skip those so only real stroke scores are stored.
     const roundScores: (string | null)[] = [null, null, null, null];
+    const isPending = (v: string) => v === '—' || v === '-' || v === '--';
     if (comp.linescores?.length) {
       for (const ls of comp.linescores) {
         const rnd = (ls.period?.number ?? 1) - 1;
-        if (rnd >= 0 && rnd < 4 && ls.displayValue) roundScores[rnd] = ls.displayValue;
+        if (rnd >= 0 && rnd < 4 && ls.displayValue && !isPending(ls.displayValue)) {
+          roundScores[rnd] = ls.displayValue;
+        }
       }
-    } else if (comp.statistics?.length) {
+    }
+    // Always merge statistics for any rounds still null after linescores
+    // (handles the common case where linescores only contains the pending current round)
+    if (comp.statistics?.length) {
       for (const s of comp.statistics) {
         const m = (s.abbreviation ?? '').toUpperCase().match(/^R([1-4])$/);
-        if (m && s.displayValue) roundScores[parseInt(m[1]) - 1] = s.displayValue;
+        if (m && s.displayValue && !isPending(s.displayValue)) {
+          const idx = parseInt(m[1]) - 1;
+          if (roundScores[idx] === null) roundScores[idx] = s.displayValue;
+        }
       }
     }
 
