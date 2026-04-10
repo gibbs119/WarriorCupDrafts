@@ -52,9 +52,7 @@ export default function Navigation() {
   return (
     <>
       <header style={{
-        background: 'rgba(6,14,28,0.85)',
-        backdropFilter: 'blur(16px)',
-        WebkitBackdropFilter: 'blur(16px)',
+        background: '#060E1C',
         borderBottom: '1px solid rgba(201,162,39,0.18)',
         paddingTop: 'env(safe-area-inset-top)',
       }}
