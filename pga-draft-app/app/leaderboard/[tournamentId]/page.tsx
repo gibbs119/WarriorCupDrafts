@@ -1016,24 +1016,25 @@ function FieldLeaderboard({
 
         {/* Thru */}
         <div className="text-xs shrink-0 w-7 text-right" style={{ color: '#475569' }}>
-          {isCut || isWdDq ? '—' : (p.thru !== '-' ? p.thru : '—')}
+          {isWdDq ? '—' : (p.thru !== '-' ? p.thru : '—')}
         </div>
 
-        {/* Score — current round + total */}
+        {/* Score — current round + total (show for cut players too, for posterity) */}
         <div className="shrink-0 w-16 text-right">
-          {isCut || isWdDq ? (
+          {isWdDq ? (
             <div className="text-sm font-bold font-mono text-slate-600">—</div>
           ) : (() => {
             const rdScore = p.roundScores?.[(p.currentRound ?? 1) - 1] ?? null;
             const showRd = rdScore !== null && p.thru !== '-';
+            const scoreStyle = isCut ? { color: '#64748b' } : { color: scoreColor };
             return (
               <>
                 {showRd && (
-                  <div className="text-xs font-mono" style={{ color: golfScoreColor(rdScore!) }}>
+                  <div className="text-xs font-mono" style={isCut ? { color: '#64748b' } : { color: golfScoreColor(rdScore!) }}>
                     {rdScore}
                   </div>
                 )}
-                <div className={showRd ? 'text-xs font-mono text-slate-400' : 'text-sm font-bold font-mono'} style={showRd ? {} : { color: scoreColor }}>
+                <div className={showRd ? 'text-xs font-mono text-slate-400' : 'text-sm font-bold font-mono'} style={showRd ? {} : scoreStyle}>
                   {p.score || '—'}
                 </div>
                 {showRd && <div className="text-xs text-slate-700" style={{ fontSize: '9px' }}>total</div>}
