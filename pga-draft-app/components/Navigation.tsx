@@ -6,11 +6,11 @@ import { useAuth } from '@/lib/AuthContext';
 import { getAllTournaments, saveUserFcmToken } from '@/lib/db';
 import { requestPushToken } from '@/lib/fcm';
 import WarriorsLogo from './WarriorsLogo';
-import { LogOut, History, Settings, Home, BookOpen } from 'lucide-react';
+import { LogOut, History, Settings, Home, BookOpen, Eye } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 export default function Navigation() {
-  const { appUser, signOut } = useAuth();
+  const { appUser, signOut, isViewMode } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const [hasLive, setHasLive] = useState(false);
@@ -24,16 +24,16 @@ export default function Navigation() {
   }, [appUser]);
 
   // Silently refresh FCM token if permission already granted (no gesture needed).
-  // First-time permission prompt requires a user tap — handled by the dashboard banner.
+  // Skip in view mode — anonymous users don't receive push notifications.
   useEffect(() => {
-    if (!appUser) return;
+    if (!appUser || isViewMode) return;
     if (typeof Notification === 'undefined') return;
     if (Notification.permission !== 'granted') return;
     requestPushToken().then((token) => {
       if (token) saveUserFcmToken(appUser.uid, token).catch(() => {});
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [appUser?.uid]);
+  }, [appUser?.uid, isViewMode]);
 
   async function handleSignOut() {
     await signOut();
@@ -98,28 +98,57 @@ export default function Navigation() {
 
           {/* User + sign out */}
           <div className="flex items-center gap-3">
-            {appUser && (
-              <Link href="/account" className="hidden sm:flex items-center gap-1.5 hover:opacity-80 transition-opacity">
-                <span className="text-sm font-semibold text-white">{appUser.username}</span>
-                {appUser.role === 'admin' && (
-                  <span className="text-xs px-1.5 py-0.5 rounded font-bold"
-                    style={{ background: 'rgba(201,162,39,0.2)', color: '#C9A227', border: '1px solid rgba(201,162,39,0.35)' }}>
-                    ADMIN
-                  </span>
+            {isViewMode ? (
+              /* View-only mode badge + exit button */
+              <div className="flex items-center gap-2">
+                <span className="hidden sm:flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full"
+                  style={{ background: 'rgba(96,165,250,0.15)', color: '#60a5fa', border: '1px solid rgba(96,165,250,0.35)' }}>
+                  <Eye size={11} />
+                  VIEW ONLY
+                </span>
+                <button onClick={handleSignOut}
+                  className="flex items-center gap-1 text-slate-500 hover:text-white transition-colors text-sm p-1.5 rounded-lg hover:bg-white/5">
+                  <LogOut size={15} />
+                  <span className="hidden sm:inline text-xs">Exit</span>
+                </button>
+              </div>
+            ) : (
+              <>
+                {appUser && (
+                  <Link href="/account" className="hidden sm:flex items-center gap-1.5 hover:opacity-80 transition-opacity">
+                    <span className="text-sm font-semibold text-white">{appUser.username}</span>
+                    {appUser.role === 'admin' && (
+                      <span className="text-xs px-1.5 py-0.5 rounded font-bold"
+                        style={{ background: 'rgba(201,162,39,0.2)', color: '#C9A227', border: '1px solid rgba(201,162,39,0.35)' }}>
+                        ADMIN
+                      </span>
+                    )}
+                  </Link>
                 )}
-              </Link>
+                <button onClick={handleSignOut}
+                  className="flex items-center gap-1 text-slate-500 hover:text-white transition-colors text-sm p-1.5 rounded-lg hover:bg-white/5">
+                  <LogOut size={15} />
+                  <span className="hidden sm:inline text-xs">Sign out</span>
+                </button>
+              </>
             )}
-            <button onClick={handleSignOut}
-              className="flex items-center gap-1 text-slate-500 hover:text-white transition-colors text-sm p-1.5 rounded-lg hover:bg-white/5">
-              <LogOut size={15} />
-              <span className="hidden sm:inline text-xs">Sign out</span>
-            </button>
           </div>
         </div>
       </header>
 
       {/* Mobile bottom tab bar */}
       <nav className="bottom-nav md:hidden">
+        {isViewMode && (
+          /* View-only indicator in tab bar */
+          <div className="absolute top-0 left-0 right-0 flex justify-center pointer-events-none"
+            style={{ transform: 'translateY(-100%)' }}>
+            <span className="flex items-center gap-1 text-xs font-bold px-3 py-0.5 rounded-t-lg"
+              style={{ background: 'rgba(15,23,42,0.95)', color: '#60a5fa', border: '1px solid rgba(96,165,250,0.35)', borderBottom: 'none' }}>
+              <Eye size={10} />
+              VIEW ONLY
+            </span>
+          </div>
+        )}
         {navLinks.map(({ href, label, icon: Icon }) => {
           const isActive = pathname === href || pathname.startsWith(href + '/');
           const isHome = href === '/dashboard';

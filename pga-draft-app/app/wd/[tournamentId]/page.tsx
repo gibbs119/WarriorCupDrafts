@@ -12,12 +12,12 @@ import {
 } from '@/lib/db';
 import { playerKey, type OddsPlayer } from '@/lib/odds';
 import type { Tournament, DraftState, DraftPick, WDReplacement } from '@/lib/types';
-import { AlertTriangle, CheckCircle, Clock, XCircle, ArrowRight, RefreshCw } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Clock, XCircle, ArrowRight, RefreshCw, Eye } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function WDReplacementPage() {
   const { tournamentId } = useParams<{ tournamentId: string }>();
-  const { appUser, loading } = useAuth();
+  const { appUser, loading, isViewMode } = useAuth();
   const router = useRouter();
 
   const [tournament, setTournament] = useState<Tournament | null>(null);
@@ -120,6 +120,24 @@ export default function WDReplacementPage() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  // View-only mode: show info banner, hide submission form
+  if (isViewMode) {
+    return (
+      <div className="min-h-screen page">
+        <Navigation />
+        <main className="relative z-10 max-w-3xl mx-auto px-4 py-8">
+          <div className="card flex items-center gap-4" style={{ border: '1px solid rgba(96,165,250,0.3)', background: 'rgba(96,165,250,0.06)' }}>
+            <Eye size={24} style={{ color: '#60a5fa', flexShrink: 0 }} />
+            <div>
+              <p className="font-semibold text-white text-sm">View Only</p>
+              <p className="text-slate-400 text-xs mt-0.5">WD replacement requests are not available in view-only mode.</p>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
   }
 
   return (
