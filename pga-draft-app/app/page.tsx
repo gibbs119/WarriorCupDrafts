@@ -4,10 +4,11 @@ import { useRouter } from 'next/navigation';
 import { useAuth, type GooglePendingUser } from '@/lib/AuthContext';
 import { getUserByUsername } from '@/lib/db';
 import WarriorsLogo from '@/components/WarriorsLogo';
+import { Eye } from 'lucide-react';
 import { USERS } from '@/lib/constants';
 
 export default function LoginPage() {
-  const { signIn, signInWithGoogle, linkGoogleAccount, appUser, loading } = useAuth();
+  const { signIn, signInWithGoogle, signInAsViewer, linkGoogleAccount, appUser, loading } = useAuth();
   const router = useRouter();
 
   // Already logged in — skip straight to dashboard
@@ -19,6 +20,20 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [viewLoading, setViewLoading] = useState(false);
+
+  async function handleViewOnly() {
+    setViewLoading(true);
+    setError('');
+    try {
+      await signInAsViewer();
+      // AuthContext fires onAuthStateChanged → sets appUser → login page's
+      // useEffect redirects to /dashboard automatically
+    } catch {
+      setError('View mode unavailable. Try again.');
+      setViewLoading(false);
+    }
+  }
 
   // Google one-time account linking state
   const [googlePending, setGooglePending] = useState<GooglePendingUser | null>(null);
@@ -290,7 +305,22 @@ export default function LoginPage() {
           </form>
         </div>
 
-        <p className="text-center text-slate-600 text-xs mt-5">
+        {/* View-only access */}
+        <button
+          onClick={handleViewOnly}
+          disabled={viewLoading || submitting}
+          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all disabled:opacity-40 mt-3"
+          style={{
+            background: 'rgba(255,255,255,0.04)',
+            border: '1px solid rgba(255,255,255,0.09)',
+            color: '#64748b',
+          }}
+        >
+          <Eye size={15} />
+          {viewLoading ? 'Opening view…' : 'Browse as viewer (read-only)'}
+        </button>
+
+        <p className="text-center text-slate-600 text-xs mt-4">
           Contact Gibbs for your password
         </p>
       </div>
