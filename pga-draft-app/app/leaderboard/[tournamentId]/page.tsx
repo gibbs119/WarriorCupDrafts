@@ -335,15 +335,29 @@ function DetailPanel({ team, isMe, cutLine, standalone, playersMap }: {
               </div>
             )}
 
-            {/* Score to par — visual only */}
+            {/* Score to par — current round + total (visual only) */}
             {!pending && (
               <div className="text-right shrink-0 w-10">
-                <div className="text-sm font-bold font-mono" style={{
-                  color: golfScoreColor(p.score),
-                }}>
-                  {p.score}
-                </div>
-                <div className="text-xs text-slate-700">golf</div>
+                {(() => {
+                  const rs  = playersMap?.[p.playerId]?.roundScores;
+                  const cr  = playersMap?.[p.playerId]?.currentRound ?? p.currentRound;
+                  const rdScore = (rs && cr) ? rs[cr - 1] : null;
+                  const showRd  = rdScore !== null && p.thru !== '-';
+                  return (
+                    <>
+                      {showRd && (
+                        <div className="text-xs font-mono" style={{ color: golfScoreColor(rdScore!) }}>
+                          {rdScore}
+                        </div>
+                      )}
+                      <div className={showRd ? 'text-xs font-mono text-slate-400' : 'text-sm font-bold font-mono'}
+                        style={showRd ? {} : { color: golfScoreColor(p.score) }}>
+                        {p.score}
+                      </div>
+                      <div className="text-xs text-slate-700">{showRd ? 'total' : 'golf'}</div>
+                    </>
+                  );
+                })()}
               </div>
             )}
             <div className="text-right shrink-0 w-16">
@@ -957,9 +971,27 @@ function FieldLeaderboard({
           {isCut || isWdDq ? '—' : (p.thru !== '-' ? p.thru : '—')}
         </div>
 
-        {/* Score */}
-        <div className="text-sm font-bold font-mono shrink-0 w-9 text-right" style={{ color: scoreColor }}>
-          {isCut || isWdDq ? '—' : (p.score || '—')}
+        {/* Score — current round + total */}
+        <div className="shrink-0 w-16 text-right">
+          {isCut || isWdDq ? (
+            <div className="text-sm font-bold font-mono text-slate-600">—</div>
+          ) : (() => {
+            const rdScore = p.roundScores?.[(p.currentRound ?? 1) - 1] ?? null;
+            const showRd = rdScore !== null && p.thru !== '-';
+            return (
+              <>
+                {showRd && (
+                  <div className="text-xs font-mono" style={{ color: golfScoreColor(rdScore!) }}>
+                    {rdScore}
+                  </div>
+                )}
+                <div className={showRd ? 'text-xs font-mono text-slate-400' : 'text-sm font-bold font-mono'} style={showRd ? {} : { color: scoreColor }}>
+                  {p.score || '—'}
+                </div>
+                {showRd && <div className="text-xs text-slate-700" style={{ fontSize: '9px' }}>total</div>}
+              </>
+            );
+          })()}
         </div>
       </div>
     );
@@ -987,7 +1019,7 @@ function FieldLeaderboard({
         <div className="w-9 text-right shrink-0">Pos</div>
         <div className="flex-1">Player</div>
         <div className="w-7 text-right shrink-0">Thru</div>
-        <div className="w-9 text-right shrink-0">Score</div>
+        <div className="w-16 text-right shrink-0">Rd / Tot</div>
       </div>
 
       {/* Active players */}
