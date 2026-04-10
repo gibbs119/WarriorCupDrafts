@@ -42,6 +42,7 @@ export default function AdminPage() {
   const [draftOrderInput, setDraftOrderInput] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [seeding, setSeeding] = useState(false);
+  const [generatingRecap, setGeneratingRecap] = useState(false);
   const [reedRuleStates, setReedRuleStates] = useState<Record<string, boolean>>({});
   const [reedRuleSaving, setReedRuleSaving] = useState<string | null>(null);
 
@@ -390,6 +391,25 @@ export default function AdminPage() {
     setUsers(await getAllUsers());
   }
 
+  async function generateDailyRecap(tournamentId: string) {
+    setGeneratingRecap(true);
+    const toastId = toast.loading('Generating round recap…');
+    try {
+      const res = await fetch('/api/cron/daily-summary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ secret: process.env.NEXT_PUBLIC_ADMIN_SEED_SECRET, tournamentId }),
+      });
+      const data = await res.json();
+      if (res.ok) toast.success(`Recap generated for ${data.summary?.dayLabel ?? 'today'}!`, { id: toastId });
+      else toast.error(`Failed: ${data.error}`, { id: toastId });
+    } catch {
+      toast.error('Network error generating recap.', { id: toastId });
+    } finally {
+      setGeneratingRecap(false);
+    }
+  }
+
   async function seedHistoricalData() {
     setSeeding(true);
     const toastId = toast.loading('Importing historical data…');
@@ -670,6 +690,32 @@ export default function AdminPage() {
                 </div>
               );
             })}
+
+            {/* Round recap manual trigger */}
+            <div className="card mt-6">
+              <h3 className="font-bebas text-lg tracking-wider text-white mb-1">Round Recap</h3>
+              <p className="text-slate-400 text-sm mb-3">
+                Manually generate today's AI recap for an active or completed tournament.
+                Overwrites any existing recap for today.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {tournaments
+                  .filter((t) => t.status === 'active' || t.status === 'completed')
+                  .map((t) => (
+                    <button
+                      key={t.id}
+                      onClick={() => generateDailyRecap(t.id)}
+                      disabled={generatingRecap}
+                      className="btn-secondary text-sm disabled:opacity-50"
+                    >
+                      {generatingRecap ? '⏳ Generating…' : `📋 Generate Recap — ${t.shortName}`}
+                    </button>
+                  ))}
+                {tournaments.filter((t) => t.status === 'active' || t.status === 'completed').length === 0 && (
+                  <p className="text-slate-500 text-sm italic">No active or completed tournaments.</p>
+                )}
+              </div>
+            </div>
 
             {/* Lock scores / seed section */}
             <div className="card mt-6">
