@@ -367,13 +367,14 @@ button, .btn-primary, .btn-gold, .btn-secondary, .btn-danger {
   position: fixed;
   bottom: 0; left: 0; right: 0;
   z-index: 50;
-  /* Force own compositor layer so iOS doesn't detach it during scroll */
+  /* Force own compositor layer — CRITICAL for iOS: keeps nav anchored during scroll */
   transform: translateZ(0);
   -webkit-transform: translateZ(0);
-  /* Fully opaque so content never bleeds through */
-  background: rgba(3,9,18,0.98);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  will-change: transform;
+  /* Fully opaque background — backdrop-filter intentionally omitted:
+     blur on position:fixed elements triggers an iOS Safari bug that causes
+     the nav to detach from the viewport bottom during scroll momentum */
+  background: #030912;
   border-top: 1px solid rgba(255,255,255,0.10);
   /* Extend height to fill the iOS home indicator safe area */
   padding-bottom: env(safe-area-inset-bottom);
@@ -381,7 +382,6 @@ button, .btn-primary, .btn-gold, .btn-secondary, .btn-danger {
   display: flex;
   align-items: center;
   justify-content: space-around;
-  /* Shadow anchors it visually to the bottom of the screen */
   box-shadow: 0 -4px 24px rgba(0,0,0,0.6), 0 -1px 0 rgba(255,255,255,0.06);
 }
 /* Solid fill between nav bottom and true screen edge (belt-and-suspenders for iOS) */
