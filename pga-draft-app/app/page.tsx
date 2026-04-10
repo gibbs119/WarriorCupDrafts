@@ -29,8 +29,12 @@ export default function LoginPage() {
       await signInAsViewer();
       // AuthContext fires onAuthStateChanged → sets appUser → login page's
       // useEffect redirects to /dashboard automatically
-    } catch {
-      setError('View mode unavailable. Try again.');
+    } catch (err: unknown) {
+      const code = (err as { code?: string })?.code ?? '';
+      const msg = code === 'auth/operation-not-allowed'
+        ? 'Anonymous auth not enabled — enable it in Firebase Console → Authentication → Sign-in method → Anonymous.'
+        : 'View mode unavailable. Try again.';
+      setError(msg);
       setViewLoading(false);
     }
   }
