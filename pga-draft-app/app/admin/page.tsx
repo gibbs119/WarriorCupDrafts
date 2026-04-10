@@ -556,7 +556,17 @@ export default function AdminPage() {
                           className="btn-secondary text-xs py-1.5 px-3 disabled:opacity-50">
                           Mark Final
                         </button>
+                        <button onClick={() => generateDailyRecap(t.id)} disabled={generatingRecap}
+                          className="btn-secondary text-xs py-1.5 px-3 disabled:opacity-50">
+                          {generatingRecap ? '⏳…' : '📋 Recap'}
+                        </button>
                       </>
+                    )}
+                    {t.status === 'completed' && (
+                      <button onClick={() => generateDailyRecap(t.id)} disabled={generatingRecap}
+                        className="btn-secondary text-xs py-1.5 px-3 disabled:opacity-50">
+                        {generatingRecap ? '⏳…' : '📋 Recap'}
+                      </button>
                     )}
 
                     <Link href={`/admin/rosters/${t.id}`} className="btn-secondary text-xs py-1.5 px-3">
@@ -690,32 +700,6 @@ export default function AdminPage() {
                 </div>
               );
             })}
-
-            {/* Round recap manual trigger */}
-            <div className="card mt-6">
-              <h3 className="font-bebas text-lg tracking-wider text-white mb-1">Round Recap</h3>
-              <p className="text-slate-400 text-sm mb-3">
-                Manually generate today's AI recap for an active or completed tournament.
-                Overwrites any existing recap for today.
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {tournaments
-                  .filter((t) => t.status === 'active' || t.status === 'completed')
-                  .map((t) => (
-                    <button
-                      key={t.id}
-                      onClick={() => generateDailyRecap(t.id)}
-                      disabled={generatingRecap}
-                      className="btn-secondary text-sm disabled:opacity-50"
-                    >
-                      {generatingRecap ? '⏳ Generating…' : `📋 Generate Recap — ${t.shortName}`}
-                    </button>
-                  ))}
-                {tournaments.filter((t) => t.status === 'active' || t.status === 'completed').length === 0 && (
-                  <p className="text-slate-500 text-sm italic">No active or completed tournaments.</p>
-                )}
-              </div>
-            </div>
 
             {/* Lock scores / seed section */}
             <div className="card mt-6">
