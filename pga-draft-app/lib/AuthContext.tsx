@@ -55,6 +55,7 @@ interface AuthContextValue {
   isViewMode: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signInWithGoogle: () => Promise<{ status: 'ok' } | { status: 'new'; pending: GooglePendingUser }>;
+  signInAsViewer: () => Promise<void>;
   linkGoogleAccount: (pending: GooglePendingUser, username: string) => Promise<void>;
   signOut: () => Promise<void>;
   createAccount: (email: string, password: string, username: string, role: 'admin' | 'user') => Promise<void>;
@@ -181,6 +182,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoading(false);
   }
 
+  async function signInAsViewer() {
+    try {
+      sessionStorage.setItem('viewMode', '1');
+      await signInAnonymously(auth);
+      // onAuthStateChanged fires with anonymous user → sets isViewMode + appUser viewer
+    } catch (err) {
+      try { sessionStorage.removeItem('viewMode'); } catch { /* ignore */ }
+      throw err;
+    }
+  }
+
   async function signOut() {
     try { sessionStorage.removeItem('viewMode'); } catch { /* ignore */ }
     setIsViewMode(false);
@@ -226,7 +238,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ firebaseUser, appUser, loading, isViewMode, signIn, signInWithGoogle, linkGoogleAccount, signOut, createAccount, changePassword, changeEmail }}>
+    <AuthContext.Provider value={{ firebaseUser, appUser, loading, isViewMode, signIn, signInWithGoogle, signInAsViewer, linkGoogleAccount, signOut, createAccount, changePassword, changeEmail }}>
       {children}
     </AuthContext.Provider>
   );
