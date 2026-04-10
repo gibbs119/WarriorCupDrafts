@@ -20,6 +20,10 @@ interface DailySummaryData {
   outlook: string;
   generatedAt: number;
   seen: Record<string, boolean>;
+  isFinalRound?: boolean;
+  tournamentJourney?: string;
+  chartAnalysis?: string;
+  draftReportCard?: string;
 }
 
 interface Props {
@@ -120,18 +124,51 @@ export default function DailySummaryModal({ tournamentId }: Props) {
             </div>
           </div>
 
-          {/* Tournament outlook */}
+          {/* Outlook / Champion Verdict */}
           <div className="rounded-xl p-4" style={{ background: 'rgba(0,107,182,0.1)', border: '1px solid rgba(0,107,182,0.25)' }}>
             <div className="flex items-center gap-2 mb-2">
-              <span className="text-xs">🔭</span>
-              <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#60a5fa' }}>Tournament Outlook</span>
+              <span className="text-xs">{summary.isFinalRound ? '🏆' : '🔭'}</span>
+              <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#60a5fa' }}>
+                {summary.isFinalRound ? 'Champion Verdict' : 'Tournament Outlook'}
+              </span>
             </div>
             <p className="text-sm text-slate-300 leading-relaxed">{summary.outlook}</p>
           </div>
 
+          {/* Round 4 extended sections */}
+          {summary.isFinalRound && summary.tournamentJourney && (
+            <div className="rounded-xl p-4" style={{ background: 'rgba(201,162,39,0.07)', border: '1px solid rgba(201,162,39,0.25)' }}>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xs">📈</span>
+                <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#C9A227' }}>Tournament Journey</span>
+              </div>
+              <p className="text-sm text-slate-300 leading-relaxed">{summary.tournamentJourney}</p>
+            </div>
+          )}
+
+          {summary.isFinalRound && summary.chartAnalysis && (
+            <div className="rounded-xl p-4" style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.25)' }}>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xs">📊</span>
+                <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#a78bfa' }}>Score Chart Analysis</span>
+              </div>
+              <p className="text-sm text-slate-300 leading-relaxed">{summary.chartAnalysis}</p>
+            </div>
+          )}
+
+          {summary.isFinalRound && summary.draftReportCard && (
+            <div className="rounded-xl p-4" style={{ background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.2)' }}>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xs">📝</span>
+                <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#4ade80' }}>Draft Report Card</span>
+              </div>
+              <p className="text-sm text-slate-300 leading-relaxed">{summary.draftReportCard}</p>
+            </div>
+          )}
+
           <button onClick={handleDismiss}
             className="btn-gold w-full py-2.5 font-bebas tracking-widest text-base justify-center">
-            GOT IT — LET'S GO ⛳
+            {summary.isFinalRound ? 'SEE YOU NEXT MAJOR ⛳' : 'GOT IT — LET\'S GO ⛳'}
           </button>
         </div>
       </div>

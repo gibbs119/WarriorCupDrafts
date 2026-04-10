@@ -31,6 +31,11 @@ interface DailySummary {
   zeroSummary: string;
   outlook: string;
   generatedAt: number;
+  isFinalRound?: boolean;
+  // Round 4 extended fields
+  tournamentJourney?: string;
+  chartAnalysis?: string;
+  draftReportCard?: string;
 }
 
 interface DraftGrade {
@@ -123,17 +128,57 @@ function DailySummaryCard({ summary }: { summary: DailySummary }) {
             </div>
           </div>
 
-          {/* Outlook */}
+          {/* Outlook / Champion Verdict */}
           <div className="rounded-xl p-3.5"
             style={{ background: 'rgba(0,107,182,0.1)', border: '1px solid rgba(0,107,182,0.25)' }}>
             <div className="flex items-center gap-2 mb-2">
-              <span className="text-xs">🔭</span>
+              <span className="text-xs">{summary.isFinalRound ? '🏆' : '🔭'}</span>
               <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#60a5fa' }}>
-                Outlook
+                {summary.isFinalRound ? 'Champion Verdict' : 'Outlook'}
               </span>
             </div>
             <p className="text-sm text-slate-300 leading-relaxed">{summary.outlook}</p>
           </div>
+
+          {/* Round 4 extended sections */}
+          {summary.isFinalRound && summary.tournamentJourney && (
+            <div className="rounded-xl p-3.5"
+              style={{ background: 'rgba(201,162,39,0.07)', border: '1px solid rgba(201,162,39,0.25)' }}>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xs">📈</span>
+                <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#C9A227' }}>
+                  Tournament Journey
+                </span>
+              </div>
+              <p className="text-sm text-slate-300 leading-relaxed">{summary.tournamentJourney}</p>
+            </div>
+          )}
+
+          {summary.isFinalRound && summary.chartAnalysis && (
+            <div className="rounded-xl p-3.5"
+              style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.25)' }}>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xs">📊</span>
+                <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#a78bfa' }}>
+                  Score Chart Analysis
+                </span>
+              </div>
+              <p className="text-sm text-slate-300 leading-relaxed">{summary.chartAnalysis}</p>
+            </div>
+          )}
+
+          {summary.isFinalRound && summary.draftReportCard && (
+            <div className="rounded-xl p-3.5"
+              style={{ background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.2)' }}>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xs">📝</span>
+                <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#4ade80' }}>
+                  Draft Report Card
+                </span>
+              </div>
+              <p className="text-sm text-slate-300 leading-relaxed">{summary.draftReportCard}</p>
+            </div>
+          )}
         </div>
       )}
     </div>
