@@ -62,7 +62,7 @@ export default function DailySummaryModal({ tournamentId }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
-      style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)' }}>
+      style={{ background: 'rgba(0,0,0,0.82)' }}>
 
       <div className="w-full max-w-lg rounded-2xl overflow-hidden shadow-2xl"
         style={{ background: '#0A1628', border: '1px solid rgba(201,162,39,0.4)', maxHeight: '90vh', overflowY: 'auto' }}>

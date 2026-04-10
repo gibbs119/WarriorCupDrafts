@@ -103,8 +103,8 @@ export default function TournamentAudio({ trackUrl, label, accent, accentMid }: 
     return (
       <button
         onClick={enable}
-        className="fixed bottom-24 right-4 z-40 rounded-full w-10 h-10 flex items-center justify-center text-lg shadow-xl transition-opacity opacity-40 hover:opacity-80"
-        style={{ background: 'rgba(3,9,18,0.92)', border: `1px solid ${accent}50`, backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}
+        className="fixed right-4 z-40 rounded-full w-10 h-10 flex items-center justify-center text-lg shadow-xl transition-opacity opacity-40 hover:opacity-80"
+        style={{ bottom: 'calc(60px + env(safe-area-inset-bottom) + 0.75rem)', background: '#030912', border: `1px solid ${accent}50` }}
         title="Enable Masters theme music"
       >
         🎵
@@ -126,13 +126,12 @@ export default function TournamentAudio({ trackUrl, label, accent, accentMid }: 
 
       {/* Floating pill */}
       <div
-        className="fixed bottom-24 right-4 z-40 flex items-center gap-2 rounded-full pl-3 pr-2 shadow-xl"
+        className="fixed right-4 z-40 flex items-center gap-2 rounded-full pl-3 pr-2 shadow-xl"
         style={{
+          bottom: 'calc(60px + env(safe-area-inset-bottom) + 0.75rem)',
           height: '38px',
-          background: 'rgba(3,9,18,0.95)',
+          background: '#030912',
           border: `1px solid ${accent}70`,
-          backdropFilter: 'blur(16px)',
-          WebkitBackdropFilter: 'blur(16px)',
           boxShadow: `0 4px 24px rgba(0,0,0,0.7), 0 0 0 1px ${accent}30`,
         }}
       >
