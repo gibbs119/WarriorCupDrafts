@@ -306,7 +306,11 @@ function DetailPanel({ team, isMe, cutLine, standalone, playersMap }: {
                   : p.status === 'wd' || p.status === 'dq' ? `${p.status.toUpperCase()} — scores ${p.points} pts`
                   : p.thru === 'F' ? 'Round complete'
                   : p.thru !== '-' ? `Thru hole ${p.thru}`
-                  : 'Tee time pending'}
+                  : (() => {
+                      const raw = playersMap?.[p.playerId]?.teeTime;
+                      const fmt = raw ? fmtTeeTime(raw) : '';
+                      return fmt ? `Tees off ${fmt}` : 'Tee time pending';
+                    })()}
               </div>
               {!pending && (() => {
                 const rs = playersMap?.[p.playerId]?.roundScores;
@@ -941,9 +945,9 @@ function FieldLeaderboard({
               </span>
             )}
           </div>
-          {p.position === null && p.teeTime && (
+          {p.thru === '-' && p.teeTime && (
             <div className="text-xs mt-0.5" style={{ color: '#475569' }}>
-              {fmtTeeTime(p.teeTime)}
+              Tees off {fmtTeeTime(p.teeTime)}
             </div>
           )}
         </div>
@@ -1171,7 +1175,7 @@ function OddsPanel({
 
 // ─── Rosters View ─────────────────────────────────────────────────────────────
 
-function RostersView({ teams, myUserId }: { teams: TeamScore[]; myUserId: string }) {
+function RostersView({ teams, myUserId, playersMap }: { teams: TeamScore[]; myUserId: string; playersMap?: Record<string, Player> }) {
   if (teams.length === 0) {
     return (
       <div className="text-center py-16 text-slate-600 text-sm">
@@ -1220,9 +1224,19 @@ function RostersView({ teams, myUserId }: { teams: TeamScore[]; myUserId: string
                       ? <span style={{ color: 'rgba(212,175,55,0.7)', fontSize: '10px' }}>★</span>
                       : <span className="text-slate-700" style={{ fontSize: '10px' }}>·</span>}
                   </div>
-                  <span className="text-sm flex-1 truncate" style={{ color: pending ? '#94a3b8' : 'white', fontWeight: isCounting ? 600 : 400 }}>
-                    {p.playerName}
-                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm truncate" style={{ color: pending ? '#94a3b8' : 'white', fontWeight: isCounting ? 600 : 400 }}>
+                      {p.playerName}
+                    </div>
+                    {/* Tee time: R1 not-yet-started (pending) OR R2/3/4 waiting for round */}
+                    {(pending || p.thru === '-') && (() => {
+                      const raw = playersMap?.[p.playerId]?.teeTime;
+                      const fmt = raw ? fmtTeeTime(raw) : '';
+                      return fmt
+                        ? <div className="text-xs" style={{ color: '#475569' }}>Tees off {fmt}</div>
+                        : null;
+                    })()}
+                  </div>
                   <StatusPill status={p.status} />
                   {!pending && (
                     <span className="text-xs font-bold shrink-0"
@@ -1836,7 +1850,7 @@ export default function LeaderboardPage() {
 
         {/* ROSTERS view */}
         {view === 'rosters' && (
-          <RostersView teams={teamScores} myUserId={appUser.uid} />
+          <RostersView teams={teamScores} myUserId={appUser.uid} playersMap={fieldPlayers} />
         )}
 
         {/* ODDS view */}
