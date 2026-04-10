@@ -9,7 +9,7 @@ import { getAdminServices, pushToAllUsers } from '@/lib/fcm-admin';
 // Uses OpenAI API (gpt-4o-mini) and Firebase Admin SDK (bypasses security rules).
 
 // ── OpenAI ────────────────────────────────────────────────────────────────────
-async function callAI(prompt: string, maxTokens = 1500): Promise<string | null> {
+async function callAI(prompt: string, maxTokens = 1500, temperature = 0.95): Promise<string | null> {
   const apiKey = process.env.OPENAI_API_KEY ?? '';
   if (!apiKey) {
     console.error('[daily-summary] OPENAI_API_KEY not set');
@@ -27,7 +27,7 @@ async function callAI(prompt: string, maxTokens = 1500): Promise<string | null> 
         model: 'gpt-4o-mini',
         messages: [{ role: 'user', content: prompt }],
         max_tokens: maxTokens,
-        temperature: 0.95,
+        temperature,
       }),
     });
 
@@ -234,13 +234,25 @@ async function generateSummary(forceTournamentId?: string, forceRound?: number) 
         progressionBlock = lines.join('\n');
       }
 
-      // Draft grades vs final results
-      const gradeLines = teams.map(t => {
-        const g = Object.values(draftGradesRaw).find(
+      // Draft grades vs final results — structured comparison table
+      const gradeLookup = (t: TeamEntry) =>
+        Object.values(draftGradesRaw).find(
           (gr) => gr.userId === t.userId || gr.username === t.username
         );
-        const gradeStr = g ? `Grade ${g.grade} (${g.winPct}% projected win chance) — "${g.summary}"` : 'No grade recorded';
-        return `${t.username} (#${t.rank} final): ${gradeStr}`;
+
+      // Compute projected pre-tournament rankings from win% (higher win% = projected higher rank)
+      const teamsWithGrades = teams.map(t => ({ ...t, g: gradeLookup(t) }));
+      const sortedByWinPct = [...teamsWithGrades]
+        .sort((a, b) => (b.g?.winPct ?? 0) - (a.g?.winPct ?? 0));
+      const projectedRankMap = Object.fromEntries(sortedByWinPct.map((t, i) => [t.userId, i + 1]));
+
+      const gradeLines = teams.map(t => {
+        const g = gradeLookup(t);
+        if (!g) return `${t.username}: Actual Rank #${t.rank} | No pre-tournament grade recorded`;
+        const projRank = projectedRankMap[t.userId];
+        const rankDiff = projRank - t.rank; // positive = outperformed expectations
+        const perf = rankDiff > 1 ? 'OUTPERFORMED' : rankDiff < -1 ? 'UNDERPERFORMED' : 'MET EXPECTATIONS';
+        return `${t.username}: Grade ${g.grade} | Win% ${g.winPct}% | Projected Rank #${projRank} | Actual Rank #${t.rank} | ${perf} — "${g.summary}"`;
       });
       gradesBlock = gradeLines.join('\n');
     }
@@ -252,18 +264,25 @@ async function generateSummary(forceTournamentId?: string, forceRound?: number) 
     let prompt: string;
     let jsonShape: string;
 
+    const winner = teams[0]; // rank 1 = champion
+
     if (isFinalRound) {
       prompt = `You are writing the CHAMPIONSHIP FINAL RECAP for ${activeTournament.name} for a private fantasy golf draft league of close friends. This is the biggest recap of the tournament — the full story, the drama, the winners, the collapses. Be genuinely funny, use banter and roasting, but also deliver real analytical insight. This one matters.
 
+⚠️ GROUND TRUTH — ALL DATA BELOW IS EXACT AND FINAL. DO NOT CHANGE NAMES, RANKINGS, OR INVENT RESULTS:
+TOURNAMENT CHAMPION: ${winner.username} (Team Score: ${winner.top3Score > 0 ? '+' : ''}${winner.top3Score})
+RUNNER-UP: ${teams[1]?.username ?? 'N/A'}
+LAST PLACE: ${teams[teams.length - 1]?.username ?? 'N/A'}
+
 ${scoringRules}
 
-FINAL STANDINGS:
+FINAL STANDINGS (1 = winner, ranked by lowest team score):
 ${teamsBlock}
 
-${progressionBlock ? `SCORE PROGRESSION (hourly snapshots, lower = better):
+${progressionBlock ? `SCORE PROGRESSION (hourly snapshots, lower team score = better):
 ${progressionBlock}
 
-` : ''}${gradesBlock ? `DRAFT GRADES (pre-tournament AI assessments vs actual result):
+` : ''}${gradesBlock ? `DRAFT GRADE VS ACTUAL RESULT TABLE (use these exact ranks and grades — do not invent):
 ${gradesBlock}
 
 ` : ''}Write a championship recap with SIX sections:
@@ -280,7 +299,8 @@ ${gradesBlock}
 
 6. **DRAFT REPORT CARD** (~4-5 sentences): Compare each team's pre-tournament draft grade against their actual finish. Who was correctly scouted? Who was overrated? Who was the sleeper that outperformed expectations? Be specific with names and grades.
 
-Use actual player names and usernames. Be creative, punchy, funny, and genuine.
+Use actual player names and usernames from the data. Be creative, punchy, funny, and genuine.
+REMINDER: The champion is ${winner.username}. Do not contradict the standings data above.
 
 Respond ONLY with valid JSON — no markdown, no backticks, no extra text:
 {
@@ -337,7 +357,8 @@ Respond ONLY with valid JSON — no markdown, no backticks, no extra text:
 }`;
     }
 
-    const text = await callAI(prompt, isFinalRound ? 2500 : 1500);
+    // R4: lower temperature to reduce hallucination on factual winner/standings data
+    const text = await callAI(prompt, isFinalRound ? 2500 : 1500, isFinalRound ? 0.7 : 0.95);
     if (!text) {
       return NextResponse.json({ error: 'AI generation failed — check OPENAI_API_KEY env variable' }, { status: 500 });
     }
