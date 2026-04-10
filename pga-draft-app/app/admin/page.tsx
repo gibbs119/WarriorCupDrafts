@@ -43,6 +43,7 @@ export default function AdminPage() {
   const [saving, setSaving] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const [generatingRecap, setGeneratingRecap] = useState(false);
+  const [recapPickingId, setRecapPickingId] = useState<string | null>(null);
   const [reedRuleStates, setReedRuleStates] = useState<Record<string, boolean>>({});
   const [reedRuleSaving, setReedRuleSaving] = useState<string | null>(null);
 
@@ -391,17 +392,18 @@ export default function AdminPage() {
     setUsers(await getAllUsers());
   }
 
-  async function generateDailyRecap(tournamentId: string) {
+  async function generateDailyRecap(tournamentId: string, round: number) {
+    setRecapPickingId(null);
     setGeneratingRecap(true);
-    const toastId = toast.loading('Generating round recap…');
+    const toastId = toast.loading(`Generating Round ${round} recap…`);
     try {
       const res = await fetch('/api/cron/daily-summary', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ secret: process.env.NEXT_PUBLIC_ADMIN_SEED_SECRET, tournamentId }),
+        body: JSON.stringify({ secret: process.env.NEXT_PUBLIC_ADMIN_SEED_SECRET, tournamentId, round }),
       });
       const data = await res.json();
-      if (res.ok) toast.success(`Recap generated for ${data.summary?.dayLabel ?? 'today'}!`, { id: toastId });
+      if (res.ok) toast.success(`Recap generated for ${data.summary?.dayLabel ?? `Round ${round}`}!`, { id: toastId });
       else toast.error(`Failed: ${data.error}`, { id: toastId });
     } catch {
       toast.error('Network error generating recap.', { id: toastId });
@@ -556,17 +558,34 @@ export default function AdminPage() {
                           className="btn-secondary text-xs py-1.5 px-3 disabled:opacity-50">
                           Mark Final
                         </button>
-                        <button onClick={() => generateDailyRecap(t.id)} disabled={generatingRecap}
+                        <button onClick={() => setRecapPickingId(recapPickingId === t.id ? null : t.id)}
+                          disabled={generatingRecap}
                           className="btn-secondary text-xs py-1.5 px-3 disabled:opacity-50">
                           {generatingRecap ? '⏳…' : '📋 Recap'}
                         </button>
                       </>
                     )}
                     {t.status === 'completed' && (
-                      <button onClick={() => generateDailyRecap(t.id)} disabled={generatingRecap}
+                      <button onClick={() => setRecapPickingId(recapPickingId === t.id ? null : t.id)}
+                        disabled={generatingRecap}
                         className="btn-secondary text-xs py-1.5 px-3 disabled:opacity-50">
                         {generatingRecap ? '⏳…' : '📋 Recap'}
                       </button>
+                    )}
+                    {/* Round picker — shown after clicking Recap */}
+                    {recapPickingId === t.id && (
+                      <div className="w-full mt-1 flex items-center gap-2 flex-wrap">
+                        <span className="text-xs text-slate-400">Which round?</span>
+                        {[1, 2, 3, 4].map((r) => (
+                          <button key={r} onClick={() => generateDailyRecap(t.id, r)}
+                            className="text-xs py-1 px-2.5 rounded-lg font-bold transition-all"
+                            style={{ background: 'rgba(201,162,39,0.15)', color: '#C9A227', border: '1px solid rgba(201,162,39,0.4)' }}>
+                            R{r}
+                          </button>
+                        ))}
+                        <button onClick={() => setRecapPickingId(null)}
+                          className="text-xs text-slate-500 hover:text-slate-300 px-1">✕</button>
+                      </div>
                     )}
 
                     <Link href={`/admin/rosters/${t.id}`} className="btn-secondary text-xs py-1.5 px-3">

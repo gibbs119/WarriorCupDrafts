@@ -4,11 +4,12 @@ import { getAdminServices, pushToAllUsers } from '@/lib/fcm-admin';
 
 // Cron: runs at midnight UTC = 8 PM ET every day (schedule: "0 0 * * *")
 // Generates a daily AI summary of tournament activity and stores it in Firebase.
-// Users see it as a modal the next time they open the app.
+// Round 4 generates an extended championship recap including score progression
+// and draft grades vs results analysis.
 // Uses OpenAI API (gpt-4o-mini) and Firebase Admin SDK (bypasses security rules).
 
 // ── OpenAI ────────────────────────────────────────────────────────────────────
-async function callAI(prompt: string): Promise<string | null> {
+async function callAI(prompt: string, maxTokens = 1500): Promise<string | null> {
   const apiKey = process.env.OPENAI_API_KEY ?? '';
   if (!apiKey) {
     console.error('[daily-summary] OPENAI_API_KEY not set');
@@ -25,7 +26,7 @@ async function callAI(prompt: string): Promise<string | null> {
       body: JSON.stringify({
         model: 'gpt-4o-mini',
         messages: [{ role: 'user', content: prompt }],
-        max_tokens: 1500,
+        max_tokens: maxTokens,
         temperature: 0.95,
       }),
     });
@@ -56,14 +57,14 @@ export async function GET(req: NextRequest) {
 
 // Also allow admin to trigger manually
 export async function POST(req: NextRequest) {
-  const { secret, tournamentId } = await req.json();
+  const { secret, tournamentId, round } = await req.json();
   if (secret !== process.env.CRON_SECRET && secret !== process.env.NEXT_PUBLIC_ADMIN_SEED_SECRET) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-  return generateSummary(tournamentId);
+  return generateSummary(tournamentId, typeof round === 'number' ? round : undefined);
 }
 
-async function generateSummary(forceTournamentId?: string) {
+async function generateSummary(forceTournamentId?: string, forceRound?: number) {
   try {
     // Use Admin SDK for all Firebase operations — bypasses security rules
     const { db: adminDb, messaging } = getAdminServices();
@@ -95,7 +96,7 @@ async function generateSummary(forceTournamentId?: string) {
       }
     }
 
-    // Load all the data we need
+    // Load core data
     const [draftSnap, usersSnap, playersSnap] = await Promise.all([
       adminDb.ref(`drafts/${tournamentId}`).get(),
       adminDb.ref('users').get(),
@@ -113,15 +114,35 @@ async function generateSummary(forceTournamentId?: string) {
     const picks = draftState.picks ?? [];
     const cutLine = activeTournament.cutLine;
 
-    // Derive current round from actual player data (not calendar math)
-    const playerValues = Object.values(playersMap) as Array<{ currentRound?: number; round?: number }>;
-    const currentRound = playerValues.length > 0
-      ? Math.max(1, ...playerValues.map(p => p.currentRound ?? p.round ?? 1).filter(r => r > 0 && r <= 4))
-      : 1;
+    // Derive round: admin can override via forceRound; otherwise infer from player data
+    let currentRound: number;
+    if (forceRound && forceRound >= 1 && forceRound <= 4) {
+      currentRound = forceRound;
+    } else {
+      const playerValues = Object.values(playersMap) as Array<{ currentRound?: number; round?: number }>;
+      currentRound = playerValues.length > 0
+        ? Math.max(1, ...playerValues.map(p => p.currentRound ?? p.round ?? 1).filter(r => r > 0 && r <= 4))
+        : 1;
+    }
     const dayLabel = currentRound === 1 ? 'Round 1'
       : currentRound === 2 ? 'Round 2'
       : currentRound === 3 ? 'Round 3'
       : 'Final Round';
+
+    const isFinalRound = currentRound === 4;
+
+    // For Round 4: also load trend snapshots and draft grades
+    let trendSnapshotsRaw: Record<string, { timestamp: number; hour: string; scores: Record<string, number> }> = {};
+    let draftGradesRaw: Record<string, { userId: string; username: string; grade: string; winPct: number; summary: string }> = {};
+
+    if (isFinalRound) {
+      const [trendSnap, gradesSnap] = await Promise.all([
+        adminDb.ref(`trendSnapshots/${tournamentId}`).get(),
+        adminDb.ref(`draftGrades/${tournamentId}`).get(),
+      ]);
+      if (trendSnap.exists()) trendSnapshotsRaw = trendSnap.val();
+      if (gradesSnap.exists()) draftGradesRaw = gradesSnap.val();
+    }
 
     // Build team summaries with live scores
     interface PlayerEntry {
@@ -134,6 +155,7 @@ async function generateSummary(forceTournamentId?: string) {
     }
 
     interface TeamEntry {
+      userId: string;
       username: string;
       players: PlayerEntry[];
       top3Score: number;
@@ -172,7 +194,7 @@ async function generateSummary(forceTournamentId?: string) {
       const top3 = sorted.slice(0, 3);
       const top3Score = top3.reduce((sum, p) => sum + (p.points < 9000 ? p.points : 0), 0);
 
-      teams.push({ username: user.username, players, top3Score, rank: 0 });
+      teams.push({ userId: user.uid, username: user.username, players, top3Score, rank: 0 });
     }
 
     // Rank teams
@@ -188,9 +210,104 @@ async function generateSummary(forceTournamentId?: string) {
       return `#${t.rank} ${t.username} (Team Score: ${t.top3Score > 0 ? '+' : ''}${t.top3Score}):\n${playerLines}`;
     }).join('\n\n');
 
-    const prompt = `You are a hilariously snarky but genuinely insightful fantasy golf analyst recapping ${dayLabel} of ${activeTournament.name} for a private fantasy draft league of friends. Be funny, use sports banter, roast the losers, hype the leaders, and make specific observations about players' actual rounds. Keep it punchy and fun — like a group chat message from the most golf-obsessed person you know.
+    // ── Build extra context blocks for Round 4 ────────────────────────────────
 
-The league has ${totalTeams} teams. Best 3 of ${activeTournament.maxPicks} drafted players count toward team score. Lower score is better (golf scoring). Top 10 point bonuses: ${TOP_10_POINTS.map((p, i) => `${i + 1}: ${p}`).join(', ')}. Position 11+: points = position number. Cut/WD = cut line + 1.
+    let progressionBlock = '';
+    let gradesBlock = '';
+
+    if (isFinalRound) {
+      // Score progression: hourly snapshots sorted chronologically
+      const snapshots = Object.values(trendSnapshotsRaw)
+        .sort((a, b) => a.timestamp - b.timestamp);
+
+      if (snapshots.length > 0) {
+        const userMap = Object.fromEntries(users.map(u => [u.uid, u.username]));
+        const lines = snapshots.map(snap => {
+          const scores = teams.map(t => {
+            const s = snap.scores[t.userId];
+            const display = (s === undefined || s >= 9000) ? 'NS' : (s > 0 ? `+${s}` : `${s}`);
+            return `${t.username}=${display}`;
+          }).join(', ');
+          void userMap;
+          return `${snap.hour}: ${scores}`;
+        });
+        progressionBlock = lines.join('\n');
+      }
+
+      // Draft grades vs final results
+      const gradeLines = teams.map(t => {
+        const g = Object.values(draftGradesRaw).find(
+          (gr) => gr.userId === t.userId || gr.username === t.username
+        );
+        const gradeStr = g ? `Grade ${g.grade} (${g.winPct}% projected win chance) — "${g.summary}"` : 'No grade recorded';
+        return `${t.username} (#${t.rank} final): ${gradeStr}`;
+      });
+      gradesBlock = gradeLines.join('\n');
+    }
+
+    // ── Build the prompt ──────────────────────────────────────────────────────
+
+    const scoringRules = `The league has ${totalTeams} teams. Best 3 of ${activeTournament.maxPicks} drafted players count toward team score. Lower score is better (golf scoring). Top 10 point bonuses: ${TOP_10_POINTS.map((p, i) => `${i + 1}: ${p}`).join(', ')}. Position 11+: points = position number. Cut/WD = cut line + 1.`;
+
+    let prompt: string;
+    let jsonShape: string;
+
+    if (isFinalRound) {
+      prompt = `You are writing the CHAMPIONSHIP FINAL RECAP for ${activeTournament.name} for a private fantasy golf draft league of close friends. This is the biggest recap of the tournament — the full story, the drama, the winners, the collapses. Be genuinely funny, use banter and roasting, but also deliver real analytical insight. This one matters.
+
+${scoringRules}
+
+FINAL STANDINGS:
+${teamsBlock}
+
+${progressionBlock ? `SCORE PROGRESSION (hourly snapshots, lower = better):
+${progressionBlock}
+
+` : ''}${gradesBlock ? `DRAFT GRADES (pre-tournament AI assessments vs actual result):
+${gradesBlock}
+
+` : ''}Write a championship recap with SIX sections:
+
+1. **FINAL STANDINGS BREAKDOWN** (~4-5 sentences): Crown the champion properly. Roast the losers. Call out the biggest moves of the final round. Be dramatic — this is the finale.
+
+2. **HERO & ZERO OF THE TOURNAMENT** (2-3 sentences each): Not just today — the single most impactful drafted player of the ENTIRE tournament (Hero) and the biggest overall bust (Zero).
+
+3. **TOURNAMENT CHAMPION VERDICT** (~3 sentences): Declare the winner, explain how they won it, and give a cheeky send-off to the rest of the field. This replaces the usual "Outlook" section.
+
+4. **TOURNAMENT JOURNEY** (~3-4 sentences): Using the score progression data, describe how the tournament unfolded over the week — who dominated early, who made a late charge, which team's lead evaporated. Tell the arc of the whole week.
+
+5. **SCORE CHART ANALYSIS** (~3 sentences): Look at the progression snapshots and call out the most dramatic moment — a team that rocketed up, one that cratered, or the closest finish. Make it vivid.
+
+6. **DRAFT REPORT CARD** (~4-5 sentences): Compare each team's pre-tournament draft grade against their actual finish. Who was correctly scouted? Who was overrated? Who was the sleeper that outperformed expectations? Be specific with names and grades.
+
+Use actual player names and usernames. Be creative, punchy, funny, and genuine.
+
+Respond ONLY with valid JSON — no markdown, no backticks, no extra text:
+{
+  "dayLabel": "Final Round",
+  "standingsBreakdown": "...",
+  "heroName": "...",
+  "heroTeam": "...",
+  "heroSummary": "...",
+  "zeroName": "...",
+  "zeroTeam": "...",
+  "zeroSummary": "...",
+  "outlook": "...",
+  "tournamentJourney": "...",
+  "chartAnalysis": "...",
+  "draftReportCard": "..."
+}`;
+
+      jsonShape = `{
+  "dayLabel", "standingsBreakdown", "heroName", "heroTeam", "heroSummary",
+  "zeroName", "zeroTeam", "zeroSummary", "outlook",
+  "tournamentJourney", "chartAnalysis", "draftReportCard"
+}`;
+      void jsonShape;
+    } else {
+      prompt = `You are a hilariously snarky but genuinely insightful fantasy golf analyst recapping ${dayLabel} of ${activeTournament.name} for a private fantasy draft league of friends. Be funny, use sports banter, roast the losers, hype the leaders, and make specific observations about players' actual rounds. Keep it punchy and fun — like a group chat message from the most golf-obsessed person you know.
+
+${scoringRules}
 
 Here are the current standings after ${dayLabel}:
 
@@ -218,8 +335,9 @@ Respond ONLY with valid JSON — no markdown, no backticks, no extra text:
   "zeroSummary": "...",
   "outlook": "..."
 }`;
+    }
 
-    const text = await callAI(prompt);
+    const text = await callAI(prompt, isFinalRound ? 2500 : 1500);
     if (!text) {
       return NextResponse.json({ error: 'AI generation failed — check OPENAI_API_KEY env variable' }, { status: 500 });
     }
@@ -238,6 +356,7 @@ Respond ONLY with valid JSON — no markdown, no backticks, no extra text:
       tournamentId,
       tournamentName: activeTournament.name,
       date: today,
+      isFinalRound,
       generatedAt: Date.now(),
       seen: {},  // tracks which users have dismissed it
     };
@@ -249,12 +368,13 @@ Respond ONLY with valid JSON — no markdown, no backticks, no extra text:
     try {
       const summaryDayLabel = (summary as { dayLabel?: string }).dayLabel ?? 'Today\'s';
       const url = `${process.env.NEXT_PUBLIC_APP_URL ?? ''}/recaps`;
-      await pushToAllUsers(
-        messaging, adminDb,
-        `📋 ${summaryDayLabel} Recap — ${activeTournament.name}`,
-        'The round summary and standings breakdown are ready. Check Recaps.',
-        url,
-      );
+      const notifTitle = isFinalRound
+        ? `🏆 Championship Recap — ${activeTournament.name}`
+        : `📋 ${summaryDayLabel} Recap — ${activeTournament.name}`;
+      const notifBody = isFinalRound
+        ? 'The full tournament recap, score progression, and draft report card are ready.'
+        : 'The round summary and standings breakdown are ready. Check Recaps.';
+      await pushToAllUsers(messaging, adminDb, notifTitle, notifBody, url);
     } catch (e) {
       console.warn('[daily-summary] push notification failed:', e);
     }
