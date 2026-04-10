@@ -27,12 +27,12 @@ interface Props {
 }
 
 export default function DailySummaryModal({ tournamentId }: Props) {
-  const { appUser } = useAuth();
+  const { appUser, isViewMode } = useAuth();
   const [summary, setSummary] = useState<DailySummaryData | null>(null);
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    if (!tournamentId || !appUser) return;
+    if (!tournamentId || !appUser || isViewMode) return;
 
     async function checkForSummary() {
       const data = await getLatestDailySummary(tournamentId!);

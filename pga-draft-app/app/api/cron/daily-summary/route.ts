@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { ref, get, set } from 'firebase/database';
-import { db } from '@/lib/firebase';
 import { TOP_10_POINTS } from '@/lib/constants';
 import { getAdminServices, pushToAllUsers } from '@/lib/fcm-admin';
 
-// Cron: runs at 8 PM ET every day (0 0 * * * = midnight UTC = 8 PM ET)
+// Cron: runs at midnight UTC = 8 PM ET every day (schedule: "0 0 * * *")
 // Generates a daily AI summary of tournament activity and stores it in Firebase.
 // Users see it as a modal the next time they open the app.
-// Uses OpenAI API (gpt-4o-mini).
+// Uses OpenAI API (gpt-4o-mini) and Firebase Admin SDK (bypasses security rules).
 
 // ── OpenAI ────────────────────────────────────────────────────────────────────
 async function callAI(prompt: string): Promise<string | null> {
@@ -67,8 +65,11 @@ export async function POST(req: NextRequest) {
 
 async function generateSummary(forceTournamentId?: string) {
   try {
+    // Use Admin SDK for all Firebase operations — bypasses security rules
+    const { db: adminDb, messaging } = getAdminServices();
+
     // Find the currently active tournament
-    const tournamentsSnap = await get(ref(db, 'tournaments'));
+    const tournamentsSnap = await adminDb.ref('tournaments').get();
     if (!tournamentsSnap.exists()) return NextResponse.json({ error: 'No tournaments' });
 
     const tournaments = Object.values(tournamentsSnap.val()) as Array<{
@@ -86,17 +87,19 @@ async function generateSummary(forceTournamentId?: string) {
     const tournamentId = activeTournament.id;
     const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
 
-    // Check if we already generated today's summary
-    const existingSnap = await get(ref(db, `dailySummaries/${tournamentId}/${today}`));
-    if (existingSnap.exists() && !forceTournamentId) {
-      return NextResponse.json({ skipped: true, reason: 'Already generated today' });
+    // Check if we already generated today's summary (unless force-triggered by admin)
+    if (!forceTournamentId) {
+      const existingSnap = await adminDb.ref(`dailySummaries/${tournamentId}/${today}`).get();
+      if (existingSnap.exists()) {
+        return NextResponse.json({ skipped: true, reason: 'Already generated today' });
+      }
     }
 
     // Load all the data we need
     const [draftSnap, usersSnap, playersSnap] = await Promise.all([
-      get(ref(db, `drafts/${tournamentId}`)),
-      get(ref(db, 'users')),
-      get(ref(db, `players/${tournamentId}`)),
+      adminDb.ref(`drafts/${tournamentId}`).get(),
+      adminDb.ref('users').get(),
+      adminDb.ref(`players/${tournamentId}`).get(),
     ]);
 
     if (!draftSnap.exists()) return NextResponse.json({ error: 'No draft' });
@@ -109,6 +112,16 @@ async function generateSummary(forceTournamentId?: string) {
 
     const picks = draftState.picks ?? [];
     const cutLine = activeTournament.cutLine;
+
+    // Derive current round from actual player data (not calendar math)
+    const playerValues = Object.values(playersMap) as Array<{ currentRound?: number; round?: number }>;
+    const currentRound = playerValues.length > 0
+      ? Math.max(1, ...playerValues.map(p => p.currentRound ?? p.round ?? 1).filter(r => r > 0 && r <= 4))
+      : 1;
+    const dayLabel = currentRound === 1 ? 'Round 1'
+      : currentRound === 2 ? 'Round 2'
+      : currentRound === 3 ? 'Round 3'
+      : 'Final Round';
 
     // Build team summaries with live scores
     interface PlayerEntry {
@@ -175,12 +188,6 @@ async function generateSummary(forceTournamentId?: string) {
       return `#${t.rank} ${t.username} (Team Score: ${t.top3Score > 0 ? '+' : ''}${t.top3Score}):\n${playerLines}`;
     }).join('\n\n');
 
-    // Determine round label from today's date vs tournament start
-    const tournamentStartSnap = await get(ref(db, `tournaments/${tournamentId}/startDate`));
-    const dayNum = Math.ceil((Date.now() - new Date('2026-01-01').getTime()) / 86400000) % 4 + 1;
-    const dayLabel = dayNum <= 1 ? 'Round 1' : dayNum <= 2 ? 'Round 2' : dayNum <= 3 ? 'Round 3' : 'Final Round';
-    void tournamentStartSnap; // unused but fetched for future use
-
     const prompt = `You are a hilariously snarky but genuinely insightful fantasy golf analyst recapping ${dayLabel} of ${activeTournament.name} for a private fantasy draft league of friends. Be funny, use sports banter, roast the losers, hype the leaders, and make specific observations about players' actual rounds. Keep it punchy and fun — like a group chat message from the most golf-obsessed person you know.
 
 The league has ${totalTeams} teams. Best 3 of ${activeTournament.maxPicks} drafted players count toward team score. Lower score is better (golf scoring). Top 10 point bonuses: ${TOP_10_POINTS.map((p, i) => `${i + 1}: ${p}`).join(', ')}. Position 11+: points = position number. Cut/WD = cut line + 1.
@@ -214,9 +221,7 @@ Respond ONLY with valid JSON — no markdown, no backticks, no extra text:
 
     const text = await callAI(prompt);
     if (!text) {
-      return NextResponse.json({
-        error: 'AI generation failed — check GEMINI_API_KEY env variable. Get a free key at https://aistudio.google.com/app/apikey',
-      }, { status: 500 });
+      return NextResponse.json({ error: 'AI generation failed — check OPENAI_API_KEY env variable' }, { status: 500 });
     }
 
     let summaryContent: Record<string, string>;
@@ -237,16 +242,16 @@ Respond ONLY with valid JSON — no markdown, no backticks, no extra text:
       seen: {},  // tracks which users have dismissed it
     };
 
-    await set(ref(db, `dailySummaries/${tournamentId}/${today}`), summary);
+    // Write via Admin SDK — bypasses the ".write: false" client rule on dailySummaries
+    await adminDb.ref(`dailySummaries/${tournamentId}/${today}`).set(summary);
 
     // Push notification to all users
     try {
-      const { messaging, db: adminDb } = getAdminServices();
-      const dayLabel = (summary as { dayLabel?: string }).dayLabel ?? 'Today\'s';
+      const summaryDayLabel = (summary as { dayLabel?: string }).dayLabel ?? 'Today\'s';
       const url = `${process.env.NEXT_PUBLIC_APP_URL ?? ''}/recaps`;
       await pushToAllUsers(
         messaging, adminDb,
-        `📋 ${dayLabel} Recap — ${activeTournament.name}`,
+        `📋 ${summaryDayLabel} Recap — ${activeTournament.name}`,
         'The round summary and standings breakdown are ready. Check Recaps.',
         url,
       );

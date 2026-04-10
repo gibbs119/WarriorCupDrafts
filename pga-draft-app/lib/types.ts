@@ -4,7 +4,7 @@ export interface AppUser {
   uid: string;
   username: string;
   email: string;
-  role: 'admin' | 'user';
+  role: 'admin' | 'user' | 'viewer';
 }
 
 // ─── Tournaments ─────────────────────────────────────────────────────────────

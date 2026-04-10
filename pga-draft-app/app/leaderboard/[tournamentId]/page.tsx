@@ -1298,6 +1298,18 @@ export default function LeaderboardPage() {
     if (!loading && !appUser) router.push('/');
   }, [loading, appUser, router]);
 
+  // Restore hourly dedup keys from sessionStorage so page reloads within the
+  // same hour do NOT re-fire snapshot + odds generation.
+  useEffect(() => {
+    try {
+      const savedSnap = sessionStorage.getItem(`lastSnapshotHour_${tournamentId}`);
+      if (savedSnap) lastSnapshotHourRef.current = savedSnap;
+      const savedOdds = sessionStorage.getItem(`lastOddsHour_${tournamentId}`);
+      if (savedOdds) lastOddsHourRef.current = savedOdds;
+    } catch { /* sessionStorage may be unavailable in some private modes */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tournamentId]);
+
   useEffect(() => {
     if (!appUser) return;
     async function load() {
@@ -1474,6 +1486,7 @@ export default function LeaderboardPage() {
           const hourKey = nowLocal.toISOString().slice(0, 13);
           if (hourKey !== lastSnapshotHourRef.current) {
             lastSnapshotHourRef.current = hourKey;
+            try { sessionStorage.setItem(`lastSnapshotHour_${tournamentId}`, hourKey); } catch { /* ignore */ }
             const DAYS  = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
             const h     = hourLoc % 12 || 12;
             const ampm  = hourLoc < 12 ? 'AM' : 'PM';
@@ -1494,6 +1507,7 @@ export default function LeaderboardPage() {
             // the scheduled hourly auto-gen should always produce fresh odds.
             if (hourKey !== lastOddsHourRef.current) {
               lastOddsHourRef.current = hourKey;
+              try { sessionStorage.setItem(`lastOddsHour_${tournamentId}`, hourKey); } catch { /* ignore */ }
               fetch('/api/ai/live-odds', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

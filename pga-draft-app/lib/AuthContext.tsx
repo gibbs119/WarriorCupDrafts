@@ -4,6 +4,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import {
   signInWithEmailAndPassword,
   signInWithPopup,
+  signInAnonymously,
   GoogleAuthProvider,
   signOut as firebaseSignOut,
   onAuthStateChanged,
@@ -51,6 +52,7 @@ interface AuthContextValue {
   firebaseUser: FirebaseUser | null;
   appUser: AppUser | null;
   loading: boolean;
+  isViewMode: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signInWithGoogle: () => Promise<{ status: 'ok' } | { status: 'new'; pending: GooglePendingUser }>;
   linkGoogleAccount: (pending: GooglePendingUser, username: string) => Promise<void>;
@@ -68,22 +70,66 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [appUser, setAppUserState] = useState<AppUser | null>(readCache);
   // Only show loading spinner if there's no cached data to show
   const [loading, setLoading] = useState(() => readCache() === null);
+  const [isViewMode, setIsViewMode] = useState(false);
 
   function setAppUser(user: AppUser | null) {
     setAppUserState(user);
     writeCache(user);
   }
 
+  // Detect view mode from URL param on mount (before auth state resolves)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has('view')) {
+      try { sessionStorage.setItem('viewMode', '1'); } catch { /* ignore */ }
+    }
+  }, []);
+
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (fbUser) => {
       setFirebaseUser(fbUser);
-      if (fbUser) {
+
+      const isView = (() => {
+        try { return sessionStorage.getItem('viewMode') === '1'; } catch { return false; }
+      })();
+
+      if (fbUser?.isAnonymous) {
+        // View-only mode: synthetic viewer user, NOT stored in DB or localStorage
+        setIsViewMode(true);
+        setAppUserState({
+          uid:      fbUser.uid,
+          username: 'Viewer',
+          email:    '',
+          role:     'viewer',
+        });
+        setLoading(false);
+      } else if (fbUser && !fbUser.isAnonymous) {
+        // Real authenticated user — clear any stale view mode flag
+        try { sessionStorage.removeItem('viewMode'); } catch { /* ignore */ }
+        setIsViewMode(false);
         const user = await getUserByUid(fbUser.uid);
         setAppUser(user);
+        setLoading(false);
       } else {
-        setAppUser(null);
+        // No user signed in
+        if (isView) {
+          // View mode requested — sign in anonymously.
+          // onAuthStateChanged will fire again with the anonymous user.
+          setIsViewMode(true);
+          signInAnonymously(auth).catch((err) => {
+            console.error('[viewMode] Anonymous auth failed:', err);
+            try { sessionStorage.removeItem('viewMode'); } catch { /* ignore */ }
+            setIsViewMode(false);
+            setAppUser(null);
+            setLoading(false);
+          });
+          // Don't set loading=false yet — wait for next onAuthStateChanged callback
+        } else {
+          setAppUser(null);
+          setLoading(false);
+        }
       }
-      setLoading(false);
     });
     return unsub;
   }, []);
@@ -128,7 +174,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       uid: pending.uid,
       username,
       email: pending.googleEmail,
-      role,
+      role: role as 'admin' | 'user',
     };
     await setUser(pending.uid, newUser);
     setAppUser(newUser);
@@ -136,6 +182,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function signOut() {
+    try { sessionStorage.removeItem('viewMode'); } catch { /* ignore */ }
+    setIsViewMode(false);
     await firebaseSignOut(auth);
     setAppUser(null);
   }
@@ -178,7 +226,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ firebaseUser, appUser, loading, signIn, signInWithGoogle, linkGoogleAccount, signOut, createAccount, changePassword, changeEmail }}>
+    <AuthContext.Provider value={{ firebaseUser, appUser, loading, isViewMode, signIn, signInWithGoogle, linkGoogleAccount, signOut, createAccount, changePassword, changeEmail }}>
       {children}
     </AuthContext.Provider>
   );

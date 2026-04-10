@@ -14,7 +14,7 @@ type TournamentItem = Tournament;
 import { TOURNAMENTS } from '@/lib/constants';
 
 export default function Dashboard() {
-  const { appUser, loading } = useAuth();
+  const { appUser, loading, isViewMode } = useAuth();
   const router = useRouter();
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [fetching, setFetching] = useState(true);
@@ -88,21 +88,25 @@ export default function Dashboard() {
 
         {/* Welcome header */}
         <div className="mb-8">
-          <p className="text-slate-500 text-sm uppercase tracking-widest font-semibold mb-1">Welcome back</p>
+          <p className="text-slate-500 text-sm uppercase tracking-widest font-semibold mb-1">
+            {isViewMode ? 'Viewing' : 'Welcome back'}
+          </p>
           <h1 className="font-bebas text-4xl tracking-widest text-white leading-none">
-            {appUser.username}
-            {appUser.role === 'admin' && (
+            {isViewMode ? 'WARRIOR CUP DRAFTS' : appUser.username}
+            {!isViewMode && appUser.role === 'admin' && (
               <span className="ml-3 text-sm font-sans px-2 py-0.5 rounded font-bold align-middle"
                 style={{ background: 'rgba(201,162,39,0.2)', color: '#C9A227', border: '1px solid rgba(201,162,39,0.35)' }}>
                 ADMIN
               </span>
             )}
           </h1>
-          <p className="text-slate-500 text-sm mt-1">Warrior Cup Drafts · The Players + All 4 Majors</p>
+          <p className="text-slate-500 text-sm mt-1">
+            {isViewMode ? 'Read-only view · The Players + All 4 Majors' : 'Warrior Cup Drafts · The Players + All 4 Majors'}
+          </p>
         </div>
 
-        {/* Push notification prompt — only shown until user enables or dismisses */}
-        {pushPerm === 'default' && (
+        {/* Push notification prompt — hidden in view mode */}
+        {!isViewMode && pushPerm === 'default' && (
           <div className="card mb-6 flex items-center justify-between gap-4 flex-wrap"
             style={{ border: '1px solid rgba(201,162,39,0.3)', background: 'rgba(201,162,39,0.06)' }}>
             <div>
@@ -117,7 +121,7 @@ export default function Dashboard() {
             </button>
           </div>
         )}
-        {pushPerm === 'denied' && (
+        {!isViewMode && pushPerm === 'denied' && (
           <div className="card mb-6 flex items-center gap-3"
             style={{ border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.05)' }}>
             <span className="text-xl">🔕</span>

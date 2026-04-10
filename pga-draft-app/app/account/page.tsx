@@ -7,7 +7,7 @@ import toast from 'react-hot-toast';
 import { Lock, Mail, User, ChevronLeft } from 'lucide-react';
 
 export default function AccountPage() {
-  const { appUser, changePassword, changeEmail, loading } = useAuth();
+  const { appUser, changePassword, changeEmail, loading, isViewMode } = useAuth();
   const router = useRouter();
 
   // Password form
@@ -23,6 +23,7 @@ export default function AccountPage() {
 
   if (loading) return null;
   if (!appUser) { router.replace('/'); return null; }
+  if (isViewMode) { router.replace('/dashboard'); return null; }
 
   async function handlePasswordChange(e: React.FormEvent) {
     e.preventDefault();
