@@ -192,27 +192,31 @@ export function parseLeaderboard(data: ESPNLeaderboardResponse): {
     // Tee time
     const teeTime = comp.teeTime ?? comp.status?.teeTime ?? null;
 
-    // Round-by-round scores — merge linescores + statistics so both sources fill gaps.
-    // Linescores use period.number (1-indexed) and may include '—'/'-' placeholders for
-    // pending/not-yet-started rounds — skip those so only real stroke scores are stored.
+    // Round-by-round scores.
+    // Priority: statistics with explicit R1/R2/R3/R4 abbreviations come FIRST because
+    // they are unambiguous (R1 always = round 1).  Linescores use period.number which
+    // ESPN sometimes resets to 1 for the current in-progress round regardless of actual
+    // round number, causing e.g. an R2 score to be stored at index 0 (mislabelled R1).
+    // Linescores fill any slots still null after statistics as a fallback.
+    // Both sources skip '—'/'-' placeholder values for not-yet-started rounds.
     const roundScores: (string | null)[] = [null, null, null, null];
     const isPending = (v: string) => v === '—' || v === '-' || v === '--';
-    if (comp.linescores?.length) {
-      for (const ls of comp.linescores) {
-        const rnd = (ls.period?.number ?? 1) - 1;
-        if (rnd >= 0 && rnd < 4 && ls.displayValue && !isPending(ls.displayValue)) {
-          roundScores[rnd] = ls.displayValue;
-        }
-      }
-    }
-    // Always merge statistics for any rounds still null after linescores
-    // (handles the common case where linescores only contains the pending current round)
+
+    // Pass 1: explicit round labels from statistics (authoritative)
     if (comp.statistics?.length) {
       for (const s of comp.statistics) {
         const m = (s.abbreviation ?? '').toUpperCase().match(/^R([1-4])$/);
         if (m && s.displayValue && !isPending(s.displayValue)) {
-          const idx = parseInt(m[1]) - 1;
-          if (roundScores[idx] === null) roundScores[idx] = s.displayValue;
+          roundScores[parseInt(m[1]) - 1] = s.displayValue;
+        }
+      }
+    }
+    // Pass 2: linescores fill any rounds still null (don't overwrite statistics data)
+    if (comp.linescores?.length) {
+      for (const ls of comp.linescores) {
+        const rnd = (ls.period?.number ?? 1) - 1;
+        if (rnd >= 0 && rnd < 4 && ls.displayValue && !isPending(ls.displayValue)) {
+          if (roundScores[rnd] === null) roundScores[rnd] = ls.displayValue;
         }
       }
     }
