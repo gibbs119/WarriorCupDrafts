@@ -422,11 +422,6 @@ function DetailPanel({ team, isMe, cutLine, standalone, playersMap }: {
                     : p.status === 'dq'  ? 'DQ'
                     : p.positionDisplay || '—'}
                 </div>
-                {!pending && p.positionChange !== null && p.currentRound > 1 && p.positionChange !== 0 && (
-                  <span className={p.positionChange > 0 ? 'arrow-up' : 'arrow-down'}>
-                    {p.positionChange > 0 ? `▲${p.positionChange}` : `▼${Math.abs(p.positionChange)}`}
-                  </span>
-                )}
               </div>
               <div className="text-xs text-slate-600">pos</div>
             </div>
