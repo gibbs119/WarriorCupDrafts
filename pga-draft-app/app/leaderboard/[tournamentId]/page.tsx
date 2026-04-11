@@ -388,31 +388,6 @@ function DetailPanel({ team, isMe, cutLine, standalone, playersMap }: {
               </div>
             )}
 
-            {/* Score to par — current round + total (visual only) */}
-            {!pending && (
-              <div className="text-right shrink-0 w-10">
-                {(() => {
-                  const rs  = playersMap?.[p.playerId]?.roundScores;
-                  const cr  = playersMap?.[p.playerId]?.currentRound ?? p.currentRound;
-                  const rdScore = (rs && cr) ? rs[cr - 1] : null;
-                  const showRd  = rdScore !== null && p.thru !== '-';
-                  return (
-                    <>
-                      {showRd && (
-                        <div className="text-xs font-mono" style={{ color: golfScoreColor(rdScore!) }}>
-                          {rdScore}
-                        </div>
-                      )}
-                      <div className={showRd ? 'text-xs font-mono text-slate-400' : 'text-sm font-bold font-mono'}
-                        style={showRd ? {} : { color: golfScoreColor(p.score) }}>
-                        {p.score}
-                      </div>
-                      <div className="text-xs text-slate-700">{showRd ? 'total' : 'golf'}</div>
-                    </>
-                  );
-                })()}
-              </div>
-            )}
             <div className="text-right shrink-0 w-16">
               <div className="flex items-center justify-end gap-1">
                 <div className="text-sm font-bold" style={{ color: posColor }}>
