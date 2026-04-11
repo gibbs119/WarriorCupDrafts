@@ -212,26 +212,29 @@ export function parseLeaderboard(data: ESPNLeaderboardResponse): {
       }
     }
     // Pass 2: linescores fill any rounds still null, with ESPN period-number correction.
-    // ESPN sometimes resets period.number to 1 for the current in-progress round regardless
-    // of actual round number (e.g. R2 score arrives as {period:{number:1}, displayValue:'-7'}).
+    // ESPN resets period.number to 1 for the current/most-recent round regardless of the
+    // actual round number (e.g. R2 score arrives as {period:{number:1}, displayValue:'-7'}).
     // When a linescore value DIFFERS from what statistics already set at the same index,
-    // and the player has teed off (thru ≠ '-') and is past R1, remap to currentRound-1 slot.
+    // and the player is past R1 (currentRound > 1 and rnd < currentRound-1), remap the
+    // score to the first unfilled slot (indexOf null) rather than assuming currentRound-1.
+    // Using indexOf(null) correctly handles the inter-round window where ESPN has already
+    // advanced currentRound to the NEXT round (e.g. R3) but thru is still '-'.
     if (comp.linescores?.length) {
       for (const ls of comp.linescores) {
         if (!ls.displayValue || isPending(ls.displayValue)) continue;
         let rnd = (ls.period?.number ?? 1) - 1;
         if (rnd < 0 || rnd >= 4) continue;
         if (roundScores[rnd] !== null) {
-          // Conflict: statistics already set this slot.
-          // If the value differs AND the player is in a later round, ESPN mis-labeled
-          // this linescore's period — remap it to the current round's slot.
+          // Conflict: statistics already set this slot with a different value.
+          // Find the first unfilled slot as the correct target for this mis-labeled score.
+          // rnd < currentRound-1 ensures we don't remap pre-tournament placeholder data.
           if (
             ls.displayValue !== roundScores[rnd] &&
             currentRound > 1 &&
-            rnd < currentRound - 1 &&
-            thruDisplay !== '-'
+            rnd < currentRound - 1
           ) {
-            rnd = currentRound - 1;
+            const nextNull = roundScores.indexOf(null);
+            rnd = nextNull !== -1 ? nextNull : currentRound - 1;
           } else {
             continue; // same value (duplicate) or can't safely remap — skip
           }
