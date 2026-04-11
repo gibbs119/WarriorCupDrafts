@@ -1360,6 +1360,7 @@ export default function LeaderboardPage() {
   const [expandedTeam,       setExpandedTeam]       = useState<string | null>(null);
   const [dataSource,         setDataSource]         = useState('');
   const [isStale,            setIsStale]            = useState(false);
+  const [derivedCutLine,     setDerivedCutLine]     = useState<number>(65);
   const [fetchError,         setFetchError]         = useState<string | null>(null);
   const [prevRoundPositions, setPrevRoundPositions] = useState<Record<string, number | null> | null>(null);
   const [liveOdds,           setLiveOdds]           = useState<LiveOdds | null>(null);
@@ -1451,7 +1452,21 @@ export default function LeaderboardPage() {
         }
 
         const data = await res.json();
-        const { players: parsed, cutLine } = parseLeaderboard(data);
+        const { players: parsed, cutLine: espnCutLine } = parseLeaderboard(data);
+
+        // Derive cut line from actual player data so we don't rely on ESPN's
+        // detail text (often unparseable) or an admin-set override.
+        // After the cut: active survivors hold positions 1..N → N is the cut line.
+        // Before the cut: no cut-status players → fall back to ESPN-parsed value.
+        const cutHasBeenMade = Object.values(parsed).some(p => p.status === 'cut');
+        const cutLine = (() => {
+          if (!cutHasBeenMade) return espnCutLine;
+          const survivors = Object.values(parsed).filter(
+            p => p.status === 'active' && p.position !== null
+          ).length;
+          return survivors > 0 ? survivors : espnCutLine;
+        })();
+        setDerivedCutLine(cutLine);
 
         if (Object.keys(parsed).length === 0) {
           consecutiveFailures.current++;
@@ -1518,7 +1533,7 @@ export default function LeaderboardPage() {
           if (fetched) { setPrevRoundPositions(fetched); currentPrevPositions = fetched; }
         }
 
-        const scores = calculateLeaderboard(userPicksMap, mergedMap, cutLine ?? t.cutLine ?? 65, currentPrevPositions, reedRuleRef.current);
+        const scores = calculateLeaderboard(userPicksMap, mergedMap, cutLine, currentPrevPositions, reedRuleRef.current);
         setTeamScores(scores);
 
         // ── Score change flash detection ──────────────────────────────────
@@ -1569,7 +1584,7 @@ export default function LeaderboardPage() {
               for (const [id, player] of Object.entries(parsed)) {
                 prevPlayers[id] = { ...player, position: prevPositions[id] ?? null };
               }
-              const baselineScores = calculateLeaderboard(userPicksMap, prevPlayers, cutLine ?? t.cutLine ?? 65, null, reedRuleRef.current);
+              const baselineScores = calculateLeaderboard(userPicksMap, prevPlayers, cutLine, null, reedRuleRef.current);
               if (baselineScores.some(s => s.top3Score < 9000)) {
                 const baseline: Record<string, { score: number; rank: number }> = {};
                 baselineScores.forEach(s => { baseline[s.userId] = { score: s.top3Score, rank: s.rank }; });
@@ -1710,7 +1725,7 @@ export default function LeaderboardPage() {
   }
 
   const hasLiveScores = teamScores.length > 0 && teamScores.some(t => t.players.some(p => p.points < 9000));
-  const cutLine = tournament?.cutLine ?? 65;
+  const cutLine = derivedCutLine;
   const myTeam  = teamScores.find(t => t.userId === appUser.uid);
 
   // Pre-tournament: sort board by each team's earliest player tee time so users

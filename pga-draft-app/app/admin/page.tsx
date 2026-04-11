@@ -38,7 +38,6 @@ export default function AdminPage() {
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [espnId, setEspnId] = useState('');
-  const [cutLine, setCutLine] = useState(65);
   const [draftOrderInput, setDraftOrderInput] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [seeding, setSeeding] = useState(false);
@@ -84,7 +83,6 @@ export default function AdminPage() {
   function startEdit(t: Tournament) {
     setEditingId(t.id);
     setEspnId(t.espnEventId ?? '');
-    setCutLine(t.cutLine ?? 65);
     setDraftOrderInput(t.draftOrder ?? []);
   }
 
@@ -92,10 +90,10 @@ export default function AdminPage() {
     if (!editingId) return;
     setSaving(true);
     try {
-      await updateTournament(editingId, { espnEventId: espnId, cutLine, draftOrder: draftOrderInput });
+      await updateTournament(editingId, { espnEventId: espnId, draftOrder: draftOrderInput });
       setTournaments((prev) =>
         prev.map((t) =>
-          t.id === editingId ? { ...t, espnEventId: espnId, cutLine, draftOrder: draftOrderInput } : t
+          t.id === editingId ? { ...t, espnEventId: espnId, draftOrder: draftOrderInput } : t
         )
       );
       toast.success('Saved!');
@@ -180,7 +178,7 @@ export default function AdminPage() {
       await updateTournament(t.id, {
         espnEventId: t.espnEventId || '401811937',
         draftOrder: randomOrder,
-        cutLine: t.cutLine || 65,
+        cutLine: 65,
       });
       // 3. Initialize snake draft + open it
       const totalPicks = (t.maxPicks || 5) * randomOrder.length;
@@ -524,7 +522,6 @@ export default function AdminPage() {
                     </p>
                     <p className="text-slate-500 text-xs mt-0.5">
                       ESPN ID: <span className="font-mono" style={{ color: t.espnEventId ? '#4ade80' : '#f87171' }}>{t.espnEventId || '⚠ not set'}</span>
-                      {' · '}Cut: {t.cutLine}
                       {' · '}Draft order: <span style={{ color: t.draftOrder?.length ? '#4ade80' : '#f87171' }}>{t.draftOrder?.length ? `${t.draftOrder.length} users ✓` : '⚠ not set'}</span>
                     </p>
                   </div>
@@ -658,12 +655,6 @@ export default function AdminPage() {
                         <input type="text" value={espnId} onChange={(e) => setEspnId(e.target.value)}
                           placeholder="e.g. 401811937"
                           className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white font-mono focus:outline-none focus:ring-2 focus:ring-blue-600" />
-                      </div>
-
-                      <div>
-                        <label className="text-xs text-slate-400 block mb-1">Cut Line Position</label>
-                        <input type="number" value={cutLine} onChange={(e) => setCutLine(Number(e.target.value))}
-                          className="w-32 bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-600" />
                       </div>
 
                       <div>
