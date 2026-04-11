@@ -112,7 +112,21 @@ async function generateSummary(forceTournamentId?: string, forceRound?: number) 
     const playersMap = playersSnap.exists() ? playersSnap.val() : {};
 
     const picks = draftState.picks ?? [];
-    const cutLine = activeTournament.cutLine;
+
+    // Derive cut line from live player data (same logic as leaderboard page).
+    // After the cut: active survivors hold positions 1..N → N is the cut line.
+    // Fall back to the stored tournament value, then 65.
+    const allPlayers = Object.values(playersMap) as Array<{
+      status?: string; position?: number | null;
+    }>;
+    const cutHasBeenMade = allPlayers.some(p => p.status === 'cut');
+    const cutLine = (() => {
+      if (!cutHasBeenMade) return activeTournament.cutLine ?? 65;
+      const survivors = allPlayers.filter(
+        p => p.status === 'active' && typeof p.position === 'number' && p.position !== null
+      ).length;
+      return survivors > 0 ? survivors : (activeTournament.cutLine ?? 65);
+    })();
 
     // Derive round: admin can override via forceRound; otherwise infer from player data
     let currentRound: number;
