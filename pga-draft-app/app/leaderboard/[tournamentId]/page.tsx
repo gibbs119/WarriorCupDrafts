@@ -388,6 +388,14 @@ function DetailPanel({ team, isMe, cutLine, standalone, playersMap }: {
               </div>
             )}
 
+            {!pending && (
+              <div className="text-right shrink-0 w-10">
+                <div className="text-sm font-bold font-mono" style={{ color: golfScoreColor(p.score) }}>
+                  {p.score || '—'}
+                </div>
+                <div className="text-xs text-slate-700">total</div>
+              </div>
+            )}
             <div className="text-right shrink-0 w-16">
               <div className="flex items-center justify-end gap-1">
                 <div className="text-sm font-bold" style={{ color: posColor }}>
@@ -439,6 +447,8 @@ function TrendChart({ snapshots, teams, myUserId }: {
   teams: TeamScore[];
   myUserId: string;
 }) {
+  const [focusedId, setFocusedId] = React.useState<string | null>(null);
+
   if (snapshots.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 rounded-xl"
@@ -540,8 +550,10 @@ function TrendChart({ snapshots, teams, myUserId }: {
 
         {/* Team lines + dots */}
         {teams.map((team, ti) => {
-          const color = TEAM_COLORS[ti % TEAM_COLORS.length];
-          const isMe  = team.userId === myUserId;
+          const color    = TEAM_COLORS[ti % TEAM_COLORS.length];
+          const isMe     = team.userId === myUserId;
+          const isFocused  = focusedId === null || focusedId === team.userId;
+          const dimmed   = !isFocused;
 
           // Build valid points for this team (skip hours where they had no score)
           const pts: { x: number; y: number }[] = [];
@@ -560,12 +572,12 @@ function TrendChart({ snapshots, teams, myUserId }: {
             .join(' ');
 
           return (
-            <g key={team.userId}>
+            <g key={team.userId} style={{ transition: 'opacity 0.2s' }} opacity={dimmed ? 0.1 : 1}>
               <path
                 d={pathD}
                 fill="none"
                 stroke={color}
-                strokeWidth={isMe ? 2.5 : 1.5}
+                strokeWidth={focusedId === team.userId ? 3 : isMe ? 2.5 : 1.5}
                 strokeOpacity={isMe ? 1 : 0.55}
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -605,15 +617,21 @@ function TrendChart({ snapshots, teams, myUserId }: {
         })}
       </svg>
 
-      {/* Legend */}
+      {/* Legend — tap a team to isolate its line; tap again to reset */}
       <div className="flex flex-wrap gap-x-4 gap-y-1.5 px-2 pt-3 pb-1">
         {teams.map((team, ti) => {
-          const color = TEAM_COLORS[ti % TEAM_COLORS.length];
-          const isMe  = team.userId === myUserId;
-          const lastReal = [...snapshots].reverse().find(s => (s.scores[team.userId] ?? 9999) < 9000);
+          const color     = TEAM_COLORS[ti % TEAM_COLORS.length];
+          const isMe      = team.userId === myUserId;
+          const isFocused = focusedId === null || focusedId === team.userId;
+          const lastReal  = [...snapshots].reverse().find(s => (s.scores[team.userId] ?? 9999) < 9000);
           const lastScore = lastReal?.scores[team.userId];
           return (
-            <div key={team.userId} className="flex items-center gap-1.5 text-xs">
+            <button
+              key={team.userId}
+              onClick={() => setFocusedId(focusedId === team.userId ? null : team.userId)}
+              className="flex items-center gap-1.5 text-xs"
+              style={{ opacity: isFocused ? 1 : 0.35, transition: 'opacity 0.2s', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+            >
               <div style={{ width: 16, height: 2.5, borderRadius: 2, background: color, opacity: isMe ? 1 : 0.6 }} />
               <span style={{ color: isMe ? color : '#94a3b8', fontWeight: isMe ? 700 : 400 }}>
                 {team.username}
@@ -623,9 +641,18 @@ function TrendChart({ snapshots, teams, myUserId }: {
                   {fmtPts(lastScore)}
                 </span>
               )}
-            </div>
+            </button>
           );
         })}
+        {focusedId !== null && (
+          <button
+            onClick={() => setFocusedId(null)}
+            className="text-xs text-slate-500 underline"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+          >
+            show all
+          </button>
+        )}
       </div>
     </div>
   );
@@ -639,6 +666,8 @@ function OddsTrendChart({ snapshots, teams, myUserId }: {
   teams: TeamScore[];
   myUserId: string;
 }) {
+  const [focusedId, setFocusedId] = React.useState<string | null>(null);
+
   if (snapshots.length === 0) return null;
 
   const PX_PER_POINT = 44;
@@ -686,8 +715,9 @@ function OddsTrendChart({ snapshots, teams, myUserId }: {
 
         {/* Team lines */}
         {teams.map((team, ti) => {
-          const color = TEAM_COLORS[ti % TEAM_COLORS.length];
-          const isMe  = team.userId === myUserId;
+          const color    = TEAM_COLORS[ti % TEAM_COLORS.length];
+          const isMe     = team.userId === myUserId;
+          const isFocused = focusedId === null || focusedId === team.userId;
 
           const pts: { x: number; y: number }[] = [];
           snapshots.forEach((snap, si) => {
@@ -703,10 +733,10 @@ function OddsTrendChart({ snapshots, teams, myUserId }: {
             .join(' ');
 
           return (
-            <g key={team.userId}>
+            <g key={team.userId} style={{ transition: 'opacity 0.2s' }} opacity={isFocused ? 1 : 0.1}>
               <path
                 d={pathD} fill="none" stroke={color}
-                strokeWidth={isMe ? 2.5 : 1.5}
+                strokeWidth={focusedId === team.userId ? 3 : isMe ? 2.5 : 1.5}
                 strokeOpacity={isMe ? 1 : 0.55}
                 strokeLinecap="round" strokeLinejoin="round"
               />
@@ -740,16 +770,22 @@ function OddsTrendChart({ snapshots, teams, myUserId }: {
         })}
       </svg>
 
-      {/* Legend */}
+      {/* Legend — tap a team to isolate its line */}
       <div className="flex flex-wrap gap-x-4 gap-y-1.5 px-2 pt-3 pb-1">
         {teams.map((team, ti) => {
-          const color  = TEAM_COLORS[ti % TEAM_COLORS.length];
-          const isMe   = team.userId === myUserId;
-          const latest = snapshots.length > 0
+          const color      = TEAM_COLORS[ti % TEAM_COLORS.length];
+          const isMe       = team.userId === myUserId;
+          const isFocused  = focusedId === null || focusedId === team.userId;
+          const latest     = snapshots.length > 0
             ? snapshots[snapshots.length - 1].odds[team.userId]
             : undefined;
           return (
-            <div key={team.userId} className="flex items-center gap-1.5 text-xs">
+            <button
+              key={team.userId}
+              onClick={() => setFocusedId(focusedId === team.userId ? null : team.userId)}
+              className="flex items-center gap-1.5 text-xs"
+              style={{ opacity: isFocused ? 1 : 0.35, transition: 'opacity 0.2s', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+            >
               <div style={{ width: 16, height: 2.5, borderRadius: 2, background: color, opacity: isMe ? 1 : 0.6 }} />
               <span style={{ color: isMe ? color : '#94a3b8', fontWeight: isMe ? 700 : 400 }}>
                 {team.username}
@@ -757,9 +793,18 @@ function OddsTrendChart({ snapshots, teams, myUserId }: {
               {latest !== undefined && (
                 <span className="font-mono" style={{ color: '#94a3b8' }}>{latest}%</span>
               )}
-            </div>
+            </button>
           );
         })}
+        {focusedId !== null && (
+          <button
+            onClick={() => setFocusedId(null)}
+            className="text-xs text-slate-500 underline"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+          >
+            show all
+          </button>
+        )}
       </div>
     </div>
   );
