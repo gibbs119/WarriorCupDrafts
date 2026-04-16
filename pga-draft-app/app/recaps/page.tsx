@@ -33,6 +33,12 @@ interface DailySummary {
   generatedAt: number;
   isFinalRound?: boolean;
   // Round 4 extended fields
+  r4HeroName?: string;
+  r4HeroTeam?: string;
+  r4HeroSummary?: string;
+  r4ZeroName?: string;
+  r4ZeroTeam?: string;
+  r4ZeroSummary?: string;
   tournamentJourney?: string;
   chartAnalysis?: string;
   draftReportCard?: string;
@@ -104,27 +110,61 @@ function DailySummaryCard({ summary }: { summary: DailySummary }) {
             <p className="text-sm text-slate-300 leading-relaxed">{summary.standingsBreakdown}</p>
           </div>
 
-          {/* Hero & Zero */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-xl p-3"
-              style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)' }}>
-              <div className="flex items-center gap-1.5 mb-1.5">
-                <TrendingUp size={12} className="text-green-400" />
-                <span className="text-xs font-bold uppercase tracking-widest text-green-400">Hero</span>
+          {/* Round 4 Hero & Zero (only for final round recaps) */}
+          {summary.isFinalRound && summary.r4HeroName && (
+            <div className="space-y-1.5">
+              <p className="text-xs font-bold uppercase tracking-widest text-slate-500 px-0.5">Round 4</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-xl p-3"
+                  style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)' }}>
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <TrendingUp size={12} className="text-green-400" />
+                    <span className="text-xs font-bold uppercase tracking-widest text-green-400">Hero</span>
+                  </div>
+                  <p className="text-white font-bold text-sm leading-tight">{summary.r4HeroName}</p>
+                  <p className="text-xs text-green-400/70 mb-1.5">{summary.r4HeroTeam}&apos;s pick</p>
+                  <p className="text-xs text-slate-400 leading-relaxed">{summary.r4HeroSummary}</p>
+                </div>
+                <div className="rounded-xl p-3"
+                  style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)' }}>
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <TrendingDown size={12} className="text-red-400" />
+                    <span className="text-xs font-bold uppercase tracking-widest text-red-400">Zero</span>
+                  </div>
+                  <p className="text-white font-bold text-sm leading-tight">{summary.r4ZeroName}</p>
+                  <p className="text-xs text-red-400/70 mb-1.5">{summary.r4ZeroTeam}&apos;s pick</p>
+                  <p className="text-xs text-slate-400 leading-relaxed">{summary.r4ZeroSummary}</p>
+                </div>
               </div>
-              <p className="text-white font-bold text-sm leading-tight">{summary.heroName}</p>
-              <p className="text-xs text-green-400/70 mb-1.5">{summary.heroTeam}&apos;s pick</p>
-              <p className="text-xs text-slate-400 leading-relaxed">{summary.heroSummary}</p>
             </div>
-            <div className="rounded-xl p-3"
-              style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)' }}>
-              <div className="flex items-center gap-1.5 mb-1.5">
-                <TrendingDown size={12} className="text-red-400" />
-                <span className="text-xs font-bold uppercase tracking-widest text-red-400">Zero</span>
+          )}
+
+          {/* Hero & Zero (tournament-wide when R4, otherwise just "today") */}
+          <div className="space-y-1.5">
+            {summary.isFinalRound && summary.r4HeroName && (
+              <p className="text-xs font-bold uppercase tracking-widest text-slate-500 px-0.5">Tournament</p>
+            )}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-xl p-3"
+                style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)' }}>
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <TrendingUp size={12} className="text-green-400" />
+                  <span className="text-xs font-bold uppercase tracking-widest text-green-400">Hero</span>
+                </div>
+                <p className="text-white font-bold text-sm leading-tight">{summary.heroName}</p>
+                <p className="text-xs text-green-400/70 mb-1.5">{summary.heroTeam}&apos;s pick</p>
+                <p className="text-xs text-slate-400 leading-relaxed">{summary.heroSummary}</p>
               </div>
-              <p className="text-white font-bold text-sm leading-tight">{summary.zeroName}</p>
-              <p className="text-xs text-red-400/70 mb-1.5">{summary.zeroTeam}&apos;s pick</p>
-              <p className="text-xs text-slate-400 leading-relaxed">{summary.zeroSummary}</p>
+              <div className="rounded-xl p-3"
+                style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)' }}>
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <TrendingDown size={12} className="text-red-400" />
+                  <span className="text-xs font-bold uppercase tracking-widest text-red-400">Zero</span>
+                </div>
+                <p className="text-white font-bold text-sm leading-tight">{summary.zeroName}</p>
+                <p className="text-xs text-red-400/70 mb-1.5">{summary.zeroTeam}&apos;s pick</p>
+                <p className="text-xs text-slate-400 leading-relaxed">{summary.zeroSummary}</p>
+              </div>
             </div>
           </div>
 

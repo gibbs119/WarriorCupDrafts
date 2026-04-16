@@ -166,6 +166,7 @@ async function generateSummary(forceTournamentId?: string, forceRound?: number) 
       thru: string;
       status: string;
       points: number;
+      r4Score?: string | null;  // Round 4 score only (for final-round hero/zero)
     }
 
     interface TeamEntry {
@@ -194,6 +195,9 @@ async function generateSummary(forceTournamentId?: string, forceRound?: number) 
           points = position <= 10 ? TOP_10_POINTS[position - 1] : position;
         }
 
+        const roundScores = pd.roundScores as (string | null)[] | undefined;
+        const r4Score = roundScores?.[3] ?? null;
+
         return {
           name: p.playerName,
           position: pd.positionDisplay ?? '-',
@@ -201,6 +205,7 @@ async function generateSummary(forceTournamentId?: string, forceRound?: number) 
           thru: pd.thru ?? '-',
           status,
           points,
+          r4Score,
         };
       });
 
@@ -322,8 +327,7 @@ async function generateSummary(forceTournamentId?: string, forceRound?: number) 
     const last   = teams[teams.length - 1];
 
     if (isFinalRound) {
-      // Build a plain-English standings summary in CODE so the AI
-      // never has to interpret the scoring math — it just adds personality.
+      // Build a plain-English standings summary so the AI never interprets scoring math.
       const standingsSentences = teams.map(t => {
         const sorted = [...t.players].sort((a, b) => a.points - b.points);
         const top3 = sorted.slice(0, 3);
@@ -331,7 +335,8 @@ async function generateSummary(forceTournamentId?: string, forceRound?: number) 
           .filter(p => p.points < 9000)
           .map(p => {
             const bonus = p.points < 0 ? ` (top-10 bonus)` : p.status === 'cut' ? ` (missed cut)` : '';
-            return `${p.name} at ${p.position || '—'}${bonus}`;
+            const r4 = p.r4Score ? `, R4: ${p.r4Score}` : '';
+            return `${p.name} at ${p.position || '—'}${bonus}${r4}`;
           }).join(', ');
         const finishLabel = t.rank === 1 ? '🏆 1st place WINNER'
           : t.rank === 2 ? '2nd place'
@@ -339,6 +344,15 @@ async function generateSummary(forceTournamentId?: string, forceRound?: number) 
           : `${ordinal(t.rank)} place`;
         return `${finishLabel}: ${t.username} — Best 3 golfers: ${top3Names || 'none scored yet'}`;
       }).join('\n');
+
+      // R4-only round scores block — used to pick today's hero/zero independently
+      // of the overall tournament standings.  Base it on ALL players (bench too).
+      const r4Block = teams.map(t => {
+        const withR4 = t.players
+          .filter(p => p.r4Score && p.r4Score !== '—' && p.r4Score !== '-')
+          .map(p => `  ${p.name} (${t.username}): R4 ${p.r4Score}, final pos ${p.position}`);
+        return withR4.join('\n');
+      }).filter(Boolean).join('\n');
 
       prompt = `You are writing the CHAMPIONSHIP FINAL RECAP for ${activeTournament.name} for a private fantasy golf draft league of close friends.
 
@@ -357,7 +371,9 @@ ${scoringRules}
 FINAL STANDINGS (copy these names and places exactly):
 ${standingsSentences}
 
-${progressionBlock ? `HOW THE LEAD CHANGED OVER THE WEEK (1st = leading at that moment):
+${r4Block ? `ROUND 4 SCORES FOR ALL GOLFERS (use this ONLY for the R4 hero/zero, do NOT use final position for this):
+${r4Block}
+` : ''}${progressionBlock ? `HOW THE LEAD CHANGED OVER THE WEEK (1st = leading at that moment):
 ${progressionBlock}
 ` : ''}${gradesBlock ? `PRE-TOURNAMENT PREDICTIONS VS ACTUAL RESULTS:
 ${gradesBlock}
@@ -366,24 +382,32 @@ ${gradesBlock}
 YOUR CREATIVE TASK
 ════════════════════════════════════════
 
-Write six sections using ONLY the facts above. Add humor, roasting, drama, and personality — but never change a name, a finish position, or a ranking:
+Write seven sections using ONLY the facts above. Add humor, roasting, drama, and personality — but never change a name, a finish position, or a ranking:
 
 1. **FINAL STANDINGS BREAKDOWN** (~4-5 sentences): Crown ${winner.username} as champion. Roast the lower finishers. Be dramatic — this is the finale. Reference specific golfer names from the standings.
 
-2. **HERO & ZERO OF THE TOURNAMENT** (2-3 sentences each): Pick one golfer as the Hero (best performer for their team across the whole week) and one as the Zero (biggest bust). Use names from the data.
+2. **ROUND 4 HERO & ZERO** (2-3 sentences each): Who played the BEST round today (lowest R4 score from the R4 SCORES block above)? Who played the WORST round today (highest R4 score)? Base this ONLY on today's R4 score — not the overall tournament finish. Name the golfer AND their team owner.
 
-3. **TOURNAMENT CHAMPION VERDICT** (~3 sentences): Declare ${winner.username} the winner. Explain why they won based on their golfers' finishes. Cheeky send-off to everyone else.
+3. **TOURNAMENT HERO & ZERO** (2-3 sentences each): Who was the best performer for their team across the ENTIRE tournament (4 rounds)? Who was the biggest bust or disappointment across all 4 rounds? This is separate from today — judge the full week. Name the golfer AND their team owner.
 
-4. **TOURNAMENT JOURNEY** (~3-4 sentences): Using the progression data, describe who led early and how it changed. Reference the team names from the standings-over-time data above.
+4. **TOURNAMENT CHAMPION VERDICT** (~3 sentences): Declare ${winner.username} the winner. Explain why they won based on their golfers' finishes. Cheeky send-off to everyone else.
 
-5. **SCORE CHART ANALYSIS** (~3 sentences): What was the most dramatic shift in the standings? Who was on a streak, who collapsed?
+5. **TOURNAMENT JOURNEY** (~3-4 sentences): Using the progression data, describe who led early and how it changed. Reference the team names from the standings-over-time data above.
 
-6. **DRAFT REPORT CARD** (~4-5 sentences): For each team, compare the pre-tournament prediction to the actual result. Call out the biggest hit (correctly predicted winner?) and miss (predicted to win, finished last?).
+6. **SCORE CHART ANALYSIS** (~3 sentences): What was the most dramatic shift in the standings? Who was on a streak, who collapsed?
+
+7. **DRAFT REPORT CARD** (~4-5 sentences): For each team, compare the pre-tournament prediction to the actual result. Call out the biggest hit (correctly predicted winner?) and miss (predicted to win, finished last?).
 
 Respond ONLY with valid JSON — no markdown, no backticks, no extra text:
 {
   "dayLabel": "Final Round",
   "standingsBreakdown": "...",
+  "r4HeroName": "...",
+  "r4HeroTeam": "...",
+  "r4HeroSummary": "...",
+  "r4ZeroName": "...",
+  "r4ZeroTeam": "...",
+  "r4ZeroSummary": "...",
   "heroName": "...",
   "heroTeam": "...",
   "heroSummary": "...",
@@ -397,9 +421,10 @@ Respond ONLY with valid JSON — no markdown, no backticks, no extra text:
 }`;
 
       jsonShape = `{
-  "dayLabel", "standingsBreakdown", "heroName", "heroTeam", "heroSummary",
-  "zeroName", "zeroTeam", "zeroSummary", "outlook",
-  "tournamentJourney", "chartAnalysis", "draftReportCard"
+  "dayLabel", "standingsBreakdown",
+  "r4HeroName", "r4HeroTeam", "r4HeroSummary", "r4ZeroName", "r4ZeroTeam", "r4ZeroSummary",
+  "heroName", "heroTeam", "heroSummary", "zeroName", "zeroTeam", "zeroSummary",
+  "outlook", "tournamentJourney", "chartAnalysis", "draftReportCard"
 }`;
       void jsonShape;
     } else {
