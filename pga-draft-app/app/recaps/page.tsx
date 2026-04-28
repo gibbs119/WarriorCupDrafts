@@ -122,7 +122,7 @@ function DailySummaryCard({ summary }: { summary: DailySummary }) {
                     <span className="text-xs font-bold uppercase tracking-widest text-green-400">Hero</span>
                   </div>
                   <p className="text-white font-bold text-sm leading-tight">{summary.r4HeroName}</p>
-                  <p className="text-xs text-green-400/70 mb-1.5">{summary.r4HeroTeam}&apos;s pick</p>
+                  {summary.r4HeroTeam && <p className="text-xs text-green-400/70 mb-1.5">{summary.r4HeroTeam}&apos;s pick</p>}
                   <p className="text-xs text-slate-400 leading-relaxed">{summary.r4HeroSummary}</p>
                 </div>
                 <div className="rounded-xl p-3"
@@ -132,7 +132,7 @@ function DailySummaryCard({ summary }: { summary: DailySummary }) {
                     <span className="text-xs font-bold uppercase tracking-widest text-red-400">Zero</span>
                   </div>
                   <p className="text-white font-bold text-sm leading-tight">{summary.r4ZeroName}</p>
-                  <p className="text-xs text-red-400/70 mb-1.5">{summary.r4ZeroTeam}&apos;s pick</p>
+                  {summary.r4ZeroTeam && <p className="text-xs text-red-400/70 mb-1.5">{summary.r4ZeroTeam}&apos;s pick</p>}
                   <p className="text-xs text-slate-400 leading-relaxed">{summary.r4ZeroSummary}</p>
                 </div>
               </div>
@@ -152,7 +152,7 @@ function DailySummaryCard({ summary }: { summary: DailySummary }) {
                   <span className="text-xs font-bold uppercase tracking-widest text-green-400">Hero</span>
                 </div>
                 <p className="text-white font-bold text-sm leading-tight">{summary.heroName}</p>
-                <p className="text-xs text-green-400/70 mb-1.5">{summary.heroTeam}&apos;s pick</p>
+                {summary.heroTeam && <p className="text-xs text-green-400/70 mb-1.5">{summary.heroTeam}&apos;s pick</p>}
                 <p className="text-xs text-slate-400 leading-relaxed">{summary.heroSummary}</p>
               </div>
               <div className="rounded-xl p-3"
@@ -162,7 +162,7 @@ function DailySummaryCard({ summary }: { summary: DailySummary }) {
                   <span className="text-xs font-bold uppercase tracking-widest text-red-400">Zero</span>
                 </div>
                 <p className="text-white font-bold text-sm leading-tight">{summary.zeroName}</p>
-                <p className="text-xs text-red-400/70 mb-1.5">{summary.zeroTeam}&apos;s pick</p>
+                {summary.zeroTeam && <p className="text-xs text-red-400/70 mb-1.5">{summary.zeroTeam}&apos;s pick</p>}
                 <p className="text-xs text-slate-400 leading-relaxed">{summary.zeroSummary}</p>
               </div>
             </div>

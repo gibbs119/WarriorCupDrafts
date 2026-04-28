@@ -1,4 +1,4 @@
-import { TOP_10_POINTS, SCORING_PLAYERS } from './constants';
+import { TOP_10_POINTS, SCORING_PLAYERS, UNSTARTED_POINTS } from './constants';
 import type { Player, PlayerScore, TeamScore, DraftPick } from './types';
 
 /**
@@ -19,8 +19,7 @@ export function calculatePoints(
   }
 
   if (position === null || position === 0) {
-    // Tournament hasn't started yet — treat as worst possible (not yet counted)
-    return 9999;
+    return UNSTARTED_POINTS;
   }
 
   if (position <= 10) {
@@ -116,12 +115,13 @@ export function buildPlayerScores(
     }
 
     if (!player) {
+      console.warn(`[scoring] Player not found in leaderboard — id="${pick.playerId}" name="${pick.playerName}"`);
       return {
         playerId: pick.playerId,
         playerName: pick.playerName,
-        position: 9999,
+        position: UNSTARTED_POINTS,
         positionDisplay: '-',
-        points: 9999,
+        points: UNSTARTED_POINTS,
         status: 'active' as const,
         countsInTop3: false,
         thru: '-',
@@ -146,7 +146,7 @@ export function buildPlayerScores(
     return {
       playerId: player.id,
       playerName: player.name,
-      position: player.position ?? 9999,
+      position: player.position ?? UNSTARTED_POINTS,
       positionDisplay: player.positionDisplay,
       points,
       status: player.status,
@@ -228,7 +228,7 @@ export function calculateLeaderboard(
    */
   function getRosterPositionsSorted(team: TeamScore): number[] {
     return team.players
-      .map((p) => (p.position === null || p.position === 9999 ? 999 : p.position))
+      .map((p) => (p.position === null || p.position === UNSTARTED_POINTS ? 999 : p.position))
       .sort((a, b) => a - b);
   }
 

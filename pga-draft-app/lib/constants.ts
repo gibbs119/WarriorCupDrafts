@@ -93,6 +93,8 @@ export const TOURNAMENTS = [
 export const TOP_10_POINTS = [-25, -15, -10, -8, -6, -5, -4, -3, -2, -1];
 export const SCORING_PLAYERS = 3;
 export const PICK_TIMER_SECONDS = 120;
+// Sentinel: player exists in picks but hasn't teed off yet — worst possible score
+export const UNSTARTED_POINTS = 9999;
 
 // ─── Tournament timezone offsets (hours from UTC) ─────────────────────────────
 // Used for hourly snapshot windows and cron timing.
