@@ -19,7 +19,7 @@ import {
 } from '@/lib/db';
 import { requestPushToken, getPushPermission, type PushPermission } from '@/lib/fcm';
 import { buildSnakeDraftOrder, getCurrentPicker } from '@/lib/scoring';
-import { STATIC_FIELDS } from '@/lib/constants';
+import { STATIC_FIELDS, SCORING_PLAYERS } from '@/lib/constants';
 import { parseLeaderboard } from '@/lib/espn';
 import {
   buildEspnLookup,
@@ -110,6 +110,8 @@ export default function DraftRoomPage() {
   const [sortMode, setSortMode] = useState<SortMode>('odds');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [pickLoading, setPickLoading] = useState(false);
+  const [pendingPick, setPendingPick] = useState<DraftPlayer | null>(null);
+  const pickSubmittingRef = useRef(false);
   const [statusMsg, setStatusMsg] = useState('');
   const [myTurnAlert, setMyTurnAlert] = useState(false);    // in-tab banner: your turn
   const [onDeckAlert, setOnDeckAlert] = useState(false);    // in-tab banner: you're next
@@ -399,6 +401,20 @@ export default function DraftRoomPage() {
   const currentRound = Math.floor(currentPick / Math.max(tournament.draftOrder.length, 1)) + 1;
   const currentPickerName = currentPickerUid ? usernameMap[currentPickerUid] : '—';
   const myPicks = (draftState?.picks ?? []).filter((p) => p.userId === appUser.uid);
+
+  // Bench-vs-counting: once roster is full, project which SCORING_PLAYERS picks will count
+  // by sorting on win odds (impliedProb). Highlighted at the end of the draft only.
+  const rosterFull = myPicks.length >= tournament.maxPicks;
+  const countingPickIds = (() => {
+    if (!rosterFull) return new Set<string>();
+    const withOdds = myPicks.map((pick) => {
+      const mp = mergedPlayers.find((p) => p.espnId === pick.playerId || p.id === pick.playerId);
+      return { id: pick.playerId, prob: mp?.impliedProb ?? -1 };
+    });
+    withOdds.sort((a, b) => b.prob - a.prob);
+    return new Set(withOdds.slice(0, SCORING_PLAYERS).map((x) => x.id));
+  })();
+
   const pickedIds = new Set((draftState?.picks ?? []).map((p) => p.playerId));
   // Track picked player keys using playerKey() — this applies the nickname map
   // so "Cam Davis" and "Cameron Davis" both resolve to the same key.
@@ -480,8 +496,17 @@ export default function DraftRoomPage() {
 
   // ─── Pick handler ────────────────────────────────────────────────────────────
 
-  async function handlePick(player: DraftPlayer) {
-    if (!isMyTurn || !draftState || pickLoading) return;
+  // Opens the confirmation modal — actual submission happens in confirmPick
+  function handlePick(player: DraftPlayer) {
+    if (!isMyTurn || !draftState || pickLoading || pickSubmittingRef.current) return;
+    setPendingPick(player);
+  }
+
+  async function confirmPick() {
+    const player = pendingPick;
+    if (!player || !isMyTurn || !draftState || pickSubmittingRef.current) return;
+    pickSubmittingRef.current = true;
+    setPendingPick(null);
     setPickLoading(true);
     setStatusMsg('');
     try {
@@ -513,10 +538,12 @@ export default function DraftRoomPage() {
           body: JSON.stringify({ tournamentId, baseUrl: window.location.origin }),
         }).catch(() => {});
       }
-    } catch {
-      setStatusMsg('❌ Pick failed — try again.');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '';
+      setStatusMsg(msg.includes('Out-of-turn') ? '❌ Not your turn — refresh and try again.' : '❌ Pick failed — try again.');
     } finally {
       setPickLoading(false);
+      pickSubmittingRef.current = false;
     }
   }
 
@@ -685,16 +712,22 @@ export default function DraftRoomPage() {
                       (p) => p.espnId === pick.playerId || p.id === pick.playerId
                     );
                     const initials = pick.playerName.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase();
+                    const isCounting = rosterFull && countingPickIds.has(pick.playerId);
+                    const isBench = rosterFull && !countingPickIds.has(pick.playerId);
                     return (
                       <div key={pick.playerId} className="flex items-center gap-3 rounded-xl px-3 py-2.5"
-                        style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                        style={{ background: 'rgba(255,255,255,0.04)', border: `1px solid ${isCounting ? 'rgba(34,197,94,0.25)' : 'rgba(255,255,255,0.07)'}` }}>
                         <div className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center font-bold text-xs"
                           style={{ background: theme.accentLight, color: theme.accentMid, border: `1px solid ${theme.cardBorder}` }}>
                           {initials}
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="text-sm font-semibold text-white truncate">{pick.playerName}</div>
-                          <div className="text-xs text-slate-500">Pick #{i + 1}</div>
+                          <div className="text-xs text-slate-500">
+                            Pick #{i + 1}
+                            {isCounting && <span className="ml-1.5 text-green-400 font-semibold">· est. counting</span>}
+                            {isBench && <span className="ml-1.5 text-slate-600">· est. bench</span>}
+                          </div>
                         </div>
                         {merged?.oddsDisplay && (
                           <span className="text-xs font-mono font-bold shrink-0"
@@ -917,7 +950,7 @@ export default function DraftRoomPage() {
                           </>}
                           {isMyTurn && !draftComplete && (
                             <td className="py-2 pl-2">
-                              <button onClick={() => handlePick(player)} disabled={pickLoading}
+                              <button onClick={() => handlePick(player)} disabled={pickLoading || pickSubmittingRef.current}
                                 className="text-xs py-1 px-2 w-full rounded-lg font-bold transition-all disabled:opacity-40"
                                 style={{ background: theme.accent, color: '#fff' }}>
                                 Pick
@@ -942,6 +975,52 @@ export default function DraftRoomPage() {
           </div>
         </div>
       </main>
+
+      {/* ── Pick confirmation modal ── */}
+      {pendingPick && (
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
+          style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)' }}
+          onClick={() => setPendingPick(null)}
+        >
+          <div
+            className="card w-full max-w-sm p-6 space-y-5"
+            style={{ border: `2px solid ${theme.accent}`, boxShadow: theme.cardGlow }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="text-center space-y-1">
+              <p className="text-xs font-bold uppercase tracking-widest text-slate-500">Confirm Pick</p>
+              <p className="text-2xl font-bold text-white leading-tight">{pendingPick.displayName}</p>
+              <div className="flex justify-center items-center gap-3 text-sm pt-1 flex-wrap">
+                {pendingPick.oddsDisplay && (
+                  <span className="font-mono font-bold" style={{ color: '#C9A227' }}>{pendingPick.oddsDisplay} to win</span>
+                )}
+                {pendingPick.top10Display && (
+                  <span className="font-mono text-slate-400">{pendingPick.top10Display} top 10</span>
+                )}
+                {pendingPick.worldRanking && (
+                  <span className="text-slate-500">#{pendingPick.worldRanking} OWGR</span>
+                )}
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setPendingPick(null)}
+                className="flex-1 py-3 rounded-xl font-bold text-slate-300 transition-colors hover:bg-slate-700"
+                style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}>
+                Cancel
+              </button>
+              <button
+                onClick={confirmPick}
+                disabled={pickLoading}
+                className="flex-1 py-3 rounded-xl font-bold text-white transition-all disabled:opacity-50"
+                style={{ background: theme.accent }}>
+                {pickLoading ? 'Picking…' : `⛳ Pick ${pendingPick.displayName.split(' ').pop()}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

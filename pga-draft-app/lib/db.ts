@@ -75,9 +75,20 @@ export async function submitPick(
 ) {
   // Use runTransaction to atomically append the pick — prevents two simultaneous
   // picks from clobbering each other via a read-then-write race condition.
+  let outOfTurn = false;
   await runTransaction(ref(db, `drafts/${tournamentId}`), (current) => {
     if (!current) return current; // abort if node doesn't exist yet
     const existingPicks: DraftPick[] = Array.isArray(current.picks) ? current.picks : [];
+    const snakeDraftOrder: string[] = Array.isArray(current.snakeDraftOrder) ? current.snakeDraftOrder : [];
+
+    // Server-side turn enforcement: reject if user is not the expected picker.
+    const expectedUid = snakeDraftOrder[existingPicks.length];
+    if (expectedUid && pick.userId !== expectedUid) {
+      outOfTurn = true;
+      return; // abort transaction — no write
+    }
+    outOfTurn = false; // clear on retry in case earlier iteration fired with stale data
+
     return {
       ...current,
       picks: [...existingPicks, pick],
@@ -85,6 +96,8 @@ export async function submitPick(
       status: isDraftComplete ? 'complete' : 'open',
     };
   });
+
+  if (outOfTurn) throw new Error('Out-of-turn pick rejected by server.');
 
   if (isDraftComplete) {
     await updateTournament(tournamentId, { draftComplete: true, status: 'active' });
@@ -393,6 +406,31 @@ export async function resetDraft(tournamentId: string): Promise<void> {
   updates[`wdRequests/${tournamentId}`] = null;        // clear WD requests
   updates[`rosterEdits/${tournamentId}`] = null;       // clear edit log
   await update(ref(db), updates);
+}
+
+/**
+ * Atomically removes the last pick and rewinds currentPickIndex by one.
+ * Returns the name of the pick that was undone, or null if there was nothing to undo.
+ */
+export async function undoLastPick(tournamentId: string): Promise<string | null> {
+  let undonePickName: string | null = null;
+  await runTransaction(ref(db, `drafts/${tournamentId}`), (current) => {
+    if (!current) return current;
+    const picks: DraftPick[] = Array.isArray(current.picks) ? current.picks : [];
+    if (picks.length === 0) return current; // nothing to undo
+    undonePickName = picks[picks.length - 1].playerName;
+    return {
+      ...current,
+      picks: picks.slice(0, -1),
+      currentPickIndex: Math.max(0, picks.length - 1),
+      status: 'open',
+    };
+  });
+  if (undonePickName) {
+    // Ensure tournament is still marked as drafting (not complete)
+    await updateTournament(tournamentId, { draftComplete: false, status: 'drafting' });
+  }
+  return undonePickName;
 }
 
 /**

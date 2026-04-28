@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { TOP_10_POINTS } from '@/lib/constants';
+import { SCORING_PLAYERS, UNSTARTED_POINTS } from '@/lib/constants';
+import { calculatePoints } from '@/lib/scoring';
 import { getAdminServices, pushToAllUsers } from '@/lib/fcm-admin';
 
 // Cron: runs at midnight UTC = 8 PM ET every day (schedule: "0 0 * * *")
@@ -187,13 +188,7 @@ async function generateSummary(forceTournamentId?: string, forceRound?: number) 
         const pd = playersMap[p.playerId] ?? playersMap[p.playerName] ?? {};
         const position = typeof pd.position === 'number' ? pd.position : null;
         const status = pd.status ?? 'active';
-
-        let points = 9999;
-        if (status === 'cut' || status === 'wd' || status === 'dq') {
-          points = cutLine + 1;
-        } else if (position !== null && position > 0) {
-          points = position <= 10 ? TOP_10_POINTS[position - 1] : position;
-        }
+        const points = calculatePoints(position, status, cutLine);
 
         const roundScores = pd.roundScores as (string | null)[] | undefined;
         const r4Score = roundScores?.[3] ?? null;
@@ -210,8 +205,8 @@ async function generateSummary(forceTournamentId?: string, forceRound?: number) 
       });
 
       const sorted = [...players].sort((a, b) => a.points - b.points);
-      const top3 = sorted.slice(0, 3);
-      const top3Score = top3.reduce((sum, p) => sum + (p.points < 9000 ? p.points : 0), 0);
+      const top3 = sorted.slice(0, SCORING_PLAYERS);
+      const top3Score = top3.reduce((sum, p) => sum + (p.points < UNSTARTED_POINTS ? p.points : 0), 0);
 
       teams.push({ userId: user.uid, username: user.username, players, top3Score, rank: 0 });
     }
@@ -247,7 +242,7 @@ async function generateSummary(forceTournamentId?: string, forceRound?: number) 
 
     const teamsBlock = teams.map((t) => {
       const sorted = [...t.players].sort((a, b) => a.points - b.points);
-      const top3  = sorted.slice(0, activeTournament.maxPicks - 1 < 3 ? sorted.length : 3);
+      const top3  = sorted.slice(0, SCORING_PLAYERS);
       const bench = sorted.slice(top3.length);
       const scoreLabel = t.top3Score < 0
         ? `${t.top3Score} pts (negative = great, top-10 bonuses)`
@@ -330,7 +325,7 @@ async function generateSummary(forceTournamentId?: string, forceRound?: number) 
       // Build a plain-English standings summary so the AI never interprets scoring math.
       const standingsSentences = teams.map(t => {
         const sorted = [...t.players].sort((a, b) => a.points - b.points);
-        const top3 = sorted.slice(0, 3);
+        const top3 = sorted.slice(0, SCORING_PLAYERS);
         const top3Names = top3
           .filter(p => p.points < 9000)
           .map(p => {
@@ -472,6 +467,23 @@ Respond ONLY with valid JSON — no markdown, no backticks, no extra text:
     } catch {
       console.error('[daily-summary] JSON parse failed:', text);
       return NextResponse.json({ error: 'AI returned invalid JSON' }, { status: 500 });
+    }
+
+    // Validate required fields are present and non-empty
+    const requiredFields = ['standingsBreakdown', 'heroName', 'heroTeam', 'heroSummary',
+      'zeroName', 'zeroTeam', 'zeroSummary', 'outlook'];
+    const missing = requiredFields.filter(f => !summaryContent[f]);
+    if (missing.length > 0) {
+      console.error('[daily-summary] AI response missing required fields:', missing, text);
+      return NextResponse.json({ error: `AI response missing fields: ${missing.join(', ')}` }, { status: 500 });
+    }
+    if (isFinalRound) {
+      const r4Fields = ['r4HeroName', 'r4HeroTeam', 'r4HeroSummary', 'r4ZeroName', 'r4ZeroTeam', 'r4ZeroSummary'];
+      const missingR4 = r4Fields.filter(f => !summaryContent[f]);
+      if (missingR4.length > 0) {
+        console.warn('[daily-summary] R4 recap missing round-4 hero/zero fields:', missingR4);
+        // Non-fatal: still save the summary; UI handles missing r4 fields gracefully
+      }
     }
 
     const summary = {

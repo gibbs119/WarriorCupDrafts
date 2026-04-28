@@ -8,7 +8,7 @@ import Navigation from '@/components/Navigation';
 import {
   getAllTournaments, updateTournament, initializeDraft,
   getAllUsers, getDraftState, getDraftOrderFromResults, saveRankedOrder,
-  resetDraft, clearDraftPicks, getReedRuleStatus, setReedRuleStatus,
+  resetDraft, clearDraftPicks, undoLastPick, getReedRuleStatus, setReedRuleStatus,
 } from '@/lib/db';
 import { buildSnakeDraftOrder, calculateLeaderboard } from '@/lib/scoring';
 import { parseLeaderboard } from '@/lib/espn';
@@ -145,6 +145,21 @@ export default function AdminPage() {
       toast.success(`Draft reset for ${t.name}. You can now re-launch.`);
     } catch {
       toast.error('Reset failed.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // ── Undo only the single most-recent pick ────────────────────────────────
+  async function handleUndoLastPick(t: Tournament) {
+    if (!confirm(`Undo the last pick for ${t.name}?\n\nThe most recent pick will be removed and that player returns to the available pool. Everything else stays.`)) return;
+    setSaving(true);
+    try {
+      const undone = await undoLastPick(t.id);
+      if (undone) toast.success(`Undid pick: ${undone} is back in the pool.`);
+      else toast('No picks to undo.', { icon: 'ℹ️' });
+    } catch {
+      toast.error('Undo failed.');
     } finally {
       setSaving(false);
     }
@@ -630,11 +645,19 @@ export default function AdminPage() {
                     )}
 
                     {(t.status === 'drafting' || t.status === 'active') && (
-                      <button onClick={() => handleClearPicks(t)} disabled={saving}
-                        className="text-xs py-1.5 px-3 rounded-lg font-bold transition-all disabled:opacity-40"
-                        style={{ background: 'rgba(251,191,36,0.15)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.3)' }}>
-                        ↺ Clear Picks
-                      </button>
+                      <>
+                        <button onClick={() => handleUndoLastPick(t)} disabled={saving}
+                          className="text-xs py-1.5 px-3 rounded-lg font-bold transition-all disabled:opacity-40"
+                          style={{ background: 'rgba(251,191,36,0.10)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.25)' }}
+                          title="Remove only the last pick — everything else stays">
+                          ↩ Undo Last Pick
+                        </button>
+                        <button onClick={() => handleClearPicks(t)} disabled={saving}
+                          className="text-xs py-1.5 px-3 rounded-lg font-bold transition-all disabled:opacity-40"
+                          style={{ background: 'rgba(251,191,36,0.15)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.3)' }}>
+                          ↺ Clear All Picks
+                        </button>
+                      </>
                     )}
                     {t.status !== 'upcoming' && (
                       <button onClick={() => handleResetDraft(t)} disabled={saving}
