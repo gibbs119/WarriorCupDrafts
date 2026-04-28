@@ -7,14 +7,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminServices, pushToUser } from '@/lib/fcm-admin';
 
-// ─── Snake-order helper (mirrors lib/scoring.ts logic) ───────────────────────
-function getPickerAtIndex(order: string[], index: number): string {
-  const n     = order.length;
-  const round = Math.floor(index / n);
-  const pos   = index % n;
-  return round % 2 === 0 ? order[pos] : order[n - 1 - pos];
-}
-
 export async function POST(req: NextRequest) {
   try {
     const { tournamentId, baseUrl } = await req.json() as {
@@ -41,6 +33,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ sent: 0, reason: 'draft complete' });
     }
 
+    // snakeDraftOrder is the full pre-expanded pick sequence (length = totalPicks)
+    // so order[idx] is directly the UID of the current picker — no round math needed.
     const order = draft.snakeDraftOrder ?? [];
     const idx   = draft.currentPickIndex ?? 0;
     if (order.length === 0) return NextResponse.json({ sent: 0 });
@@ -55,20 +49,24 @@ export async function POST(req: NextRequest) {
     const draftUrl = `${origin}/draft/${tournamentId}`;
     let sent = 0;
 
-    const currentUid = getPickerAtIndex(order, idx);
-    await pushToUser(messaging, db, currentUid,
-      `⛳ It's your pick! — ${tourName}`,
-      'Head to the Warrior Cup draft room and make your selection.',
-      draftUrl,
-    );
-    sent++;
+    const pickLabel = `Pick ${idx + 1} of ${order.length}`;
+
+    const currentUid = order[idx];
+    if (currentUid) {
+      await pushToUser(messaging, db, currentUid,
+        `⛳ You're on the clock! — ${tourName}`,
+        `${pickLabel}. Open the draft room and make your selection.`,
+        draftUrl,
+      );
+      sent++;
+    }
 
     if (idx + 1 < order.length) {
-      const nextUid = getPickerAtIndex(order, idx + 1);
-      if (nextUid !== currentUid) {
+      const nextUid = order[idx + 1];
+      if (nextUid && nextUid !== currentUid) {
         await pushToUser(messaging, db, nextUid,
           `🔜 You're on deck! — ${tourName}`,
-          "One more pick before it's your turn — start thinking.",
+          `Pick ${idx + 2} of ${order.length} is yours. Start thinking.`,
           draftUrl,
         );
         sent++;
