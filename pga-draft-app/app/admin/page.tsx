@@ -14,7 +14,7 @@ import { buildSnakeDraftOrder, calculateLeaderboard } from '@/lib/scoring';
 import { parseLeaderboard } from '@/lib/espn';
 import { USERS, TOURNAMENTS } from '@/lib/constants';
 import type { Tournament, AppUser } from '@/lib/types';
-import { Settings, Users, Trophy, Plus, Shuffle, Zap } from 'lucide-react';
+import { Settings, Users, Trophy, Plus, Shuffle } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const TOURNAMENT_SEQUENCE = TOURNAMENTS.map((t) => t.id);
@@ -452,9 +452,6 @@ export default function AdminPage() {
     );
   }
 
-  // Find the next upcoming tournament that needs a draft
-  const nextDraftTournament = tournaments.find((t) => t.status === 'upcoming');
-
   return (
     <div className="min-h-screen page">
       <Navigation />
@@ -466,37 +463,6 @@ export default function AdminPage() {
           </h1>
           <p className="text-slate-400 text-sm mt-1">Manage tournaments, drafts, and user accounts</p>
         </div>
-
-        {/* ── QUICK LAUNCH BANNER ────────────────────────────────────────────── */}
-        {nextDraftTournament && nextDraftTournament.status === 'upcoming' && (
-          <div className="mb-6 rounded-2xl p-5 border-2" style={{ background: 'rgba(201,162,39,0.08)', borderColor: '#C9A227' }}>
-            <div className="flex items-start justify-between gap-4 flex-wrap">
-              <div>
-                <p className="font-bebas text-2xl tracking-wider text-white flex items-center gap-2">
-                  <Zap size={20} style={{ color: '#C9A227' }} />
-                  TONIGHT: {nextDraftTournament.name}
-                </p>
-                <p className="text-slate-300 text-sm mt-1">
-                  Tournament: <strong className="text-white">{nextDraftTournament.startDate}</strong>
-                  {' · '}Draft night: <strong className="text-white">{(nextDraftTournament as any).draftDate ?? 'Tonight'}</strong>
-                </p>
-                <p className="text-slate-400 text-xs mt-2">
-                  {users.length === 0
-                    ? '⚠ Step 1: Go to the Users tab and click "Create All 8 Default Users" first.'
-                    : `✅ ${users.length} users ready · ESPN ID: ${nextDraftTournament.espnEventId || '401811937'}`}
-                </p>
-              </div>
-              <button
-                onClick={() => quickLaunchDraft(nextDraftTournament)}
-                disabled={saving || users.length === 0}
-                className="font-bebas tracking-widest text-lg px-6 py-3 rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
-                style={{ background: '#C9A227', color: '#0D1F38' }}
-              >
-                {saving ? 'LAUNCHING…' : '🚀 LAUNCH DRAFT NOW'}
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* Tabs */}
         <div className="flex gap-2 mb-6">
