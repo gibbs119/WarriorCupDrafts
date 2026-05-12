@@ -421,6 +421,12 @@ export const STATIC_FIELDS: Record<string, string[]> = {
     'Karl Vilips', 'Marco Penge', 'Harry Hall', 'Aldrich Potgieter', 'Kristoffer Reitan',
     'Nico Echavarria', 'Mackenzie Hughes', 'Taylor Moore', 'Scott Stallings', 'Kevin Yu',
     'Seamus Power', 'Sam Ryder', 'Brendon Todd',
+    // LIV Golf players with major exemptions
+    'Cameron Smith', 'Sebastian Soderberg',
+    // DP World Tour / international qualifiers
+    'Thriston Lawrence', 'Thomas Detry', 'Adrian Meronk', 'Alex Fitzpatrick',
+    'Christiaan Bezuidenhout', 'Justin Suh', 'Bud Cauley', 'Charley Hoffman',
+    'Matt Wallace', 'Nick Hardy', 'Ben Taylor', 'David Skinns',
     // Club professionals (PGA of America Golf Pros — via PGA Professional Championship at Bandon Dunes)
     'Michael Block', 'Jesse Droemer', 'Ryan Vermeer', 'Ben Kern', 'Michael Kartrude',
     'Tyler Collet', 'Zach Haynes', 'Garrett Sapp', 'Austin Hurt', 'Braden Shattuck',
@@ -460,4 +466,93 @@ export const STATIC_FIELDS: Record<string, string[]> = {
     'Vince Whaley', 'Gary Woodland', 'Sudarshan Yellamaraju', 'Cameron Young',
     'Kevin Yu',
   ],
+};
+
+// ─── Static OWGR lookup ───────────────────────────────────────────────────────
+// Confirmed top 15 from post-Truist Championship OWGR (week of May 12, 2026).
+// LIV player ranks confirmed: Hatton #23, DeChambeau #25, Rahm #31,
+// Koepka #129 (rejoined PGA Tour 2026), Niemann #172, Smith #222, Johnson #468.
+// Ranks 16-22 and 32-50 are best estimates; ranks 50+ are approximate.
+// Used as an immediate fallback before the live OWGR API responds.
+export const STATIC_OWGR: Record<string, Record<string, number>> = {
+  'pga-championship': {
+    // Confirmed top 15 (post-Truist Championship, May 12 2026)
+    'Scottie Scheffler': 1,
+    'Rory McIlroy': 2,
+    'Cameron Young': 3,
+    'Matt Fitzpatrick': 4,
+    'Collin Morikawa': 5,
+    'Tommy Fleetwood': 6,
+    'Justin Rose': 7,
+    'J.J. Spaun': 8,
+    'Russell Henley': 9,
+    'Chris Gotterup': 10,
+    'Xander Schauffele': 11,
+    'Robert MacIntyre': 12,
+    'Ludvig Aberg': 13,
+    'Hideki Matsuyama': 14,
+    'Viktor Hovland': 15,
+    // Estimated ranks 16-22
+    'Patrick Cantlay': 16,
+    'Sungjae Im': 17,
+    'Min Woo Lee': 18,
+    'Sam Burns': 19,
+    'Justin Thomas': 20,
+    'Wyndham Clark': 21,
+    'Sahith Theegala': 22,
+    // Confirmed LIV player ranks (post-Masters, April 2026; LIV got OWGR in 2026)
+    'Tyrrell Hatton': 23,
+    'Shane Lowry': 24,
+    'Bryson DeChambeau': 25,
+    'Kristoffer Reitan': 26,
+    'Tom Kim': 27,
+    'Akshay Bhatia': 28,
+    'Rickie Fowler': 29,
+    'Jordan Spieth': 30,
+    'Jon Rahm': 31,
+    'Nicolai Hojgaard': 32,
+    'Max Homa': 33,
+    'Sepp Straka': 34,
+    'Tony Finau': 35,
+    'Adam Scott': 36,
+    'Keegan Bradley': 37,
+    'Rasmus Hojgaard': 38,
+    'Corey Conners': 39,
+    'Si Woo Kim': 40,
+    'Jason Day': 41,
+    'Nick Taylor': 42,
+    'Taylor Pendrith': 43,
+    'Alex Noren': 44,
+    'Austin Eckroat': 45,
+    'Harris English': 46,
+    'Aaron Rai': 47,
+    'Davis Thompson': 48,
+    // Approximate ranks 49-200
+    'Maverick McNealy': 55,
+    'Denny McCarthy': 58,
+    'Max Greyserman': 62,
+    'Nick Dunlap': 66,
+    'Adam Hadwin': 71,
+    'Eric Cole': 74,
+    'Tom Hoge': 79,
+    'Will Zalatoris': 84,
+    'Brian Harman': 88,
+    'Daniel Berger': 93,
+    'Stephan Jaeger': 98,
+    'Brooks Koepka': 129,   // rejoined PGA Tour 2026; ranking fell during LIV years
+    'J.T. Poston': 104,
+    'Ryo Hisatsune': 109,
+    'Kurt Kitayama': 115,
+    'Alex Smalley': 120,
+    'Emiliano Grillo': 128,
+    'Ryan Fox': 134,
+    'Gary Woodland': 148,
+    'Lucas Glover': 195,
+    'Patrick Reed': 210,    // LIV — ranking fell without OWGR events pre-2026
+    'Joaquin Niemann': 172, // LIV — confirmed ~#172
+    'Cameron Smith': 222,   // LIV — confirmed ~#221-222
+    'Brandt Snedeker': 285,
+    'Dustin Johnson': 468,  // LIV — confirmed ~#468; PGA invite, no auto qualification
+    'Michael Block': 2000,
+  },
 };

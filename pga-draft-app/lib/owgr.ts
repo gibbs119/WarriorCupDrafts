@@ -18,42 +18,55 @@ async function fetchOwgrFromOpenAI(playerNames: string[]): Promise<OwgrEntry[] |
   const apiKey = process.env.OPENAI_API_KEY ?? '';
   if (!apiKey || playerNames.length === 0) return null;
 
-  // Batch to ≤80 names to stay within token budget
-  const batch = playerNames.slice(0, 80).join(', ');
-  const prompt =
-    `Return the current Official World Golf Rankings (OWGR) for these players as JSON. ` +
-    `Format: {"rankings": [{"name": "Full Name", "rank": 1}]}. ` +
-    `Only include players whose rank you are confident about. ` +
-    `Players: ${batch}`;
-
-  try {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [{ role: 'user', content: prompt }],
-        response_format: { type: 'json_object' },
-        max_tokens: 2000,
-        temperature: 0,
-      }),
-    });
-
-    if (!res.ok) {
-      console.warn(`[OWGR] OpenAI returned HTTP ${res.status}`);
-      return null;
-    }
-
-    const data = await res.json();
-    const text: string = data.choices?.[0]?.message?.content ?? '';
-    return parseOwgrJson(text);
-  } catch (e) {
-    console.warn('[OWGR] OpenAI fetch error:', e);
-    return null;
+  // Split into batches of 80 to stay within token budget; merge all results
+  const batches: string[][] = [];
+  for (let i = 0; i < playerNames.length; i += 80) {
+    batches.push(playerNames.slice(i, i + 80));
   }
+
+  const allEntries: OwgrEntry[] = [];
+  for (const batchNames of batches) {
+    const batch = batchNames.join(', ');
+    const prompt =
+      `You are a golf expert with up-to-date knowledge of the Official World Golf Ranking (OWGR). ` +
+      `Return the current OWGR for EVERY player in the list below as JSON. ` +
+      `Format: {"rankings": [{"name": "Full Name", "rank": 1}]}. ` +
+      `IMPORTANT: Include a rank for EVERY player listed — do not skip any. ` +
+      `Use your best knowledge of recent rankings. If unsure of exact rank, provide your best estimate. ` +
+      `Players: ${batch}`;
+
+    try {
+      const res = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [{ role: 'user', content: prompt }],
+          response_format: { type: 'json_object' },
+          max_tokens: 3000,
+          temperature: 0,
+        }),
+      });
+
+      if (!res.ok) {
+        console.warn(`[OWGR] OpenAI returned HTTP ${res.status}`);
+        continue;
+      }
+
+      const data = await res.json();
+      const text: string = data.choices?.[0]?.message?.content ?? '';
+      const entries = parseOwgrJson(text);
+      allEntries.push(...entries);
+    } catch (e) {
+      console.warn('[OWGR] OpenAI batch fetch error:', e);
+    }
+  }
+
+  console.log(`[OWGR] OpenAI total: ${allEntries.length} rankings across ${batches.length} batch(es)`);
+  return allEntries.length > 0 ? allEntries : null;
 }
 
 function parseOwgrJson(text: string): OwgrEntry[] {
