@@ -175,6 +175,34 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // ── Supplement with full static field ─────────────────────────────────────
+  // Always add STATIC_FIELDS players not already in the pool so the full
+  // tournament field is draftable even when odds only cover the top players.
+  {
+    const staticField = STATIC_FIELDS[tournamentId];
+    if (staticField && staticField.length > 0) {
+      const existingIds = new Set(players.map((p) => p.id));
+      for (const name of staticField) {
+        const id = playerKey(name);
+        if (!existingIds.has(id)) {
+          players.push({
+            id,
+            name,
+            espnName: name,
+            americanOdds: 9999,
+            impliedProb: 0,
+            oddsDisplay: 'N/A',
+            bookmaker: 'Field List',
+            top10AmericanOdds: null,
+            top10Display: null,
+            top10ImpliedProb: null,
+            worldRanking: null,
+          });
+        }
+      }
+    }
+  }
+
   // ── Stale cache ────────────────────────────────────────────────────────────
   if (players.length === 0) {
     const stale = oddsCache.get(tournamentId);

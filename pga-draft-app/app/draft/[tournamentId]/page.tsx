@@ -429,9 +429,8 @@ export default function DraftRoomPage() {
   // Available players — not yet picked, filtered, sorted
   const available = mergedPlayers
     .filter((p) => {
-      // Once ESPN field is confirmed, exclude any player not matched to an ESPN ID —
-      // they are not in the official tournament field (withdrew, different event, etc.)
-      if (hasEspnField && p.espnId === null) return false;
+      // Exclude players ESPN has explicitly marked as withdrawn once tournament is live
+      if (hasEspnField && p.espnId !== null && p.status === 'wd') return false;
       // Check ID-based membership (numeric ESPN IDs or stable name keys)
       if (pickedIds.has(p.id) || (p.espnId && pickedIds.has(p.espnId))) return false;
       // Check name-based — playerKey applies nickname map so "Cam Davis" == "Cameron Davis"
