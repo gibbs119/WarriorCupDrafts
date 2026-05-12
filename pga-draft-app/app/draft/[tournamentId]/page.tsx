@@ -429,6 +429,9 @@ export default function DraftRoomPage() {
   // Available players — not yet picked, filtered, sorted
   const available = mergedPlayers
     .filter((p) => {
+      // Once ESPN field is confirmed, exclude any player not matched to an ESPN ID —
+      // they are not in the official tournament field (withdrew, different event, etc.)
+      if (hasEspnField && p.espnId === null) return false;
       // Check ID-based membership (numeric ESPN IDs or stable name keys)
       if (pickedIds.has(p.id) || (p.espnId && pickedIds.has(p.espnId))) return false;
       // Check name-based — playerKey applies nickname map so "Cam Davis" == "Cameron Davis"
@@ -787,7 +790,6 @@ export default function DraftRoomPage() {
                     ['odds', '🏆 Win'],
                     ['top10', '🔟 Top 10'],
                     ['rank', '🌍 OWGR'],
-                    ...(hasEspnField ? [['position', '🏌️ Pos']] as [SortMode, string][] : []),
                     ['name', 'A–Z'],
                   ] as [SortMode, string][]).map(([mode, label]) => (
                     <button key={mode} onClick={() => handleSortClick(mode)}
@@ -860,18 +862,14 @@ export default function DraftRoomPage() {
                             title="Odds to finish top 10">
                           Top 10 {sortArrow('top10')}
                         </th>
-                        <th className="text-right py-2 w-14 cursor-pointer hover:text-white transition-colors hidden sm:table-cell"
+                        <th className="text-right py-2 w-14 cursor-pointer hover:text-white transition-colors"
                             onClick={() => handleSortClick('rank')}
                             title="Official World Golf Ranking">
                           OWGR {sortArrow('rank')}
                         </th>
-                        {hasEspnField && <>
-                          <th className="text-right py-2 w-12 cursor-pointer hover:text-white transition-colors"
-                              onClick={() => handleSortClick('position')}>
-                            Pos {sortArrow('position')}
-                          </th>
+                        {hasEspnField && (
                           <th className="text-right py-2 w-10 hidden lg:table-cell text-slate-500">Thru</th>
-                        </>}
+                        )}
                         {isMyTurn && !draftComplete && <th className="w-14"></th>}
                       </tr>
                     </thead>
@@ -882,9 +880,6 @@ export default function DraftRoomPage() {
                           <td className="py-2 pr-2 text-slate-600 text-xs">{idx + 1}</td>
                           <td className="py-2">
                             <div className="font-medium text-white leading-tight">{player.displayName}</div>
-                            {player.source === 'odds' && hasEspnField && (
-                              <div className="text-xs text-yellow-600/60">⚠ no ESPN match yet</div>
-                            )}
                           </td>
                           {/* Win odds */}
                           <td className={`py-2 text-right ${sortMode === 'top10' ? 'hidden md:table-cell' : ''}`}>
@@ -923,7 +918,7 @@ export default function DraftRoomPage() {
                             )}
                           </td>
                           {/* OWGR */}
-                          <td className="py-2 text-right hidden sm:table-cell">
+                          <td className="py-2 text-right">
                             {player.worldRanking ? (
                               <span className={`text-xs font-mono ${
                                 player.worldRanking <= 10 ? 'text-yellow-300 font-semibold'
@@ -936,18 +931,11 @@ export default function DraftRoomPage() {
                               <span className="text-slate-600 text-xs">—</span>
                             )}
                           </td>
-                          {hasEspnField && <>
-                            <td className="py-2 text-right text-xs text-slate-400">
-                              {player.status === 'cut' ? (
-                                <span className="text-orange-400">CUT</span>
-                              ) : player.positionDisplay !== '-' ? (
-                                player.positionDisplay
-                              ) : '—'}
-                            </td>
+                          {hasEspnField && (
                             <td className="py-2 text-right text-xs text-slate-500 hidden lg:table-cell">
                               {player.thru !== '-' ? player.thru : '—'}
                             </td>
-                          </>}
+                          )}
                           {isMyTurn && !draftComplete && (
                             <td className="py-2 pl-2">
                               <button onClick={() => handlePick(player)} disabled={pickLoading || pickSubmittingRef.current}
