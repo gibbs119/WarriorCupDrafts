@@ -191,10 +191,10 @@ export async function GET(req: NextRequest) {
   }
 
   // ── Merge OWGR rankings ────────────────────────────────────────────────────
-  // Fetch concurrently — don't let a slow OWGR response block the odds data.
-  // Failure is silent: worldRanking stays null if OWGR is unavailable.
+  // Pass player names so the OpenAI fallback can target its response.
+  // Failure is silent: worldRanking stays null if both sources are unavailable.
   try {
-    const owgrEntries = await fetchOwgrRankings();
+    const owgrEntries = await fetchOwgrRankings(players.map((p) => p.name));
     if (owgrEntries && owgrEntries.length > 0) {
       const owgrLookup = buildOwgrLookup(owgrEntries);
       for (const p of players) {
