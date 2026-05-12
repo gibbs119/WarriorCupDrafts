@@ -9,7 +9,7 @@ import {
 } from '@/lib/odds';
 import { fetchLeaderboardRaw, parseLeaderboard } from '@/lib/espn';
 import { fetchOwgrRankings, buildOwgrLookup } from '@/lib/owgr';
-import { TOURNAMENTS, STATIC_FIELDS, STATIC_ODDS } from '@/lib/constants';
+import { TOURNAMENTS, STATIC_FIELDS, STATIC_ODDS, STATIC_OWGR } from '@/lib/constants';
 
 // ─── Server-side cache ────────────────────────────────────────────────────────
 interface CacheEntry { players: OddsPlayer[]; fetchedAt: number; source: string }
@@ -191,8 +191,17 @@ export async function GET(req: NextRequest) {
   }
 
   // ── Merge OWGR rankings ────────────────────────────────────────────────────
-  // Pass player names so the OpenAI fallback can target its response.
-  // Failure is silent: worldRanking stays null if both sources are unavailable.
+  // Step 1: Seed from static OWGR so rankings are always populated immediately.
+  const staticOwgr = STATIC_OWGR[tournamentId];
+  if (staticOwgr) {
+    for (const p of players) {
+      const rank = staticOwgr[p.name];
+      if (rank) p.worldRanking = rank;
+    }
+  }
+
+  // Step 2: Live OWGR API overrides static data with fresher rankings.
+  // Failure is silent: worldRanking stays at static value if API is unavailable.
   try {
     const owgrEntries = await fetchOwgrRankings(players.map((p) => p.name));
     if (owgrEntries && owgrEntries.length > 0) {
