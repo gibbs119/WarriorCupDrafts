@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminServices } from '@/lib/fcm-admin';
 import { TOP_10_POINTS } from '@/lib/constants';
+import { fetchLeaderboardRaw, parseLeaderboard } from '@/lib/espn';
 
 // Generates live AI win-probability odds for each fantasy team based on current
 // tournament scores. Cached in Firebase; regenerates if > 25 minutes old.
@@ -104,19 +105,41 @@ export async function POST(req: NextRequest) {
     ]);
 
     if (!draftSnap.exists()) return NextResponse.json({ error: 'No draft found' }, { status: 404 });
-    if (!playersSnap.exists()) return NextResponse.json({ error: 'No scores yet' }, { status: 404 });
 
     const draftState = draftSnap.val();
     const users = usersSnap.exists()
       ? (Object.values(usersSnap.val()) as Array<{ uid: string; username: string }>)
       : [];
-    const playersMap = playersSnap.val() as Record<string, {
-      position?: number; positionDisplay?: string; score?: string;
-      thru?: string; status?: string; currentRound?: number; name?: string;
-    }>;
     const tournament = tournamentSnap.exists() ? tournamentSnap.val() : null;
     const cutLine    = tournament?.cutLine ?? 65;
     const maxPicks   = tournament?.maxPicks ?? 5;
+
+    // Fetch fresh ESPN scores to avoid stale Firebase cache causing wrong round detection.
+    // Firebase player data can persist from a prior completed tournament (e.g. all R4 scores).
+    type PlayerEntry = {
+      position?: number; positionDisplay?: string; score?: string;
+      thru?: string; status?: string; currentRound?: number; name?: string;
+    };
+    let playersMap: Record<string, PlayerEntry> = {};
+    const espnEventId = tournament?.espnEventId;
+    if (espnEventId) {
+      try {
+        const espnResult = await fetchLeaderboardRaw(espnEventId);
+        if (espnResult) {
+          const { players: espnPlayers } = parseLeaderboard(espnResult.data as never);
+          if (Object.keys(espnPlayers).length > 0) {
+            playersMap = espnPlayers as Record<string, PlayerEntry>;
+          }
+        }
+      } catch (e) {
+        console.warn('[live-odds] ESPN fetch failed, falling back to Firebase:', e);
+      }
+    }
+    // Fall back to Firebase if ESPN fetch yielded nothing
+    if (Object.keys(playersMap).length === 0) {
+      if (!playersSnap.exists()) return NextResponse.json({ error: 'No scores yet' }, { status: 404 });
+      playersMap = playersSnap.val() as Record<string, PlayerEntry>;
+    }
 
     // ── Round context ────────────────────────────────────────────────────────
     const currentRound = Object.values(playersMap).reduce(
