@@ -79,9 +79,10 @@ const THEMES: Record<string, TournamentTheme> = {
   // ── PGA Championship — Wanamaker Trophy ──────────────────────────────────
   // Deep charcoal and Wanamaker gold — power and prestige.
   'pga-championship': {
-    label:   'PGA CHAMPIONSHIP',
-    venue:   'Quail Hollow Club',
-    icon:    '🏆',
+    label:    'PGA CHAMPIONSHIP',
+    venue:    'Aronimink Golf Club · Newtown Square, PA',
+    logoPath: '/pga-championship-logo.svg',
+    icon:     '🏆',
     accent:      '#B8922A',
     accentMid:   '#D4AF37',
     accentLight: 'rgba(184, 146, 42, 0.15)',

@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" width="240" height="240">
+  <!-- Outer ring -->
+  <circle cx="120" cy="120" r="116" fill="none" stroke="#B8922A" stroke-width="3"/>
+  <circle cx="120" cy="120" r="110" fill="none" stroke="#B8922A" stroke-width="1" stroke-dasharray="4 3"/>
+
+  <!-- Wanamaker Trophy body -->
+  <!-- Cup bowl -->
+  <path d="M88 72 Q88 52 120 52 Q152 52 152 72 L148 100 Q148 118 120 122 Q92 118 92 100 Z" fill="#B8922A"/>
+  <!-- Cup bowl highlight -->
+  <path d="M96 72 Q96 58 120 58 Q144 58 144 72 L141 95 Q141 110 120 113 Q99 110 99 95 Z" fill="#D4AF37"/>
+  <!-- Cup bowl inner shadow -->
+  <path d="M108 68 Q108 61 120 61 Q132 61 132 68 L130 88 Q130 97 120 99 Q110 97 110 88 Z" fill="#B8922A"/>
+
+  <!-- Handles -->
+  <path d="M92 82 Q75 80 72 90 Q70 100 85 102 L92 100" fill="none" stroke="#B8922A" stroke-width="5" stroke-linecap="round"/>
+  <path d="M148 82 Q165 80 168 90 Q170 100 155 102 L148 100" fill="none" stroke="#B8922A" stroke-width="5" stroke-linecap="round"/>
+
+  <!-- Trophy stem -->
+  <rect x="114" y="122" width="12" height="22" fill="#B8922A"/>
+  <!-- Stem collar -->
+  <ellipse cx="120" cy="122" rx="10" ry="4" fill="#D4AF37"/>
+
+  <!-- Trophy base platform -->
+  <rect x="96" y="144" width="48" height="8" rx="2" fill="#B8922A"/>
+  <rect x="92" y="151" width="56" height="6" rx="2" fill="#D4AF37"/>
+  <rect x="88" y="156" width="64" height="5" rx="2" fill="#B8922A"/>
+
+  <!-- PGA text -->
+  <text x="120" y="195" font-family="Georgia, 'Times New Roman', serif" font-size="26" font-weight="bold" fill="#D4AF37" text-anchor="middle" letter-spacing="4">PGA</text>
+
+  <!-- CHAMPIONSHIP text -->
+  <text x="120" y="216" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="bold" fill="#B8922A" text-anchor="middle" letter-spacing="2.5">CHAMPIONSHIP</text>
+
+  <!-- Top arc text: 2026 -->
+  <path id="topArc" d="M 34 120 A 86 86 0 0 1 206 120" fill="none"/>
+  <text font-family="Arial, Helvetica, sans-serif" font-size="9" fill="#D4AF37" letter-spacing="3">
+    <textPath href="#topArc" startOffset="30%">· ARONIMINK GOLF CLUB ·</textPath>
+  </text>
+</svg>
