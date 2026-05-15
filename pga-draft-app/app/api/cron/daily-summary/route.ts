@@ -118,26 +118,36 @@ async function generateSummary(forceTournamentId?: string, forceRound?: number) 
     // Fetch fresh ESPN scores to avoid stale Firebase player cache (same fix as live-odds).
     // Firebase player data can persist from a prior completed tournament with wrong round/scores.
     type PlayerData = {
-      status?: string; position?: number | null; positionDisplay?: string;
+      name?: string; status?: string; position?: number | null; positionDisplay?: string;
       score?: string; thru?: string; currentRound?: number; round?: number;
       roundScores?: (string | null)[];
     };
     let playersMap: Record<string, PlayerData> = {};
+    let playerSource = 'none';
     if (espnEventId) {
       try {
         const espnResult = await fetchLeaderboardRaw(espnEventId);
         if (espnResult) {
           const { players: espnPlayers } = parseLeaderboard(espnResult.data as never);
-          if (Object.keys(espnPlayers).length > 0) {
+          const count = Object.keys(espnPlayers).length;
+          console.log(`[daily-summary] ESPN fetch (eventId=${espnEventId}): ${count} players`);
+          if (count > 0) {
             playersMap = espnPlayers as Record<string, PlayerData>;
+            playerSource = `ESPN (${count} players)`;
           }
+        } else {
+          console.warn(`[daily-summary] ESPN fetch returned null for eventId=${espnEventId}`);
         }
       } catch (e) {
-        console.warn('[daily-summary] ESPN fetch failed, falling back to Firebase:', e);
+        console.warn('[daily-summary] ESPN fetch failed:', e);
       }
+    } else {
+      console.warn('[daily-summary] No espnEventId on tournament — cannot fetch live scores');
     }
     if (Object.keys(playersMap).length === 0) {
       playersMap = playersSnap.exists() ? (playersSnap.val() as Record<string, PlayerData>) : {};
+      playerSource = playersSnap.exists() ? `Firebase (${Object.keys(playersMap).length} players)` : 'empty';
+      console.log(`[daily-summary] Using Firebase player data: ${playerSource}`);
     }
 
     const picks = draftState.picks ?? [];
@@ -497,7 +507,9 @@ Respond ONLY with valid JSON — no markdown, no backticks, no extra text:
     // Guard: if no player has a real score, the AI can't pick a hero/zero — bail early.
     const hasRealScores = teams.some(t => t.players.some(p => p.points < UNSTARTED_POINTS));
     if (!hasRealScores) {
-      return NextResponse.json({ error: 'No live scores yet — tournament has not started or ESPN data is unavailable' }, { status: 404 });
+      const msg = `No live scores found. playerSource=${playerSource}, espnEventId=${espnEventId ?? 'NOT SET'}, teams=${teams.length}`;
+      console.error('[daily-summary]', msg);
+      return NextResponse.json({ error: msg }, { status: 404 });
     }
 
     // R4: much lower temperature — the facts are pre-written, AI only adds tone
