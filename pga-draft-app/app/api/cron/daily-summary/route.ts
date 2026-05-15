@@ -142,6 +142,18 @@ async function generateSummary(forceTournamentId?: string, forceRound?: number) 
 
     const picks = draftState.picks ?? [];
 
+    // Build name-based fallback lookup for picks stored without ESPN IDs
+    // (same normalization as scoring.ts buildNameLookup).
+    const nameLookup = new Map<string, PlayerData>();
+    for (const pd of Object.values(playersMap)) {
+      if (pd.name) {
+        const key = pd.name.toLowerCase().normalize('NFD')
+          .replace(/[̀-ͯ]/g, '').replace(/\./g, '')
+          .replace(/[-–]/g, ' ').replace(/\s+/g, ' ').trim();
+        nameLookup.set(key, pd);
+      }
+    }
+
     // Derive cut line from live player data (same logic as leaderboard page).
     // After the cut: active survivors hold positions 1..N → N is the cut line.
     // Fall back to the stored tournament value, then 65.
@@ -211,7 +223,10 @@ async function generateSummary(forceTournamentId?: string, forceRound?: number) 
       if (myPicks.length === 0) continue;
 
       const players: PlayerEntry[] = myPicks.map((p: { playerName: string; playerId: string }) => {
-        const pd: PlayerData = playersMap[p.playerId] ?? playersMap[p.playerName] ?? {};
+        const nameKey = p.playerName.toLowerCase().normalize('NFD')
+          .replace(/[̀-ͯ]/g, '').replace(/\./g, '')
+          .replace(/[-–]/g, ' ').replace(/\s+/g, ' ').trim();
+        const pd: PlayerData = playersMap[p.playerId] ?? nameLookup.get(nameKey) ?? {};
         const position = typeof pd.position === 'number' ? pd.position : null;
         const status = pd.status ?? 'active';
         const points = calculatePoints(position, status, cutLine);
