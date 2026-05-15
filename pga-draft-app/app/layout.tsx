@@ -39,6 +39,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <AuthProvider children={children} />
         <Toaster
           position="top-center"
+          containerStyle={{ top: 'calc(env(safe-area-inset-top, 0px) + 56px)' }}
           toastOptions={{
             duration: 3500,
             style: {
