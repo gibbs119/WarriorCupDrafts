@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { SCORING_PLAYERS, UNSTARTED_POINTS } from '@/lib/constants';
 import { calculatePoints } from '@/lib/scoring';
 import { getAdminServices, pushToAllUsers } from '@/lib/fcm-admin';
+import { fetchLeaderboardRaw, parseLeaderboard } from '@/lib/espn';
 
 // Cron: runs at midnight UTC = 8 PM ET every day (schedule: "0 0 * * *")
 // Generates a daily AI summary of tournament activity and stores it in Firebase.
@@ -98,10 +99,11 @@ async function generateSummary(forceTournamentId?: string, forceRound?: number) 
     }
 
     // Load core data
-    const [draftSnap, usersSnap, playersSnap] = await Promise.all([
+    const [draftSnap, usersSnap, playersSnap, tournamentSnap] = await Promise.all([
       adminDb.ref(`drafts/${tournamentId}`).get(),
       adminDb.ref('users').get(),
       adminDb.ref(`players/${tournamentId}`).get(),
+      adminDb.ref(`tournaments/${tournamentId}`).get(),
     ]);
 
     if (!draftSnap.exists()) return NextResponse.json({ error: 'No draft' });
@@ -110,16 +112,52 @@ async function generateSummary(forceTournamentId?: string, forceRound?: number) 
     const users = usersSnap.exists()
       ? (Object.values(usersSnap.val()) as Array<{ uid: string; username: string }>)
       : [];
-    const playersMap = playersSnap.exists() ? playersSnap.val() : {};
+    const tournamentMeta = tournamentSnap.exists() ? tournamentSnap.val() : null;
+    const espnEventId = tournamentMeta?.espnEventId;
+
+    // Fetch fresh ESPN scores to avoid stale Firebase player cache (same fix as live-odds).
+    // Firebase player data can persist from a prior completed tournament with wrong round/scores.
+    type PlayerData = {
+      status?: string; position?: number | null; positionDisplay?: string;
+      score?: string; thru?: string; currentRound?: number; round?: number;
+      roundScores?: (string | null)[];
+    };
+    let playersMap: Record<string, PlayerData> = {};
+    if (espnEventId) {
+      try {
+        const espnResult = await fetchLeaderboardRaw(espnEventId);
+        if (espnResult) {
+          const { players: espnPlayers } = parseLeaderboard(espnResult.data as never);
+          if (Object.keys(espnPlayers).length > 0) {
+            playersMap = espnPlayers as Record<string, PlayerData>;
+          }
+        }
+      } catch (e) {
+        console.warn('[daily-summary] ESPN fetch failed, falling back to Firebase:', e);
+      }
+    }
+    if (Object.keys(playersMap).length === 0) {
+      playersMap = playersSnap.exists() ? (playersSnap.val() as Record<string, PlayerData>) : {};
+    }
 
     const picks = draftState.picks ?? [];
+
+    // Build name-based fallback lookup for picks stored without ESPN IDs
+    // (same normalization as scoring.ts buildNameLookup).
+    const nameLookup = new Map<string, PlayerData>();
+    for (const pd of Object.values(playersMap)) {
+      if (pd.name) {
+        const key = pd.name.toLowerCase().normalize('NFD')
+          .replace(/[̀-ͯ]/g, '').replace(/\./g, '')
+          .replace(/[-–]/g, ' ').replace(/\s+/g, ' ').trim();
+        nameLookup.set(key, pd);
+      }
+    }
 
     // Derive cut line from live player data (same logic as leaderboard page).
     // After the cut: active survivors hold positions 1..N → N is the cut line.
     // Fall back to the stored tournament value, then 65.
-    const allPlayers = Object.values(playersMap) as Array<{
-      status?: string; position?: number | null;
-    }>;
+    const allPlayers = Object.values(playersMap);
     const cutHasBeenMade = allPlayers.some(p => p.status === 'cut');
     const cutLine = (() => {
       if (!cutHasBeenMade) return activeTournament.cutLine ?? 65;
@@ -134,7 +172,7 @@ async function generateSummary(forceTournamentId?: string, forceRound?: number) 
     if (forceRound && forceRound >= 1 && forceRound <= 4) {
       currentRound = forceRound;
     } else {
-      const playerValues = Object.values(playersMap) as Array<{ currentRound?: number; round?: number }>;
+      const playerValues = Object.values(playersMap);
       currentRound = playerValues.length > 0
         ? Math.max(1, ...playerValues.map(p => p.currentRound ?? p.round ?? 1).filter(r => r > 0 && r <= 4))
         : 1;
@@ -185,13 +223,15 @@ async function generateSummary(forceTournamentId?: string, forceRound?: number) 
       if (myPicks.length === 0) continue;
 
       const players: PlayerEntry[] = myPicks.map((p: { playerName: string; playerId: string }) => {
-        const pd = playersMap[p.playerId] ?? playersMap[p.playerName] ?? {};
+        const nameKey = p.playerName.toLowerCase().normalize('NFD')
+          .replace(/[̀-ͯ]/g, '').replace(/\./g, '')
+          .replace(/[-–]/g, ' ').replace(/\s+/g, ' ').trim();
+        const pd: PlayerData = playersMap[p.playerId] ?? nameLookup.get(nameKey) ?? {};
         const position = typeof pd.position === 'number' ? pd.position : null;
         const status = pd.status ?? 'active';
         const points = calculatePoints(position, status, cutLine);
 
-        const roundScores = pd.roundScores as (string | null)[] | undefined;
-        const r4Score = roundScores?.[3] ?? null;
+        const r4Score = pd.roundScores?.[3] ?? null;
 
         return {
           name: p.playerName,
@@ -452,6 +492,12 @@ Respond ONLY with valid JSON — no markdown, no backticks, no extra text:
   "zeroSummary": "...",
   "outlook": "..."
 }`;
+    }
+
+    // Guard: if no player has a real score, the AI can't pick a hero/zero — bail early.
+    const hasRealScores = teams.some(t => t.players.some(p => p.points < UNSTARTED_POINTS));
+    if (!hasRealScores) {
+      return NextResponse.json({ error: 'No live scores yet — tournament has not started or ESPN data is unavailable' }, { status: 404 });
     }
 
     // R4: much lower temperature — the facts are pre-written, AI only adds tone
