@@ -490,7 +490,7 @@ Write a daily summary with THREE sections. Use ONLY names and rankings from the 
 
 1. **STANDINGS BREAKDOWN** (~3-4 sentences): Who's leading and why? Roast the cellar dwellers, hype the leaders. Reference the specific golfers and their positions.
 
-2. **HERO & ZERO OF THE DAY** (2 sentences each): Hero = best individual golfer performance today (lowest pts / best position). Zero = biggest bust. Name the golfer AND the team owner.
+2. **HERO & ZERO OF THE DAY** (2 sentences each): Hero = best individual R${currentRound} round score today (lowest R${currentRound} score shown after position — NOT overall position). Zero = worst R${currentRound} round score. Name the golfer AND the team owner. If R${currentRound} scores are not shown, fall back to best/worst overall position.
 
 3. **TOURNAMENT OUTLOOK** (~2-3 sentences): Who realistically wins from here? Who should start planning their concession speech?
 
