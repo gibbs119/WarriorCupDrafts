@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { SCORING_PLAYERS, UNSTARTED_POINTS } from '@/lib/constants';
+import { SCORING_PLAYERS, UNSTARTED_POINTS, TOP_10_POINTS } from '@/lib/constants';
 import { calculatePoints } from '@/lib/scoring';
 import { getAdminServices, pushToAllUsers } from '@/lib/fcm-admin';
 import { fetchLeaderboardRaw, parseLeaderboard } from '@/lib/espn';

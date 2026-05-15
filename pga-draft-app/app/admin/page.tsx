@@ -43,7 +43,7 @@ export default function AdminPage() {
   const [seeding, setSeeding] = useState(false);
   const [generatingRecap, setGeneratingRecap] = useState(false);
   const [recapPickingId, setRecapPickingId] = useState<string | null>(null);
-  const [recapError, setRecapError] = useState<string | null>(null);
+  const [recapError, setRecapError] = useState<{ tournamentId: string; msg: string } | null>(null);
   const [reedRuleStates, setReedRuleStates] = useState<Record<string, boolean>>({});
   const [reedRuleSaving, setReedRuleSaving] = useState<string | null>(null);
 
@@ -424,12 +424,12 @@ export default function AdminPage() {
       } else {
         const msg = data.error ?? 'Unknown error';
         toast.error(`Failed: ${msg}`, { id: toastId });
-        setRecapError(msg);
+        setRecapError({ tournamentId, msg });
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Network error';
       toast.error('Network error generating recap.', { id: toastId });
-      setRecapError(msg);
+      setRecapError({ tournamentId, msg });
     } finally {
       setGeneratingRecap(false);
     }
@@ -576,10 +576,10 @@ export default function AdminPage() {
                       </div>
                     )}
                     {/* Inline error — visible even when toasts are blocked by Dynamic Island / tab bar */}
-                    {recapError && (
+                    {recapError?.tournamentId === t.id && (
                       <div className="w-full mt-1 rounded-lg px-3 py-2 text-xs font-mono break-all"
                         style={{ background: 'rgba(239,68,68,0.15)', color: '#f87171', border: '1px solid rgba(239,68,68,0.4)' }}>
-                        {recapError}
+                        {recapError.msg}
                         <button onClick={() => setRecapError(null)} className="ml-2 opacity-60 hover:opacity-100">✕</button>
                       </div>
                     )}
