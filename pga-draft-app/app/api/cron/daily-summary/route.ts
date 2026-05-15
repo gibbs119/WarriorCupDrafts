@@ -215,7 +215,8 @@ async function generateSummary(forceTournamentId?: string, forceRound?: number) 
       thru: string;
       status: string;
       points: number;
-      r4Score?: string | null;  // Round 4 score only (for final-round hero/zero)
+      currentRoundScore: string | null;  // this round's score for hero/zero identification
+      r4Score?: string | null;
     }
 
     interface TeamEntry {
@@ -241,6 +242,7 @@ async function generateSummary(forceTournamentId?: string, forceRound?: number) 
         const status = pd.status ?? 'active';
         const points = calculatePoints(position, status, cutLine);
 
+        const currentRoundScore = pd.roundScores?.[currentRound - 1] ?? null;
         const r4Score = pd.roundScores?.[3] ?? null;
 
         return {
@@ -250,6 +252,7 @@ async function generateSummary(forceTournamentId?: string, forceRound?: number) 
           thru: pd.thru ?? '-',
           status,
           points,
+          currentRoundScore,
           r4Score,
         };
       });
@@ -304,7 +307,10 @@ async function generateSummary(forceTournamentId?: string, forceRound?: number) 
           : p.status === 'cut' ? `+${p.points} pts (missed cut — worst)`
           : p.status !== 'active' ? `${p.status.toUpperCase()}`
           : `+${p.points} pts (position ${p.position})`;
-        return `    [${counting ? 'counts' : 'bench'}] ${p.name}: ${p.position || 'NS'} — ${pLabel}`;
+        const roundPart = p.currentRoundScore && p.currentRoundScore !== '-'
+          ? `, R${currentRound}: ${p.currentRoundScore}`
+          : '';
+        return `    [${counting ? 'counts' : 'bench'}] ${p.name}: ${p.position || 'NS'}${roundPart} — ${pLabel}`;
       };
       return [
         `${ordinal(t.rank)}: ${t.username} — ${scoreLabel}`,
