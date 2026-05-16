@@ -37,7 +37,7 @@ async function callOpenAI(prompt: string): Promise<string | null> {
         model: 'gpt-4o-mini',
         messages: [{ role: 'user', content: prompt }],
         max_tokens: 2000,
-        temperature: 0.8,
+        temperature: 0.3,
       }),
     });
     if (!res.ok) {
@@ -84,6 +84,59 @@ function parseStrokeScore(score: string | undefined): number | null {
   if (score === 'E') return 0;
   const n = parseInt(score, 10);
   return isNaN(n) ? null : n;
+}
+
+// Pre-compute the realistic maximum point improvement for a single player.
+// Returns the expected improvement (positive = score gets lower/better).
+// Key insight: a player far BELOW the cut line will actually improve when cut
+// (e.g. T83 → cutLine+1 = 66), so that "free improvement" is included.
+function computeRealisticSwing(
+  position: number | null,
+  status: string,
+  scoreLocked: boolean,
+  points: number,
+  spotsFromTop10: number,
+  insideTop10: boolean,
+  top10PtSwing: number | null,
+  totalHolesLeft: number,
+  cutLine: number,
+  cutHasBeenMade: boolean,
+): number {
+  if (scoreLocked || status === 'cut' || status === 'wd' || status === 'dq') return 0;
+
+  let swing = 0;
+
+  // Pre-cut "free improvement": player far below the cut line will likely be cut,
+  // changing their score from e.g. +83 to cutLine+1 = +66.
+  if (!cutHasBeenMade && position !== null && position > cutLine + 1) {
+    swing += points - (cutLine + 1);
+  }
+
+  if (position === null) return Math.round((cutLine + 1) * 0.04); // tiny wildcard for not-started
+
+  // Weight by remaining holes — more holes = more time to move
+  const holesWeight =
+    totalHolesLeft >= 54 ? 1.00 :
+    totalHolesLeft >= 36 ? 0.85 :
+    totalHolesLeft >= 18 ? 0.55 :
+    totalHolesLeft >= 9  ? 0.20 : 0.04;
+
+  if (insideTop10) {
+    // Can only improve toward T1 — already collecting bonuses, modest ceiling
+    const ptsToT1 = Math.abs(TOP_10_POINTS[0] - points);
+    swing += Math.round(ptsToT1 * holesWeight * 0.20);
+  } else if (top10PtSwing !== null) {
+    // Probability of reaching T10 drops sharply with distance
+    const posWeight =
+      spotsFromTop10 <= 3  ? 0.70 :
+      spotsFromTop10 <= 6  ? 0.45 :
+      spotsFromTop10 <= 12 ? 0.18 :
+      spotsFromTop10 <= 25 ? 0.06 :
+      spotsFromTop10 <= 50 ? 0.02 : 0.003;
+    swing += Math.round(top10PtSwing * holesWeight * posWeight);
+  }
+
+  return Math.max(0, swing);
 }
 
 export async function POST(req: NextRequest) {
@@ -164,8 +217,9 @@ export async function POST(req: NextRequest) {
     );
     const top10Player = allActivePlayers.find(p => p.position === 10);
     const top11Player = allActivePlayers.find(p => p.position === 11);
-    const cutlineScore = top10Player?.score ?? top11Player?.score ?? 'unknown';
+    const cutlineScore   = top10Player?.score ?? top11Player?.score ?? 'unknown';
     const t10StrokeScore = parseStrokeScore(cutlineScore);
+    const cutHasBeenMade = Object.values(playersMap).some(p => p.status === 'cut');
 
     const picks = draftState.picks ?? [];
 
@@ -186,14 +240,17 @@ export async function POST(req: NextRequest) {
       top10PtSwing: number | null; // pts gained by entering / pts lost by falling out
       strokesFromT10: number | null;  // negative = strokes AHEAD of T10, positive = strokes needed
       currentRoundScore: string | null;  // this round's score (e.g. "-3"), null if not available
+      realisticSwing: number;  // max realistic point improvement (server-computed, not AI guess)
     }
     interface TeamEntry {
       userId: string; username: string;
       players: RichPlayer[];
       top3Score: number; rank: number;
       countingNames: Set<string>;
-      bestBench: RichPlayer | null;     // best non-counting player still active
-      gapToCount: number | null;        // pts bench player needs to displace worst counter
+      bestBench: RichPlayer | null;
+      gapToCount: number | null;
+      realisticBestScore: number;  // best-case team score given holes remaining
+      canReallyWin: boolean;       // false if realisticBestScore > leader's current score
     }
 
     const teams: TeamEntry[] = [];
@@ -238,6 +295,12 @@ export async function POST(req: NextRequest) {
         const roundScoresArr = (pd as { roundScores?: (string | null)[] }).roundScores;
         const currentRoundScore = roundScoresArr?.[currentRound - 1] ?? null;
 
+        const realisticSwing = computeRealisticSwing(
+          position, status, scoreLocked, points,
+          spotsFromTop10, insideTop10, top10PtSwingVal,
+          totalTournamentHolesLeft, cutLine, cutHasBeenMade,
+        );
+
         return {
           name: p.playerName,
           posDisplay: pd.positionDisplay ?? '-',
@@ -254,6 +317,7 @@ export async function POST(req: NextRequest) {
           top10PtSwing: top10PtSwingVal,
           strokesFromT10,
           currentRoundScore,
+          realisticSwing,
         };
       });
 
@@ -271,16 +335,29 @@ export async function POST(req: NextRequest) {
         ? bestBench.points - worstCounting.points
         : null;
 
+      // Best-case team score: for each counting player subtract their realistic swing.
+      // Unstarted counting players get a conservative T20 = 20pts assumption.
+      const realisticBestScore = top3.reduce((sum, p) => {
+        if (p.points >= 9000) return sum + 20; // not yet started → conservative T20
+        return sum + Math.max(TOP_10_POINTS[0], p.points - p.realisticSwing);
+      }, 0);
+
       teams.push({
         userId: user.uid, username: user.username, players, top3Score, rank: 0,
         countingNames, bestBench, gapToCount,
+        realisticBestScore, canReallyWin: true, // canReallyWin set after ranking
       });
     }
 
     if (teams.length === 0) return NextResponse.json({ error: 'No teams found' }, { status: 404 });
 
     teams.sort((a, b) => a.top3Score - b.top3Score);
-    teams.forEach((t, i) => { t.rank = i + 1; });
+    teams.forEach((t, i) => {
+      t.rank = i + 1;
+      // A team can only win if their realistic best score beats the leader's CURRENT score.
+      // If they can't beat the leader even in the best case, they cannot win.
+      t.canReallyWin = i === 0 || t.realisticBestScore <= teams[0].top3Score;
+    });
 
     const hasRealScores = teams.some(t => t.players.some(p => p.points < 9000));
     if (!hasRealScores) {
@@ -328,6 +405,15 @@ export async function POST(req: NextRequest) {
         return `    [${role}] ${p.name}: ${p.posDisplay}, Score ${p.score}${strokeCtx}${roundScorePart}${lockTag}, HolesLeft ${p.totalTournamentHolesLeft}, Pts ${pts} — ${top10Tag}`;
       }).join('\n');
 
+      const leaderScore = teams[0].top3Score;
+      const ceilingStr  = t.realisticBestScore <= 0 ? `${t.realisticBestScore}` : `+${t.realisticBestScore}`;
+      const leaderStr   = leaderScore <= 0 ? `${leaderScore}` : `+${leaderScore}`;
+      const ceilingLine = t.rank === 1
+        ? `\n  LEADING — realistic floor: ${ceilingStr}`
+        : t.canReallyWin
+        ? `\n  REALISTIC CEILING: ${ceilingStr} — CAN close gap on leader (${leaderStr})`
+        : `\n  REALISTIC CEILING: ${ceilingStr} — CANNOT WIN (ceiling worse than leader @ ${leaderStr}) → MAX 2%`;
+
       const benchLine = (t.bestBench && t.gapToCount !== null && t.gapToCount > 0)
         ? `\n  BENCH UPSIDE: ${t.bestBench.name} (${t.bestBench.posDisplay}, Pts ${t.bestBench.points > 0 ? '+' : ''}${t.bestBench.points}) needs ${t.gapToCount}pt improvement to enter counting (${t.bestBench.totalTournamentHolesLeft} holes left)`
         : '';
@@ -336,7 +422,7 @@ export async function POST(req: NextRequest) {
         ? `\n  OVERTAKE: Need ${gapToNext}pt net swing to pass #${t.rank - 1} (${teamAbove!.username})`
         : '';
 
-      return `#${t.rank} ${t.username} (Team Score: ${scoreStr}):${overtakeLine}${benchLine}\n${playerLines}`;
+      return `#${t.rank} ${t.username} (Team Score: ${scoreStr}):${ceilingLine}${overtakeLine}${benchLine}\n${playerLines}`;
     }).join('\n\n');
 
     // ── Prompt ───────────────────────────────────────────────────────────────
@@ -368,31 +454,34 @@ Volatility guide: 18 holes left → realistic ±3–6 spots. 5 holes left → ±
 ${teamsBlock}
 
 === YOUR TASK ===
-Assign win probabilities using the pre-computed context above:
-1. Team score gap is the dominant factor when large. Use OVERTAKE lines to see exact recovery needed.
-2. T10 bubble players are the highest-leverage positions — check "strokes FROM T10 bubble" vs holes left.
-3. Bench upside matters: a [bench] player with many holes left and low gapToCount could enter counting and swing the team significantly.
-4. ★LOCKED scores cannot change — treat those players as fixed points.
-5. R${currentRound}score shows this round's performance — useful for spotting momentum (hot/cold rounds).
-6. Compress odds toward the leader if gap is large and most scores are locked.
+Assign win probabilities. The REALISTIC CEILING lines are server-computed math — trust them over your intuition.
+
+MANDATORY RULES (enforce these before writing a single number):
+1. Any team marked "CANNOT WIN" MUST receive ≤2% — their best-case score mathematically cannot beat the leader. Do NOT assign more because their players look strong.
+2. Teams marked "CAN close gap" get odds proportional to how close their ceiling is to the leader.
+3. The leader gets the remainder after all others are assigned (likely 50%+ if their lead is large).
+4. ★LOCKED scores are fixed — do not factor them into upside.
+5. R${currentRound}score reveals this round's momentum — a player on a hot round has more upside.
+6. BENCH UPSIDE: a bench player with low gapToCount and many holes left is a real wildcard.
 
 Respond ONLY with valid JSON — no markdown, no backticks:
 {
-  "analysis": "2-3 sentence punchy narrative of the fantasy race right now",
+  "analysis": "2-3 sentence punchy narrative referencing the realistic ceiling math and actual score gaps",
   "odds": [
     {
       "username": "...",
       "winPct": 35,
       "trend": "up",
-      "insight": "One sharp sentence referencing specific players/positions and exact stroke/point gaps"
+      "insight": "One sharp sentence with the specific pt gap and ceiling — e.g. 'ceiling +45 can't touch leader +11'"
     }
   ]
 }
 
 Rules:
 - All winPct values MUST sum to exactly 100
-- trend: "up" if team improved this round, "down" if falling back, "stable" if holding
-- Reference specific player names, stroke gaps, and point swings — be concrete, not generic`;
+- CANNOT WIN teams: max 2% each — redistribute remainder to teams that CAN win
+- trend: "up" if improved this round vs start, "down" if falling, "stable" if holding
+- Be concrete: name players, cite the ceiling score, reference the overtake gap`;
 
     const text = await callOpenAI(prompt);
     if (!text) {
