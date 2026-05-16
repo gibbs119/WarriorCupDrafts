@@ -94,7 +94,6 @@ function computeRealisticSwing(
   position: number | null,
   status: string,
   scoreLocked: boolean,
-  points: number,
   spotsFromTop10: number,
   insideTop10: boolean,
   top10PtSwing: number | null,
@@ -103,18 +102,11 @@ function computeRealisticSwing(
   cutHasBeenMade: boolean,
 ): number {
   if (scoreLocked || status === 'cut' || status === 'wd' || status === 'dq') return 0;
+  // Players below the cut line will be cut and locked — no T10 upside, handled in realisticBestScore
+  if (!cutHasBeenMade && position !== null && position > cutLine) return 0;
 
-  let swing = 0;
+  if (position === null) return Math.round((cutLine + 1) * 0.04); // small wildcard for not-started
 
-  // Pre-cut "free improvement": player far below the cut line will likely be cut,
-  // changing their score from e.g. +83 to cutLine+1 = +66.
-  if (!cutHasBeenMade && position !== null && position > cutLine + 1) {
-    swing += points - (cutLine + 1);
-  }
-
-  if (position === null) return Math.round((cutLine + 1) * 0.04); // tiny wildcard for not-started
-
-  // Weight by remaining holes — more holes = more time to move
   const holesWeight =
     totalHolesLeft >= 54 ? 1.00 :
     totalHolesLeft >= 36 ? 0.85 :
@@ -122,21 +114,20 @@ function computeRealisticSwing(
     totalHolesLeft >= 9  ? 0.20 : 0.04;
 
   if (insideTop10) {
-    // Can only improve toward T1 — already collecting bonuses, modest ceiling
-    const ptsToT1 = Math.abs(TOP_10_POINTS[0] - points);
-    swing += Math.round(ptsToT1 * holesWeight * 0.20);
-  } else if (top10PtSwing !== null) {
-    // Probability of reaching T10 drops sharply with distance
-    const posWeight =
-      spotsFromTop10 <= 3  ? 0.70 :
-      spotsFromTop10 <= 6  ? 0.45 :
-      spotsFromTop10 <= 12 ? 0.18 :
-      spotsFromTop10 <= 25 ? 0.06 :
-      spotsFromTop10 <= 50 ? 0.02 : 0.003;
-    swing += Math.round(top10PtSwing * holesWeight * posWeight);
+    const ptsToT1 = Math.abs(TOP_10_POINTS[0] - (TOP_10_POINTS[position! - 1] ?? 0));
+    return Math.round(ptsToT1 * holesWeight * 0.20);
   }
 
-  return Math.max(0, swing);
+  if (top10PtSwing === null) return 0;
+
+  const posWeight =
+    spotsFromTop10 <= 3  ? 0.70 :
+    spotsFromTop10 <= 6  ? 0.45 :
+    spotsFromTop10 <= 12 ? 0.18 :
+    spotsFromTop10 <= 25 ? 0.06 :
+    spotsFromTop10 <= 50 ? 0.02 : 0.003;
+
+  return Math.max(0, Math.round(top10PtSwing * holesWeight * posWeight));
 }
 
 export async function POST(req: NextRequest) {
@@ -296,7 +287,7 @@ export async function POST(req: NextRequest) {
         const currentRoundScore = roundScoresArr?.[currentRound - 1] ?? null;
 
         const realisticSwing = computeRealisticSwing(
-          position, status, scoreLocked, points,
+          position, status, scoreLocked,
           spotsFromTop10, insideTop10, top10PtSwingVal,
           totalTournamentHolesLeft, cutLine, cutHasBeenMade,
         );
@@ -336,9 +327,12 @@ export async function POST(req: NextRequest) {
         : null;
 
       // Best-case team score: for each counting player subtract their realistic swing.
+      // Cut/WD/DQ and below-cut players lock at cutLine+1 — no further improvement possible.
       // Unstarted counting players get a conservative T20 = 20pts assumption.
       const realisticBestScore = top3.reduce((sum, p) => {
         if (p.points >= 9000) return sum + 20; // not yet started → conservative T20
+        if (p.status === 'cut' || p.status === 'wd' || p.status === 'dq') return sum + (cutLine + 1);
+        if (!cutHasBeenMade && p.position !== null && p.position > cutLine) return sum + (cutLine + 1);
         return sum + Math.max(TOP_10_POINTS[0], p.points - p.realisticSwing);
       }, 0);
 
