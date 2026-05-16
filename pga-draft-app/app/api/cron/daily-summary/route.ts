@@ -215,7 +215,8 @@ async function generateSummary(forceTournamentId?: string, forceRound?: number) 
       thru: string;
       status: string;
       points: number;
-      r4Score?: string | null;  // Round 4 score only (for final-round hero/zero)
+      currentRoundScore: string | null;  // this round's score for hero/zero identification
+      r4Score?: string | null;
     }
 
     interface TeamEntry {
@@ -241,6 +242,7 @@ async function generateSummary(forceTournamentId?: string, forceRound?: number) 
         const status = pd.status ?? 'active';
         const points = calculatePoints(position, status, cutLine);
 
+        const currentRoundScore = pd.roundScores?.[currentRound - 1] ?? null;
         const r4Score = pd.roundScores?.[3] ?? null;
 
         return {
@@ -250,6 +252,7 @@ async function generateSummary(forceTournamentId?: string, forceRound?: number) 
           thru: pd.thru ?? '-',
           status,
           points,
+          currentRoundScore,
           r4Score,
         };
       });
@@ -304,7 +307,10 @@ async function generateSummary(forceTournamentId?: string, forceRound?: number) 
           : p.status === 'cut' ? `+${p.points} pts (missed cut — worst)`
           : p.status !== 'active' ? `${p.status.toUpperCase()}`
           : `+${p.points} pts (position ${p.position})`;
-        return `    [${counting ? 'counts' : 'bench'}] ${p.name}: ${p.position || 'NS'} — ${pLabel}`;
+        const roundPart = p.currentRoundScore && p.currentRoundScore !== '-'
+          ? `, R${currentRound}: ${p.currentRoundScore}`
+          : '';
+        return `    [${counting ? 'counts' : 'bench'}] ${p.name}: ${p.position || 'NS'}${roundPart} — ${pLabel}`;
       };
       return [
         `${ordinal(t.rank)}: ${t.username} — ${scoreLabel}`,
@@ -484,7 +490,7 @@ Write a daily summary with THREE sections. Use ONLY names and rankings from the 
 
 1. **STANDINGS BREAKDOWN** (~3-4 sentences): Who's leading and why? Roast the cellar dwellers, hype the leaders. Reference the specific golfers and their positions.
 
-2. **HERO & ZERO OF THE DAY** (2 sentences each): Hero = best individual golfer performance today (lowest pts / best position). Zero = biggest bust. Name the golfer AND the team owner.
+2. **HERO & ZERO OF THE DAY** (2 sentences each): Hero = best individual R${currentRound} round score today (lowest R${currentRound} score shown after position — NOT overall position). Zero = worst R${currentRound} round score. Name the golfer AND the team owner. If R${currentRound} scores are not shown, fall back to best/worst overall position.
 
 3. **TOURNAMENT OUTLOOK** (~2-3 sentences): Who realistically wins from here? Who should start planning their concession speech?
 
