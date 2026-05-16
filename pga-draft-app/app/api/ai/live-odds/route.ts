@@ -163,7 +163,7 @@ export async function POST(req: NextRequest) {
       ? (Object.values(usersSnap.val()) as Array<{ uid: string; username: string }>)
       : [];
     const tournament = tournamentSnap.exists() ? tournamentSnap.val() : null;
-    const cutLine    = tournament?.cutLine ?? 65;
+    let cutLine      = tournament?.cutLine ?? 65;
     const maxPicks   = tournament?.maxPicks ?? 5;
 
     // Fetch fresh ESPN scores to avoid stale Firebase cache causing wrong round detection.
@@ -211,6 +211,11 @@ export async function POST(req: NextRequest) {
     const cutlineScore   = top10Player?.score ?? top11Player?.score ?? 'unknown';
     const t10StrokeScore = parseStrokeScore(cutlineScore);
     const cutHasBeenMade = Object.values(playersMap).some(p => p.status === 'cut');
+    // After the cut, derive cutLine from survivor count so cutLine+1 = correct penalty.
+    // e.g. PGA 2026: 82 survivors → cutLine=82 → missed-cut penalty = 83pts.
+    if (cutHasBeenMade && allActivePlayers.length > 0) {
+      cutLine = allActivePlayers.length;
+    }
 
     const picks = draftState.picks ?? [];
 
