@@ -391,11 +391,23 @@ export async function POST(req: NextRequest) {
       top3Score: t.top3Score,
       players: t.players.map(p => `${p.name}(${p.position ?? 'null'}→${p.points < 9000 ? p.points : 'NF'})`),
     })));
+
+    // How much can the leader realistically REGRESS in remaining play?
+    // A team can catch up if the leader has bad holes remaining — not just if their own ceiling
+    // beats the leader's current score. Scale allowance by average holes left in leader's top-3.
+    const leaderCounters = teams[0].players.filter(p => teams[0].countingNames.has(p.name));
+    const avgLeaderHolesLeft = leaderCounters.length > 0
+      ? leaderCounters.reduce((s, p) => s + p.totalTournamentHolesLeft, 0) / leaderCounters.length
+      : roundsRemaining * 18;
+    // ~0.8pt per hole remaining (leaders regress roughly half as fast as challengers improve)
+    const leaderRegressAllowance = Math.round(Math.min(35, avgLeaderHolesLeft * 0.8));
+
     teams.forEach((t, i) => {
       t.rank = i + 1;
-      // A team can only win if their realistic best score beats the leader's CURRENT score.
-      // If they can't beat the leader even in the best case, they cannot win.
-      t.canReallyWin = i === 0 || t.realisticBestScore <= teams[0].top3Score;
+      // CAN WIN if ceiling beats leader's current score OR fits within the regression window —
+      // the leader can get worse too, so a team 8pts behind with a full round left is a real threat.
+      const gapCeilingToLeader = t.realisticBestScore - teams[0].top3Score;
+      t.canReallyWin = i === 0 || gapCeilingToLeader <= leaderRegressAllowance;
     });
 
     const hasRealScores = teams.some(t => t.players.some(p => p.points < 9000));
@@ -448,10 +460,10 @@ export async function POST(req: NextRequest) {
       const ceilingStr  = t.realisticBestScore <= 0 ? `${t.realisticBestScore}` : `+${t.realisticBestScore}`;
       const leaderStr   = leaderScore <= 0 ? `${leaderScore}` : `+${leaderScore}`;
       const ceilingLine = t.rank === 1
-        ? `\n  LEADING — realistic floor: ${ceilingStr}`
+        ? `\n  LEADING — realistic floor: ${ceilingStr} (leader may regress up to ${leaderRegressAllowance}pt)`
         : t.canReallyWin
-        ? `\n  REALISTIC CEILING: ${ceilingStr} — CAN close gap on leader (${leaderStr})`
-        : `\n  REALISTIC CEILING: ${ceilingStr} — CANNOT WIN (ceiling worse than leader @ ${leaderStr}) → MAX 2%`;
+        ? `\n  REALISTIC CEILING: ${ceilingStr} — within ${leaderRegressAllowance}pt regression window of leader (${leaderStr}) — CONTENDER`
+        : `\n  REALISTIC CEILING: ${ceilingStr} — CANNOT WIN (gap too large even with ${leaderRegressAllowance}pt leader regression) → MAX 2%`;
 
       const benchLine = (t.bestBench && t.gapToCount !== null && t.gapToCount > 0)
         ? `\n  BENCH UPSIDE: ${t.bestBench.name} (${t.bestBench.posDisplay}, Pts ${t.bestBench.points > 0 ? '+' : ''}${t.bestBench.points}) needs ${t.gapToCount}pt improvement to enter counting (${t.bestBench.totalTournamentHolesLeft} holes left)`
@@ -496,12 +508,13 @@ ${teamsBlock}
 Assign win probabilities. The REALISTIC CEILING lines are server-computed math — trust them over your intuition.
 
 MANDATORY RULES (enforce these before writing a single number):
-1. Any team marked "CANNOT WIN" MUST receive ≤2% — their best-case score mathematically cannot beat the leader. Do NOT assign more because their players look strong.
-2. Teams marked "CAN close gap" get odds proportional to how close their ceiling is to the leader.
-3. The leader gets the remainder after all others are assigned (likely 50%+ if their lead is large).
+1. CANNOT WIN teams MUST receive ≤2% — no exceptions. The server enforces this; your job is to write a realistic insight explaining why.
+2. CONTENDER teams get odds based on how tight their ceiling is vs the leader's regression window (shown above).
+3. The leader gets the remainder after all others are assigned.
 4. ★LOCKED scores are fixed — do not factor them into upside.
-5. R${currentRound}score reveals this round's momentum — a player on a hot round has more upside.
-6. BENCH UPSIDE: a bench player with low gapToCount and many holes left is a real wildcard.
+5. R${currentRound}score reveals this round's momentum — a hot round = more realistic upside.
+6. BENCH UPSIDE: a bench player close to displacing the worst counting player is a real wildcard.
+7. The leader CAN regress — factor the regression window into your analysis. A 1-round lead is fragile.
 
 Respond ONLY with valid JSON — no markdown, no backticks:
 {
@@ -541,8 +554,42 @@ Rules:
       return NextResponse.json({ error: 'AI returned invalid JSON' }, { status: 500 });
     }
 
+    // Server-side enforcement: AI often ignores the ≤2% CANNOT WIN cap.
+    // Hard-clamp here and renormalize so the sum stays at 100.
+    const cannotWinSet = new Set(teams.filter(t => !t.canReallyWin).map(t => t.username));
+    const MAX_CANNOT_WIN_PCT = 2;
+
+    // Step 1 — clamp
+    const clamped = parsed.odds.map(o => ({
+      ...o,
+      winPct: cannotWinSet.has(o.username) ? Math.min(o.winPct, MAX_CANNOT_WIN_PCT) : o.winPct,
+    }));
+
+    // Step 2 — redistribute any freed percentage to contenders proportionally
+    const clampedTotal = clamped.reduce((s, o) => s + o.winPct, 0);
+    const deficit = 100 - clampedTotal;
+    const contenderTotal = clamped
+      .filter(o => !cannotWinSet.has(o.username))
+      .reduce((s, o) => s + o.winPct, 0);
+
+    const normalised = clamped.map(o => {
+      if (cannotWinSet.has(o.username) || contenderTotal === 0) return o;
+      const bump = Math.round((o.winPct / contenderTotal) * deficit);
+      return { ...o, winPct: Math.max(1, o.winPct + bump) };
+    });
+
+    // Step 3 — fix off-by-one rounding so sum === 100
+    const normTotal = normalised.reduce((s, o) => s + o.winPct, 0);
+    if (normTotal !== 100) {
+      const diff = 100 - normTotal;
+      const leadIdx = normalised.reduce(
+        (bi, o, i) => !cannotWinSet.has(o.username) && o.winPct > normalised[bi].winPct ? i : bi, 0
+      );
+      normalised[leadIdx] = { ...normalised[leadIdx], winPct: normalised[leadIdx].winPct + diff };
+    }
+
     // Merge userIds from username match
-    const oddsWithIds = parsed.odds.map((o) => {
+    const oddsWithIds = normalised.map((o) => {
       const team = teams.find((t) => t.username === o.username);
       return {
         userId:  team?.userId ?? o.username,
