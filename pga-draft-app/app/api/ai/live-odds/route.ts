@@ -193,6 +193,41 @@ export async function POST(req: NextRequest) {
       playersMap = playersSnap.val() as Record<string, PlayerEntry>;
     }
 
+    // Build a normalized-name lookup so picks stored with name-based IDs (instead of
+    // ESPN numeric IDs) are still found. Mirrors the mergedMap pattern in the leaderboard page.
+    const nameLookup = new Map<string, PlayerEntry>();
+    for (const player of Object.values(playersMap)) {
+      if (player.name) {
+        const key = player.name
+          .toLowerCase().normalize('NFD')
+          .replace(/[̀-ͯ]/g, '').replace(/\./g, '')
+          .replace(/[-–]/g, ' ').replace(/\s+/g, ' ').trim();
+        nameLookup.set(key, player);
+      }
+    }
+
+    function lookupPlayer(playerId: string, playerName: string): PlayerEntry {
+      // 1. ESPN numeric ID (fast path — works for all modern picks)
+      if (playersMap[playerId]) return playersMap[playerId];
+      // 2. Normalized name of playerName
+      if (playerName) {
+        const key = playerName
+          .toLowerCase().normalize('NFD')
+          .replace(/[̀-ͯ]/g, '').replace(/\./g, '')
+          .replace(/[-–]/g, ' ').replace(/\s+/g, ' ').trim();
+        const byName = nameLookup.get(key);
+        if (byName) return byName;
+        // 3. Treat playerId itself as a name slug (legacy picks before ESPN field loaded)
+        const byId = nameLookup.get(
+          playerId.toLowerCase().normalize('NFD')
+            .replace(/[̀-ͯ]/g, '').replace(/\./g, '')
+            .replace(/[-–]/g, ' ').replace(/\s+/g, ' ').trim()
+        );
+        if (byId) return byId;
+      }
+      return {} as PlayerEntry;
+    }
+
     // ── Round context ────────────────────────────────────────────────────────
     const currentRound = Object.values(playersMap).reduce(
       (m, p) => Math.max(m, p.currentRound ?? 1), 1
@@ -256,7 +291,7 @@ export async function POST(req: NextRequest) {
       if (myPicks.length === 0) continue;
 
       const players: RichPlayer[] = myPicks.map((p: { playerName: string; playerId: string }) => {
-        const pd = playersMap[p.playerId] ?? playersMap[p.playerName] ?? {};
+        const pd = lookupPlayer(p.playerId, p.playerName);
         const position = typeof pd.position === 'number' ? pd.position : null;
         const status   = pd.status ?? 'active';
         const thru     = pd.thru ?? '-';
@@ -351,6 +386,11 @@ export async function POST(req: NextRequest) {
     if (teams.length === 0) return NextResponse.json({ error: 'No teams found' }, { status: 404 });
 
     teams.sort((a, b) => a.top3Score - b.top3Score);
+    console.log('[live-odds] computed team scores:', teams.map(t => ({
+      name: t.username,
+      top3Score: t.top3Score,
+      players: t.players.map(p => `${p.name}(${p.position ?? 'null'}→${p.points < 9000 ? p.points : 'NF'})`),
+    })));
     teams.forEach((t, i) => {
       t.rank = i + 1;
       // A team can only win if their realistic best score beats the leader's CURRENT score.
