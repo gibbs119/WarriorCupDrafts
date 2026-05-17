@@ -55,6 +55,9 @@ async function callOpenAI(prompt: string): Promise<string | null> {
 
 // ── Scoring helpers ───────────────────────────────────────────────────────────
 const TOTAL_ROUNDS = 4;
+// Major championship: typical single-round stroke std-dev for a PGA Tour pro.
+// Drives the Monte Carlo spread — lower = tighter, higher = wider.
+const MAJOR_ROUND_STROKE_SD = 3.5;
 
 function fantasyPts(position: number | null, status: string, cutLine: number): number {
   if (status === 'cut' || status === 'wd' || status === 'dq') return cutLine + 1;
@@ -63,18 +66,13 @@ function fantasyPts(position: number | null, status: string, cutLine: number): n
 }
 
 // Points swing if player moves from their current position to T10 (or vice versa).
-// Positive = points improvement (lower score). Returns null if player is cut/wd/dq.
 function top10Swing(position: number | null, status: string, cutLine: number): number | null {
   if (status !== 'active' || !position || position === 0) return null;
   const currentPts = fantasyPts(position, status, cutLine);
-  const top10EdgePts = TOP_10_POINTS[9]; // -1 (position 10)
   if (position <= 10) {
-    // Inside: what they'd lose by falling to T11
-    const outsidePts = 11; // position 11 = 11 pts
-    return outsidePts - currentPts; // positive = how much worse falling out would be
+    return 11 - currentPts;
   } else {
-    // Outside: what they'd gain by reaching T10
-    return currentPts - top10EdgePts; // positive = how much better breaking in would be
+    return currentPts - TOP_10_POINTS[9]; // pts gained by entering T10
   }
 }
 
@@ -86,10 +84,28 @@ function parseStrokeScore(score: string | undefined): number | null {
   return isNaN(n) ? null : n;
 }
 
-// Pre-compute the realistic maximum point improvement for a single player.
-// Returns the expected improvement (positive = score gets lower/better).
-// Key insight: a player far BELOW the cut line will actually improve when cut
-// (e.g. T83 → cutLine+1 = 66), so that "free improvement" is included.
+// Box-Muller normal variate — used in Monte Carlo simulation.
+function normalRandom(): number {
+  let u = 0, v = 0;
+  while (u === 0) u = Math.random();
+  while (v === 0) v = Math.random();
+  return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+}
+
+// Binary search: returns 1-indexed position of `strokes` in a sorted ASC array.
+// Ties are resolved to the same position bucket (upper-bound).
+function strokesToPosition(strokes: number, sortedField: number[]): number {
+  let lo = 0, hi = sortedField.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (sortedField[mid] < strokes) lo = mid + 1;
+    else hi = mid;
+  }
+  return Math.max(1, lo + 1);
+}
+
+// Pre-compute the heuristic "best-case" ceiling for AI context strings.
+// (Not used for win probability — Monte Carlo handles that.)
 function computeRealisticSwing(
   position: number | null,
   status: string,
@@ -102,10 +118,8 @@ function computeRealisticSwing(
   cutHasBeenMade: boolean,
 ): number {
   if (scoreLocked || status === 'cut' || status === 'wd' || status === 'dq') return 0;
-  // Players below the cut line will be cut and locked — no T10 upside, handled in realisticBestScore
   if (!cutHasBeenMade && position !== null && position > cutLine) return 0;
-
-  if (position === null) return Math.round((cutLine + 1) * 0.04); // small wildcard for not-started
+  if (position === null) return Math.round((cutLine + 1) * 0.04);
 
   const holesWeight =
     totalHolesLeft >= 54 ? 1.00 :
@@ -117,7 +131,6 @@ function computeRealisticSwing(
     const ptsToT1 = Math.abs(TOP_10_POINTS[0] - (TOP_10_POINTS[position! - 1] ?? 0));
     return Math.round(ptsToT1 * holesWeight * 0.20);
   }
-
   if (top10PtSwing === null) return 0;
 
   const posWeight =
@@ -392,23 +405,7 @@ export async function POST(req: NextRequest) {
       players: t.players.map(p => `${p.name}(${p.position ?? 'null'}→${p.points < 9000 ? p.points : 'NF'})`),
     })));
 
-    // How much can the leader realistically REGRESS in remaining play?
-    // A team can catch up if the leader has bad holes remaining — not just if their own ceiling
-    // beats the leader's current score. Scale allowance by average holes left in leader's top-3.
-    const leaderCounters = teams[0].players.filter(p => teams[0].countingNames.has(p.name));
-    const avgLeaderHolesLeft = leaderCounters.length > 0
-      ? leaderCounters.reduce((s, p) => s + p.totalTournamentHolesLeft, 0) / leaderCounters.length
-      : roundsRemaining * 18;
-    // ~0.8pt per hole remaining (leaders regress roughly half as fast as challengers improve)
-    const leaderRegressAllowance = Math.round(Math.min(35, avgLeaderHolesLeft * 0.8));
-
-    teams.forEach((t, i) => {
-      t.rank = i + 1;
-      // CAN WIN if ceiling beats leader's current score OR fits within the regression window —
-      // the leader can get worse too, so a team 8pts behind with a full round left is a real threat.
-      const gapCeilingToLeader = t.realisticBestScore - teams[0].top3Score;
-      t.canReallyWin = i === 0 || gapCeilingToLeader <= leaderRegressAllowance;
-    });
+    teams.forEach((t, i) => { t.rank = i + 1; t.canReallyWin = true; }); // set after MC below
 
     const hasRealScores = teams.some(t => t.players.some(p => p.points < 9000));
     if (!hasRealScores) {
@@ -418,9 +415,74 @@ export async function POST(req: NextRequest) {
     const totalTeams     = teams.length;
     const tournamentName = tournament?.name ?? tournamentId;
 
+    // ── Monte Carlo win-probability simulation ────────────────────────────────
+    // Model: each player's final stroke score = current + N(0, σ) where
+    // σ = MAJOR_ROUND_STROKE_SD × √(holesLeft/18).  Simulated position is
+    // looked up in a static sorted field (current active player strokes).
+    // The non-linear TOP_10_POINTS jump structure is preserved automatically.
+    const sortedFieldStrokes = Object.values(playersMap)
+      .filter(p => p.status === 'active')
+      .map(p => parseStrokeScore(p.score) ?? 0)
+      .sort((a, b) => a - b);
+
+    const N_SIMS = 3000;
+    const winCounts = new Array(teams.length).fill(0);
+
+    for (let sim = 0; sim < N_SIMS; sim++) {
+      const teamSims = teams.map(team => {
+        const simPts = team.players.map(p => {
+          if (p.scoreLocked || p.status === 'cut' || p.status === 'wd' || p.status === 'dq') {
+            return p.points; // locked — no variance
+          }
+          if (p.points >= 9000) return 20; // unstarted → conservative T20
+
+          const holesLeft = p.totalTournamentHolesLeft;
+          if (holesLeft <= 0) return p.points;
+
+          const strokeSd = MAJOR_ROUND_STROKE_SD * Math.sqrt(holesLeft / 18);
+          const currentStrokes = parseStrokeScore(p.score) ?? 0;
+          const simStrokes = currentStrokes + normalRandom() * strokeSd;
+          const simPos = strokesToPosition(simStrokes, sortedFieldStrokes);
+          return fantasyPts(simPos, p.status, cutLine);
+        });
+        // Best 3 of N
+        return simPts.sort((a, b) => a - b).slice(0, 3).reduce((s, pts) => s + pts, 0);
+      });
+
+      const minScore = Math.min(...teamSims);
+      // Handle ties: split the win
+      const winnerIdxs = teamSims.map((s, i) => s === minScore ? i : -1).filter(i => i >= 0);
+      for (const i of winnerIdxs) winCounts[i] += 1 / winnerIdxs.length;
+    }
+
+    // Convert raw counts to rounded percentages, floor impossibly-far teams at 1%
+    const rawPcts = winCounts.map(c => (c / N_SIMS) * 100);
+    // Teams with <0.5% raw chance are mathematically eliminated → floor 1%
+    const mcWinPcts: number[] = rawPcts.map(p => (p < 0.5 ? 0 : p));
+    const eliminated = rawPcts.map(p => p < 0.5);
+
+    // Normalise to 100, then assign 1% floor to eliminated teams from leader's share
+    let normalSum = mcWinPcts.reduce((s, p) => s + p, 0);
+    const finalPcts = mcWinPcts.map((p, i) => {
+      if (eliminated[i]) return 1;
+      return Math.max(1, Math.round((p / normalSum) * (100 - eliminated.filter(Boolean).length)));
+    });
+    // Fix rounding to exactly 100
+    const ptSum = finalPcts.reduce((s, p) => s + p, 0);
+    if (ptSum !== 100) {
+      const leaderIdx = finalPcts.indexOf(Math.max(...finalPcts));
+      finalPcts[leaderIdx] += 100 - ptSum;
+    }
+
+    // Mark canReallyWin for prompt context (teams with >1% have a real shot)
+    teams.forEach((t, i) => { t.canReallyWin = finalPcts[i] > 1; });
+
+    console.log('[live-odds] MC win%:', teams.map((t, i) => `${t.username}:${finalPcts[i]}%`).join(' '));
+
     // ── Format each player line with full context ────────────────────────────
     const teamsBlock = teams.map((t, idx) => {
       const scoreStr = t.top3Score > 0 ? `+${t.top3Score}` : `${t.top3Score}`;
+      const winPctStr = finalPcts[idx];
       const teamAbove = idx > 0 ? teams[idx - 1] : null;
       const gapToNext = teamAbove ? t.top3Score - teamAbove.top3Score : null;
 
@@ -449,91 +511,54 @@ export async function POST(req: NextRequest) {
           : '';
 
         const top10Tag = p.insideTop10
-          ? `INSIDE TOP-10 at ${p.posDisplay} (${p.top10PtSwing !== null ? `${p.top10PtSwing}pt cliff to T11` : ''})`
+          ? `INSIDE T10 at ${p.posDisplay} (${p.top10PtSwing !== null ? `${p.top10PtSwing}pt cliff to T11` : ''})`
           : `outside T10 by ${p.spotsFromTop10} spots (${p.top10PtSwing !== null ? `entering T10 = ${p.top10PtSwing}pt swing` : ''})`;
         const pts = p.points <= 0 ? `${p.points}` : `+${p.points}`;
 
         return `    [${role}] ${p.name}: ${p.posDisplay}, Score ${p.score}${strokeCtx}${roundScorePart}${lockTag}, HolesLeft ${p.totalTournamentHolesLeft}, Pts ${pts} — ${top10Tag}`;
       }).join('\n');
 
-      const leaderScore = teams[0].top3Score;
-      const ceilingStr  = t.realisticBestScore <= 0 ? `${t.realisticBestScore}` : `+${t.realisticBestScore}`;
-      const leaderStr   = leaderScore <= 0 ? `${leaderScore}` : `+${leaderScore}`;
-      const ceilingLine = t.rank === 1
-        ? `\n  LEADING — realistic floor: ${ceilingStr} (leader may regress up to ${leaderRegressAllowance}pt)`
-        : t.canReallyWin
-        ? `\n  REALISTIC CEILING: ${ceilingStr} — within ${leaderRegressAllowance}pt regression window of leader (${leaderStr}) — CONTENDER`
-        : `\n  REALISTIC CEILING: ${ceilingStr} — CANNOT WIN (gap too large even with ${leaderRegressAllowance}pt leader regression) → MAX 2%`;
-
       const benchLine = (t.bestBench && t.gapToCount !== null && t.gapToCount > 0)
-        ? `\n  BENCH UPSIDE: ${t.bestBench.name} (${t.bestBench.posDisplay}, Pts ${t.bestBench.points > 0 ? '+' : ''}${t.bestBench.points}) needs ${t.gapToCount}pt improvement to enter counting (${t.bestBench.totalTournamentHolesLeft} holes left)`
+        ? `\n  BENCH UPSIDE: ${t.bestBench.name} (${t.bestBench.posDisplay}, Pts ${t.bestBench.points > 0 ? '+' : ''}${t.bestBench.points}) needs ${t.gapToCount}pt to enter counting (${t.bestBench.totalTournamentHolesLeft} holes left)`
         : '';
 
       const overtakeLine = gapToNext !== null && gapToNext > 0
         ? `\n  OVERTAKE: Need ${gapToNext}pt net swing to pass #${t.rank - 1} (${teamAbove!.username})`
         : '';
 
-      return `#${t.rank} ${t.username} (Team Score: ${scoreStr}):${ceilingLine}${overtakeLine}${benchLine}\n${playerLines}`;
+      return `#${t.rank} ${t.username} (Score: ${scoreStr} | MC Win%: ${winPctStr}%):${overtakeLine}${benchLine}\n${playerLines}`;
     }).join('\n\n');
 
-    // ── Prompt ───────────────────────────────────────────────────────────────
-    const prompt = `You are a live fantasy golf odds analyst for ${tournamentName}, a private ${totalTeams}-person draft league.
+    // ── Prompt — AI generates NARRATIVE ONLY, win% are server-computed ────────
+    const prompt = `You are a fantasy golf analyst narrating live odds for ${tournamentName} (${totalTeams}-person private league).
 
-=== SCORING SYSTEM ===
-Best ${maxPicks > 3 ? '3 of ' + maxPicks : '3'} drafted players count toward team score (lowest = best).
-Top-10 bonuses: ${TOP_10_POINTS.map((p, i) => `T${i + 1}=${p}`).join(', ')}.
-Positions 11+: points = position number (T15 = +15pts).
-Cut/WD/DQ: ${cutLine + 1} pts (locked, cannot improve).
-★LOCKED = score cannot change (finished or eliminated).
-[COUNTING] = one of the 3 players counting toward team score. [bench] = not currently counting.
+SCORING: Best 3 of ${maxPicks} drafted players count. Lower = better.
+Top-10 pts: ${TOP_10_POINTS.map((p, i) => `T${i+1}=${p}`).join(', ')}. T11+: pts = position. Cut/WD/DQ: +${cutLine+1} (locked).
+KEY: T11→T10 = 12pt swing. T2→T1 = 10pt swing. The T10 boundary is the biggest lever.
 
-CRITICAL THRESHOLDS:
-- T10/T11 boundary: Moving T11→T10 is a +12pt swing (+11 to -1). This is the most impactful move.
-- T1/T2 boundary: Moving T2→T1 is a +10pt swing (-15 to -25). The leader gap matters at the top.
-- "strokes FROM T10 bubble" tells you exactly how far a player is from the T10 bonus zone.
-- "strokes CLEAR of T10 bubble" means they're safely inside — but can still fall out.
+TOURNAMENT: ${roundLabel} of ${TOTAL_ROUNDS}. Rounds remaining: ${roundsRemaining}.
+With ${roundsRemaining >= 1 ? 'a full round remaining' : 'only this round left'}, even a 20pt lead is fragile — a 4-stroke swing at the top can flip the entire leaderboard.
+T10 cutline score: ${cutlineScore}.
 
-BENCH UPSIDE: If a [bench] player improves enough, they displace the worst [COUNTING] player.
-OVERTAKE: The exact net swing needed for a team to move up one place in the standings.
+WIN PROBABILITIES (server-computed via Monte Carlo, 3 000 simulations — DO NOT change these numbers):
+${teams.map((t, i) => `  ${t.username}: ${finalPcts[i]}%`).join('\n')}
 
-=== TOURNAMENT CONTEXT ===
-Currently: ${roundLabel} of ${TOTAL_ROUNDS}. Rounds remaining after this: ${roundsRemaining}.
-Top-10 cutline stroke score: ${cutlineScore}.
-Volatility guide: 18 holes left → realistic ±3–6 spots. 5 holes left → ±1–2 spots. T25+ with <9 holes left → near-zero chance of T10.
-
-=== LIVE STANDINGS ===
+LIVE STANDINGS:
 ${teamsBlock}
 
-=== YOUR TASK ===
-Assign win probabilities. The REALISTIC CEILING lines are server-computed math — trust them over your intuition.
-
-MANDATORY RULES (enforce these before writing a single number):
-1. CANNOT WIN teams MUST receive ≤2% — no exceptions. The server enforces this; your job is to write a realistic insight explaining why.
-2. CONTENDER teams get odds based on how tight their ceiling is vs the leader's regression window (shown above).
-3. The leader gets the remainder after all others are assigned.
-4. ★LOCKED scores are fixed — do not factor them into upside.
-5. R${currentRound}score reveals this round's momentum — a hot round = more realistic upside.
-6. BENCH UPSIDE: a bench player close to displacing the worst counting player is a real wildcard.
-7. The leader CAN regress — factor the regression window into your analysis. A 1-round lead is fragile.
+Your job: write ONE punchy insight sentence per team (explain WHY they have that win%), and a 2–3 sentence overall analysis.
+- Reference actual names, specific pt gaps, the T10 boundary, and remaining holes.
+- For teams with 1% (mathematically eliminated), explain the gap honestly.
+- For contenders, name the specific scenario that gets them to victory.
 
 Respond ONLY with valid JSON — no markdown, no backticks:
 {
-  "analysis": "2-3 sentence punchy narrative referencing the realistic ceiling math and actual score gaps",
+  "analysis": "2-3 sentence overall narrative",
   "odds": [
-    {
-      "username": "...",
-      "winPct": 35,
-      "trend": "up",
-      "insight": "One sharp sentence with the specific pt gap and ceiling — e.g. 'ceiling +45 can't touch leader +11'"
-    }
+    { "username": "...", "trend": "up", "insight": "one sharp sentence" }
   ]
 }
-
-Rules:
-- All winPct values MUST sum to exactly 100
-- CANNOT WIN teams: max 2% each — redistribute remainder to teams that CAN win
-- trend: "up" if improved this round vs start, "down" if falling, "stable" if holding
-- Be concrete: name players, cite the ceiling score, reference the overtake gap`;
+trend: "up" if team improved since this round started, "down" if regressing, "stable" if holding.`;
 
     const text = await callOpenAI(prompt);
     if (!text) {
@@ -544,7 +569,7 @@ Rules:
 
     let parsed: {
       analysis: string;
-      odds: Array<{ username: string; winPct: number; trend: string; insight: string }>;
+      odds: Array<{ username: string; trend: string; insight: string }>;
     };
     try {
       const clean = text.replace(/```json|```/g, '').trim();
@@ -554,49 +579,15 @@ Rules:
       return NextResponse.json({ error: 'AI returned invalid JSON' }, { status: 500 });
     }
 
-    // Server-side enforcement: AI often ignores the ≤2% CANNOT WIN cap.
-    // Hard-clamp here and renormalize so the sum stays at 100.
-    const cannotWinSet = new Set(teams.filter(t => !t.canReallyWin).map(t => t.username));
-    const MAX_CANNOT_WIN_PCT = 2;
-
-    // Step 1 — clamp
-    const clamped = parsed.odds.map(o => ({
-      ...o,
-      winPct: cannotWinSet.has(o.username) ? Math.min(o.winPct, MAX_CANNOT_WIN_PCT) : o.winPct,
-    }));
-
-    // Step 2 — redistribute any freed percentage to contenders proportionally
-    const clampedTotal = clamped.reduce((s, o) => s + o.winPct, 0);
-    const deficit = 100 - clampedTotal;
-    const contenderTotal = clamped
-      .filter(o => !cannotWinSet.has(o.username))
-      .reduce((s, o) => s + o.winPct, 0);
-
-    const normalised = clamped.map(o => {
-      if (cannotWinSet.has(o.username) || contenderTotal === 0) return o;
-      const bump = Math.round((o.winPct / contenderTotal) * deficit);
-      return { ...o, winPct: Math.max(1, o.winPct + bump) };
-    });
-
-    // Step 3 — fix off-by-one rounding so sum === 100
-    const normTotal = normalised.reduce((s, o) => s + o.winPct, 0);
-    if (normTotal !== 100) {
-      const diff = 100 - normTotal;
-      const leadIdx = normalised.reduce(
-        (bi, o, i) => !cannotWinSet.has(o.username) && o.winPct > normalised[bi].winPct ? i : bi, 0
-      );
-      normalised[leadIdx] = { ...normalised[leadIdx], winPct: normalised[leadIdx].winPct + diff };
-    }
-
-    // Merge userIds from username match
-    const oddsWithIds = normalised.map((o) => {
-      const team = teams.find((t) => t.username === o.username);
+    // Merge server winPcts with AI insight/trend (AI never sets the numbers)
+    const oddsWithIds = teams.map((team, i) => {
+      const aiEntry = parsed.odds.find(o => o.username === team.username);
       return {
-        userId:  team?.userId ?? o.username,
-        username: o.username,
-        winPct:  o.winPct,
-        trend:   (o.trend as 'up' | 'down' | 'stable') ?? 'stable',
-        insight: o.insight,
+        userId:   team.userId,
+        username: team.username,
+        winPct:   finalPcts[i],  // always server MC value
+        trend:    (aiEntry?.trend as 'up' | 'down' | 'stable') ?? 'stable',
+        insight:  aiEntry?.insight ?? '',
       };
     });
 
