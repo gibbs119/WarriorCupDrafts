@@ -105,6 +105,7 @@ export default function Navigation() {
                   VIEW ONLY
                 </span>
                 <button onClick={handleSignOut}
+                  aria-label="Exit view-only mode"
                   className="flex items-center gap-1 text-slate-500 hover:text-white transition-colors text-sm p-1.5 rounded-lg hover:bg-white/5">
                   <LogOut size={15} />
                   <span className="hidden sm:inline text-xs">Exit</span>
@@ -124,6 +125,7 @@ export default function Navigation() {
                   </Link>
                 )}
                 <button onClick={handleSignOut}
+                  aria-label="Sign out"
                   className="flex items-center gap-1 text-slate-500 hover:text-white transition-colors text-sm p-1.5 rounded-lg hover:bg-white/5">
                   <LogOut size={15} />
                   <span className="hidden sm:inline text-xs">Sign out</span>
