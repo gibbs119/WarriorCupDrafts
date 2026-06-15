@@ -135,14 +135,23 @@ export default function DraftRoomPage() {
     return () => clearTimeout(t);
   }, [searchTerm]);
 
-  // Pick countdown timer — starts when it becomes my turn, resets on picker change
+  // Pick countdown timer — starts when it becomes my turn, resets on picker change.
+  // Reads snakeDraftOrder directly from draftState (not the ref) so the effect re-fires
+  // when the order first loads — handles the case where the page loads while it's already
+  // your turn and the ref hasn't been populated yet.
   useEffect(() => {
     if (!draftState || !appUser || draftState.status !== 'open') {
       setPickSecondsLeft(null);
       return;
     }
-    const order = snakeOrderRef.current;
-    if (order.length === 0) return;
+    // Prefer snakeDraftOrder from Firebase; fall back to the ref (populated during render)
+    const order = (draftState.snakeDraftOrder?.length ?? 0) > 0
+      ? draftState.snakeDraftOrder!
+      : snakeOrderRef.current;
+    if (order.length === 0) {
+      setPickSecondsLeft(null);
+      return;
+    }
     const currentPickerUid = getCurrentPicker(order, draftState.currentPickIndex);
     if (currentPickerUid !== appUser.uid) {
       setPickSecondsLeft(null);
@@ -156,8 +165,9 @@ export default function DraftRoomPage() {
       });
     }, 1000);
     return () => clearInterval(interval);
+  // snakeDraftOrder.length as dep ensures effect re-fires when the order first populates
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draftState?.currentPickIndex, draftState?.status, appUser?.uid]);
+  }, [draftState?.currentPickIndex, draftState?.status, draftState?.snakeDraftOrder?.length, appUser?.uid]);
 
   // Auth guard
   useEffect(() => {
