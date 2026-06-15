@@ -967,7 +967,7 @@ export default function DraftRoomPage() {
       {pendingPick && (
         <div
           className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
-          style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)' }}
+          style={{ background: 'rgba(0,0,0,0.80)' }}
           onClick={() => setPendingPick(null)}
         >
           <div
