@@ -19,7 +19,7 @@ import {
 } from '@/lib/db';
 import { requestPushToken, getPushPermission, type PushPermission } from '@/lib/fcm';
 import { buildSnakeDraftOrder, getCurrentPicker } from '@/lib/scoring';
-import { STATIC_FIELDS, SCORING_PLAYERS, PICK_TIMER_SECONDS } from '@/lib/constants';
+import { STATIC_FIELDS, SCORING_PLAYERS } from '@/lib/constants';
 import { parseLeaderboard } from '@/lib/espn';
 import {
   buildEspnLookup,
@@ -120,7 +120,6 @@ export default function DraftRoomPage() {
   const prevPickerUidRef = useRef<string | null>(null);     // track picker changes
   const snakeOrderRef = useRef<string[]>([]);                  // always-current snake order
   const notifPermissionRef = useRef<NotificationPermission>('default');
-  const [pickSecondsLeft, setPickSecondsLeft] = useState<number | null>(null);
 
   // Track permission state for the UI badge (token registration handled by Navigation)
   useEffect(() => {
@@ -134,40 +133,6 @@ export default function DraftRoomPage() {
     const t = setTimeout(() => setDebouncedSearch(searchTerm), 280);
     return () => clearTimeout(t);
   }, [searchTerm]);
-
-  // Pick countdown timer — starts when it becomes my turn, resets on picker change.
-  // Reads snakeDraftOrder directly from draftState (not the ref) so the effect re-fires
-  // when the order first loads — handles the case where the page loads while it's already
-  // your turn and the ref hasn't been populated yet.
-  useEffect(() => {
-    if (!draftState || !appUser || draftState.status !== 'open') {
-      setPickSecondsLeft(null);
-      return;
-    }
-    // Prefer snakeDraftOrder from Firebase; fall back to the ref (populated during render)
-    const order = (draftState.snakeDraftOrder?.length ?? 0) > 0
-      ? draftState.snakeDraftOrder!
-      : snakeOrderRef.current;
-    if (order.length === 0) {
-      setPickSecondsLeft(null);
-      return;
-    }
-    const currentPickerUid = getCurrentPicker(order, draftState.currentPickIndex);
-    if (currentPickerUid !== appUser.uid) {
-      setPickSecondsLeft(null);
-      return;
-    }
-    setPickSecondsLeft(PICK_TIMER_SECONDS);
-    const interval = setInterval(() => {
-      setPickSecondsLeft((prev) => {
-        if (prev === null || prev <= 1) { clearInterval(interval); return 0; }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(interval);
-  // snakeDraftOrder.length as dep ensures effect re-fires when the order first populates
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draftState?.currentPickIndex, draftState?.status, draftState?.snakeDraftOrder?.length, appUser?.uid]);
 
   // Auth guard
   useEffect(() => {
@@ -610,27 +575,12 @@ export default function DraftRoomPage() {
       {/* ── "Your turn" alert banner — pulses, tap to dismiss ── */}
       {myTurnAlert && (
         <div
-          className="sticky top-0 z-40 flex items-center justify-between gap-3 px-4 py-3 font-bold cursor-pointer"
-          style={{
-            background: pickSecondsLeft !== null && pickSecondsLeft <= 30
-              ? `linear-gradient(90deg, #7f1d1d, #991b1b, #7f1d1d)`
-              : `linear-gradient(90deg, ${theme.accentLight}, ${theme.accent}, ${theme.accentMid}, ${theme.accent}, ${theme.accentLight})`,
-            color: '#fff',
-            animation: 'pulse 1.5s ease-in-out infinite',
-          }}
+          className="sticky top-0 z-40 flex items-center justify-between gap-3 px-4 py-3 text-sm font-bold cursor-pointer"
+          style={{ background: `linear-gradient(90deg, ${theme.accentLight}, ${theme.accent}, ${theme.accentMid}, ${theme.accent}, ${theme.accentLight})`, color: '#fff', animation: 'pulse 1.5s ease-in-out infinite' }}
           onClick={() => setMyTurnAlert(false)}
         >
-          <span className="text-sm">⛳ &nbsp;IT'S YOUR PICK — You're on the clock!</span>
-          <div className="flex items-center gap-3 shrink-0">
-            {pickSecondsLeft !== null && (
-              <span className={`font-mono text-lg tabular-nums font-black ${
-                pickSecondsLeft <= 30 ? 'text-red-200' : pickSecondsLeft <= 60 ? 'text-yellow-200' : 'text-white'
-              }`}>
-                {String(Math.floor(pickSecondsLeft / 60)).padStart(1, '0')}:{String(pickSecondsLeft % 60).padStart(2, '0')}
-              </span>
-            )}
-            <span className="text-base opacity-70">✕</span>
-          </div>
+          <span>⛳ &nbsp;IT'S YOUR PICK — You're on the clock!</span>
+          <span className="text-base opacity-70">✕</span>
         </div>
       )}
 
@@ -737,16 +687,6 @@ export default function DraftRoomPage() {
                 </p>
               )}
             </div>
-            {isMyTurn && pickSecondsLeft !== null && (
-              <div className="flex flex-col items-end shrink-0">
-                <span className={`font-mono text-2xl font-black tabular-nums leading-none ${
-                  pickSecondsLeft <= 30 ? 'text-red-400' : pickSecondsLeft <= 60 ? 'text-yellow-400' : 'text-green-400'
-                }`}>
-                  {String(Math.floor(pickSecondsLeft / 60)).padStart(1, '0')}:{String(pickSecondsLeft % 60).padStart(2, '0')}
-                </span>
-                <span className="text-xs text-slate-500 mt-0.5">time left</span>
-              </div>
-            )}
             {statusMsg && <p className="text-sm shrink-0">{statusMsg}</p>}
           </div>
         ) : (
