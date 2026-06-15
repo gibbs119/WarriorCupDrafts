@@ -1801,6 +1801,15 @@ export default function LeaderboardPage() {
           }
         />
 
+        {/* Live "last updated" timestamp */}
+        {lastUpdated && (
+          <div className="flex items-center justify-end gap-1.5 text-xs text-slate-500 mt-1 mb-3">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-400 inline-block"
+              style={{ animation: 'live-dot 1.8s ease-out infinite' }} />
+            <span>Updated {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+          </div>
+        )}
+
         {/* Tab row — scrollable */}
         <div className="overflow-x-auto scrollbar-hide mb-4">
           <div className="flex gap-1 min-w-max p-1 rounded-xl" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>

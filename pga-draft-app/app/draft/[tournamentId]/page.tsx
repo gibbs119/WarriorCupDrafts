@@ -19,7 +19,7 @@ import {
 } from '@/lib/db';
 import { requestPushToken, getPushPermission, type PushPermission } from '@/lib/fcm';
 import { buildSnakeDraftOrder, getCurrentPicker } from '@/lib/scoring';
-import { STATIC_FIELDS, SCORING_PLAYERS } from '@/lib/constants';
+import { STATIC_FIELDS, SCORING_PLAYERS, PICK_TIMER_SECONDS } from '@/lib/constants';
 import { parseLeaderboard } from '@/lib/espn';
 import {
   buildEspnLookup,
@@ -107,6 +107,7 @@ export default function DraftRoomPage() {
   const [oddsStale, setOddsStale] = useState(false);
 
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [sortMode, setSortMode] = useState<SortMode>('odds');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [pickLoading, setPickLoading] = useState(false);
@@ -119,6 +120,7 @@ export default function DraftRoomPage() {
   const prevPickerUidRef = useRef<string | null>(null);     // track picker changes
   const snakeOrderRef = useRef<string[]>([]);                  // always-current snake order
   const notifPermissionRef = useRef<NotificationPermission>('default');
+  const [pickSecondsLeft, setPickSecondsLeft] = useState<number | null>(null);
 
   // Track permission state for the UI badge (token registration handled by Navigation)
   useEffect(() => {
@@ -126,6 +128,12 @@ export default function DraftRoomPage() {
     setPushPermission(perm);
     notifPermissionRef.current = perm === 'unsupported' ? 'default' : perm as NotificationPermission;
   }, []);
+
+  // Debounce search input — keeps input responsive while delaying filter re-renders
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchTerm), 280);
+    return () => clearTimeout(t);
+  }, [searchTerm]);
 
   // Auth guard
   useEffect(() => {
@@ -437,8 +445,8 @@ export default function DraftRoomPage() {
       // This catches ghost duplicates: same player appearing under both odds key AND ESPN key.
       if (pickedKeys.has(playerKey(p.displayName))) return false;
       if (p.espnName && pickedKeys.has(playerKey(p.espnName))) return false;
-      if (searchTerm === '') return true;
-      return p.displayName.toLowerCase().includes(searchTerm.toLowerCase());
+      if (debouncedSearch === '') return true;
+      return p.displayName.toLowerCase().includes(debouncedSearch.toLowerCase());
     })
     .sort((a, b) => {
       const dir = sortDir === 'asc' ? 1 : -1;
@@ -749,11 +757,12 @@ export default function DraftRoomPage() {
                 {snakeOrder.map((uid, i) => {
                   const pick = draftState?.picks?.[i];
                   const isCurrent = !draftComplete && i === currentPick;
+                  const isLastPick = pick && i === currentPick - 1;
                   return (
                     <div key={`${uid}-${i}`}
                       className={`flex items-center gap-2 text-xs px-2 py-1 rounded transition-colors ${
                         isCurrent ? 'bg-yellow-800/50 border border-yellow-700' : pick ? 'opacity-40' : ''
-                      }`}>
+                      }${isLastPick ? ' pick-flash' : ''}`}>
                       <span className="text-slate-600 w-5 text-right shrink-0">{i + 1}.</span>
                       <span className={`font-medium truncate flex-1 ${uid === appUser.uid ? 'text-green-400' : 'text-slate-300'}`}>
                         {usernameMap[uid] ?? uid}
@@ -875,7 +884,7 @@ export default function DraftRoomPage() {
                     <tbody>
                       {available.map((player, idx) => (
                         <tr key={player.id}
-                          className="border-b border-slate-700/40 hover:bg-slate-700/30 transition-colors">
+                          className="border-b border-slate-700/40 hover:bg-white/[0.04] transition-colors cursor-pointer">
                           <td className="py-2 pr-2 text-slate-600 text-xs">{idx + 1}</td>
                           <td className="py-2">
                             <div className="font-medium text-white leading-tight">{player.displayName}</div>

@@ -420,3 +420,17 @@ button, .btn-primary, .btn-gold, .btn-secondary, .btn-danger {
 .card-gold {
   box-shadow: 0 2px 16px rgba(0,0,0,0.35), inset 0 1px 0 rgba(201,162,39,0.1);
 }
+
+/* ─── LoadingSpinner rotation ─────────────────────────────────────────────── */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ─── Pick flash animation (draft board) ─────────────────────────────────── */
+@keyframes pick-flash {
+  0%   { background: rgba(201,162,39,0.25); }
+  100% { background: transparent; }
+}
+.pick-flash {
+  animation: pick-flash 1.2s ease-out forwards;
+}
