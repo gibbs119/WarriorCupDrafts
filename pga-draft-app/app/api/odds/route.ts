@@ -16,7 +16,7 @@ interface CacheEntry { players: OddsPlayer[]; fetchedAt: number; source: string 
 const oddsCache = new Map<string, CacheEntry>();
 const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
-async function tryFetch(url: string, label: string): Promise<{ data: unknown; source: string } | null> {
+async function tryFetch(url: string, label: string, timeoutMs = 4000): Promise<{ data: unknown; source: string } | null> {
   try {
     const res = await fetch(url, {
       headers: {
@@ -27,6 +27,7 @@ async function tryFetch(url: string, label: string): Promise<{ data: unknown; so
         'Origin': 'https://sportsbook.draftkings.com',
       },
       cache: 'no-store',
+      signal: AbortSignal.timeout(timeoutMs),
     });
     if (!res.ok) {
       console.warn(`[Odds] ${label} → HTTP ${res.status}`);
@@ -104,9 +105,12 @@ export async function GET(req: NextRequest) {
   // ── Source 2: DraftKings — always try, even when static odds are loaded ──────
   // Live DK odds are more accurate than static and use names closer to ESPN format.
   // Only skip if a paid Odds API already succeeded.
+  // Cap total DK time at 8s so 7 failed URLs can't blow the Vercel function budget.
   if (source !== 'The Odds API') {
+    const dkDeadline = Date.now() + 8000;
     for (const url of DRAFTKINGS_URLS) {
-      const result = await tryFetch(url, `DraftKings (${url.split('/').slice(-2).join('/')})`);
+      if (Date.now() > dkDeadline) { console.warn('[Odds] DK deadline reached — skipping remaining URLs'); break; }
+      const result = await tryFetch(url, `DraftKings (${url.split('/').slice(-2).join('/')})`, 3000);
       if (result) {
         try {
           const parsed = parseDraftKingsResponse(
@@ -242,9 +246,13 @@ export async function GET(req: NextRequest) {
   }
 
   // Step 2: Live OWGR API overrides static data with fresher rankings.
-  // Failure is silent: worldRanking stays at static value if API is unavailable.
+  // Hard cap at 5s so OWGR can never cause a Vercel function timeout.
+  // Static OWGR above always ensures rankings are populated even if this times out.
   try {
-    const owgrEntries = await fetchOwgrRankings(players.map((p) => p.name));
+    const owgrEntries = await Promise.race([
+      fetchOwgrRankings(players.map((p) => p.name)),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000)),
+    ]);
     if (owgrEntries && owgrEntries.length > 0) {
       const owgrLookup = buildOwgrLookup(owgrEntries);
       for (const p of players) {
