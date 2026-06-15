@@ -92,7 +92,7 @@ export async function GET(req: NextRequest) {
 
   // ── Source 1: The Odds API (needs key, most reliable) ────────────────────
   if (apiKey) {
-    const result = await tryFetch(getOddsApiUrl(apiKey), 'The Odds API');
+    const result = await tryFetch(getOddsApiUrl(apiKey, tournamentId), 'The Odds API');
     if (result) {
       try {
         const parsed = parseOddsApiResponse(result.data as Parameters<typeof parseOddsApiResponse>[0]);
@@ -101,8 +101,10 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // ── Source 2: DraftKings — try all known URL patterns ────────────────────
-  if (players.length === 0) {
+  // ── Source 2: DraftKings — always try, even when static odds are loaded ──────
+  // Live DK odds are more accurate than static and use names closer to ESPN format.
+  // Only skip if a paid Odds API already succeeded.
+  if (source !== 'The Odds API') {
     for (const url of DRAFTKINGS_URLS) {
       const result = await tryFetch(url, `DraftKings (${url.split('/').slice(-2).join('/')})`);
       if (result) {
@@ -112,8 +114,19 @@ export async function GET(req: NextRequest) {
             tournamentId
           );
           if (parsed.length > 5) {
-            players = parsed;
-            source = 'DraftKings';
+            // Merge DK odds onto static player list so we keep full-field coverage:
+            // DK often only covers the top 60-80 players; static fills the rest.
+            if (source === 'ESPN (static)' && players.length > 0) {
+              const dkById = new Map(parsed.map((p) => [p.id, p]));
+              players = players.map((p) => {
+                const live = dkById.get(p.id);
+                return live ? { ...p, ...live } : p;
+              });
+              source = 'DraftKings';
+            } else {
+              players = parsed;
+              source = 'DraftKings';
+            }
             break;
           }
         } catch (e) { console.warn('[Odds] DK parse error:', e); }

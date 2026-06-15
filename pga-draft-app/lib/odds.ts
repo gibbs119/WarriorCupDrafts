@@ -23,8 +23,19 @@ export interface OddsPlayer {
 // ─── The Odds API ─────────────────────────────────────────────────────────────
 const ODDS_API_BASE = 'https://api.the-odds-api.com/v4';
 
-export function getOddsApiUrl(apiKey: string): string {
-  return `${ODDS_API_BASE}/sports/golf_pga/odds/?apiKey=${apiKey}&regions=us&markets=outrights&oddsFormat=american&bookmakers=draftkings,fanduel,betmgm`;
+// Each major has its own sport key on The Odds API.
+// The PGA Tour season key covers regular-season events (Players Championship, etc.)
+export const ODDS_API_SPORT_KEYS: Record<string, string> = {
+  'players-championship': 'golf_pga',
+  'masters':              'golf_masters_tournament_winner',
+  'pga-championship':     'golf_pga_championship_winner',
+  'us-open':              'golf_us_open_championship_winner',
+  'the-open':             'golf_the_open_championship_winner',
+};
+
+export function getOddsApiUrl(apiKey: string, tournamentId = 'players-championship'): string {
+  const sportKey = ODDS_API_SPORT_KEYS[tournamentId] ?? 'golf_pga';
+  return `${ODDS_API_BASE}/sports/${sportKey}/odds/?apiKey=${apiKey}&regions=us&markets=outrights&oddsFormat=american&bookmakers=draftkings,fanduel,betmgm`;
 }
 
 // ─── DraftKings public API endpoints ─────────────────────────────────────────
@@ -33,14 +44,17 @@ export function getOddsApiUrl(apiKey: string): string {
 // League 2 = PGA Tour golf in DraftKings internal system.
 
 export const DRAFTKINGS_URLS = [
-  // Primary: tournament winner outright market
+  // Primary: tournament winner outright market (subcategory 4519 = "Tournament Winner")
   'https://sportsbook-nash.draftkings.com/api/odds/v1/leagues/2/categories/583/subcategories/4519',
-  // Alternate subcategory IDs DK has used
+  // Alternate winner subcategories DK has cycled through
   'https://sportsbook-nash.draftkings.com/api/odds/v1/leagues/2/categories/583/subcategories/4520',
-  // Full category (includes all markets, we filter to winner)
+  'https://sportsbook-nash.draftkings.com/api/odds/v1/leagues/2/categories/583/subcategories/4515',
+  'https://sportsbook-nash.draftkings.com/api/odds/v1/leagues/2/categories/583/subcategories/4521',
+  // Full category endpoint (includes all markets — heavier payload but catches any subcategory)
   'https://sportsbook-nash.draftkings.com/api/odds/v1/leagues/2/categories/583',
   // Alt domain
   'https://sportsbook.draftkings.com/api/odds/v1/leagues/2/categories/583/subcategories/4519',
+  'https://sportsbook.draftkings.com/api/odds/v1/leagues/2/categories/583',
 ];
 
 // Keep legacy exports so existing route.ts doesn't break
@@ -53,7 +67,7 @@ export const TOURNAMENT_SLUGS: Record<string, string[]> = {
   'players-championship': ['players championship', 'the players', 'players'],
   'masters': ['masters', 'the masters', 'augusta'],
   'pga-championship': ['pga championship', 'pga champ'],
-  'us-open': ['u.s. open', 'us open', 'united states open'],
+  'us-open': ['u.s. open', 'us open', 'united states open', 'us open championship', 'open golf'],
   'the-open': ['the open', 'open championship', 'british open'],
 };
 
@@ -231,13 +245,17 @@ export function parseDraftKingsResponse(
   const group = (data as { eventGroup?: DKCategory }).eventGroup ?? (data as DKCategory);
   const players: OddsPlayer[] = [];
 
-  // If we have multiple event groups, try to find the right tournament
+  // If we have multiple event groups, try to find the right tournament.
+  // When DK's full category endpoint returns multiple tournaments, we filter by name.
+  // When DK's subcategory endpoint returns a single event, eventGroupName is often
+  // empty or already filtered — in that case accept whatever comes back.
   const eventName = group.eventGroupName?.toLowerCase() ?? '';
   const slugs = tournamentId ? (TOURNAMENT_SLUGS[tournamentId] ?? []) : [];
-  const isRightEvent = slugs.length === 0 || slugs.some((s) => eventName.includes(s));
+  const hasEventName = eventName.length > 3;
+  const isRightEvent = !hasEventName || slugs.length === 0 || slugs.some((s) => eventName.includes(s));
 
-  if (!isRightEvent && slugs.length > 0) {
-    // This DK response is for a different tournament - skip
+  if (!isRightEvent) {
+    console.log(`[Odds] DK event "${eventName}" didn't match ${tournamentId} slugs — skipping`);
     return [];
   }
 
