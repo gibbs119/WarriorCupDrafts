@@ -135,6 +135,30 @@ export default function DraftRoomPage() {
     return () => clearTimeout(t);
   }, [searchTerm]);
 
+  // Pick countdown timer — starts when it becomes my turn, resets on picker change
+  useEffect(() => {
+    if (!draftState || !appUser || draftState.status !== 'open') {
+      setPickSecondsLeft(null);
+      return;
+    }
+    const order = snakeOrderRef.current;
+    if (order.length === 0) return;
+    const currentPickerUid = getCurrentPicker(order, draftState.currentPickIndex);
+    if (currentPickerUid !== appUser.uid) {
+      setPickSecondsLeft(null);
+      return;
+    }
+    setPickSecondsLeft(PICK_TIMER_SECONDS);
+    const interval = setInterval(() => {
+      setPickSecondsLeft((prev) => {
+        if (prev === null || prev <= 1) { clearInterval(interval); return 0; }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftState?.currentPickIndex, draftState?.status, appUser?.uid]);
+
   // Auth guard
   useEffect(() => {
     if (!loading && !appUser) router.push('/');
@@ -576,12 +600,27 @@ export default function DraftRoomPage() {
       {/* ── "Your turn" alert banner — pulses, tap to dismiss ── */}
       {myTurnAlert && (
         <div
-          className="sticky top-0 z-40 flex items-center justify-between gap-3 px-4 py-3 text-sm font-bold cursor-pointer"
-          style={{ background: `linear-gradient(90deg, ${theme.accentLight}, ${theme.accent}, ${theme.accentMid}, ${theme.accent}, ${theme.accentLight})`, color: '#fff', animation: 'pulse 1.5s ease-in-out infinite' }}
+          className="sticky top-0 z-40 flex items-center justify-between gap-3 px-4 py-3 font-bold cursor-pointer"
+          style={{
+            background: pickSecondsLeft !== null && pickSecondsLeft <= 30
+              ? `linear-gradient(90deg, #7f1d1d, #991b1b, #7f1d1d)`
+              : `linear-gradient(90deg, ${theme.accentLight}, ${theme.accent}, ${theme.accentMid}, ${theme.accent}, ${theme.accentLight})`,
+            color: '#fff',
+            animation: 'pulse 1.5s ease-in-out infinite',
+          }}
           onClick={() => setMyTurnAlert(false)}
         >
-          <span>⛳ &nbsp;IT'S YOUR PICK — You're on the clock!</span>
-          <span className="text-base opacity-70">✕</span>
+          <span className="text-sm">⛳ &nbsp;IT'S YOUR PICK — You're on the clock!</span>
+          <div className="flex items-center gap-3 shrink-0">
+            {pickSecondsLeft !== null && (
+              <span className={`font-mono text-lg tabular-nums font-black ${
+                pickSecondsLeft <= 30 ? 'text-red-200' : pickSecondsLeft <= 60 ? 'text-yellow-200' : 'text-white'
+              }`}>
+                {String(Math.floor(pickSecondsLeft / 60)).padStart(1, '0')}:{String(pickSecondsLeft % 60).padStart(2, '0')}
+              </span>
+            )}
+            <span className="text-base opacity-70">✕</span>
+          </div>
         </div>
       )}
 
@@ -674,11 +713,11 @@ export default function DraftRoomPage() {
             </Link>
           </div>
         ) : draftState?.status === 'open' ? (
-          <div className={`card mb-4 flex items-center gap-3 border ${
-            isMyTurn ? '' : ''
-          }`}>
+          <div className={`card mb-4 flex items-center gap-3 ${
+            isMyTurn ? 'border border-yellow-500/40' : ''
+          }`} style={isMyTurn ? { background: 'rgba(201,162,39,0.06)' } : {}}>
             <User size={20} className={isMyTurn ? 'text-yellow-400' : 'text-slate-400'} />
-            <div className="flex-1">
+            <div className="flex-1 min-w-0">
               {isMyTurn ? (
                 <p className="font-bold text-yellow-300">🎯 It's your turn to pick! — Round {currentRound}, Pick #{currentPick + 1}</p>
               ) : (
@@ -688,6 +727,16 @@ export default function DraftRoomPage() {
                 </p>
               )}
             </div>
+            {isMyTurn && pickSecondsLeft !== null && (
+              <div className="flex flex-col items-end shrink-0">
+                <span className={`font-mono text-2xl font-black tabular-nums leading-none ${
+                  pickSecondsLeft <= 30 ? 'text-red-400' : pickSecondsLeft <= 60 ? 'text-yellow-400' : 'text-green-400'
+                }`}>
+                  {String(Math.floor(pickSecondsLeft / 60)).padStart(1, '0')}:{String(pickSecondsLeft % 60).padStart(2, '0')}
+                </span>
+                <span className="text-xs text-slate-500 mt-0.5">time left</span>
+              </div>
+            )}
             {statusMsg && <p className="text-sm shrink-0">{statusMsg}</p>}
           </div>
         ) : (
