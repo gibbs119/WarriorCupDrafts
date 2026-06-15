@@ -92,7 +92,7 @@ export async function GET(req: NextRequest) {
 
   // ── Source 1: The Odds API (needs key, most reliable) ────────────────────
   if (apiKey) {
-    const result = await tryFetch(getOddsApiUrl(apiKey), 'The Odds API');
+    const result = await tryFetch(getOddsApiUrl(apiKey, tournamentId), 'The Odds API');
     if (result) {
       try {
         const parsed = parseOddsApiResponse(result.data as Parameters<typeof parseOddsApiResponse>[0]);

@@ -23,8 +23,19 @@ export interface OddsPlayer {
 // ─── The Odds API ─────────────────────────────────────────────────────────────
 const ODDS_API_BASE = 'https://api.the-odds-api.com/v4';
 
-export function getOddsApiUrl(apiKey: string): string {
-  return `${ODDS_API_BASE}/sports/golf_pga/odds/?apiKey=${apiKey}&regions=us&markets=outrights&oddsFormat=american&bookmakers=draftkings,fanduel,betmgm`;
+// Each major has its own sport key on The Odds API.
+// The PGA Tour season key covers regular-season events (Players Championship, etc.)
+export const ODDS_API_SPORT_KEYS: Record<string, string> = {
+  'players-championship': 'golf_pga',
+  'masters':              'golf_masters_tournament_winner',
+  'pga-championship':     'golf_pga_championship_winner',
+  'us-open':              'golf_us_open_championship_winner',
+  'the-open':             'golf_the_open_championship_winner',
+};
+
+export function getOddsApiUrl(apiKey: string, tournamentId = 'players-championship'): string {
+  const sportKey = ODDS_API_SPORT_KEYS[tournamentId] ?? 'golf_pga';
+  return `${ODDS_API_BASE}/sports/${sportKey}/odds/?apiKey=${apiKey}&regions=us&markets=outrights&oddsFormat=american&bookmakers=draftkings,fanduel,betmgm`;
 }
 
 // ─── DraftKings public API endpoints ─────────────────────────────────────────
