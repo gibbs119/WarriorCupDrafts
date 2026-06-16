@@ -10,6 +10,12 @@ export interface TournamentTheme {
   logoPath?: string;   // path to official tournament logo (in /public/)
   musicUrl?: string;   // SoundCloud track URL for ambient theme music
 
+  // Hero supplemental text
+  location?: string;   // city/state, e.g. "Southampton, New York"
+  dates?: string;      // tournament dates, e.g. "June 19–22, 2026"
+  // Which inline SVG decal renders in the hero right-side watermark
+  heroDecal?: 'flag-pin' | 'trophy' | 'claret-jug' | 'eagle' | 'lighthouse';
+
   // Primary accent color (replaces royal blue in active states)
   accent: string;      // e.g. #006747
   accentMid: string;   // slightly lighter variant for text/icons
@@ -38,15 +44,17 @@ const THEMES: Record<string, TournamentTheme> = {
   // Augusta green + Masters gold — matches the official logo palette exactly.
   // Deep forest backdrop with golden-yellow accents from the logo map color.
   'masters': {
-    label:    'THE MASTERS',
-    venue:    'Augusta National Golf Club',
-    icon:     '⛳',
-    logoPath: '/masters-logo.png',
-    musicUrl: 'https://soundcloud.com/user-543843379-262071282/the-masters-theme-full-tv-version-revised-clear-intro',
-    accent:      '#006747',           // Augusta National green
-    accentMid:   '#E8C94A',           // Masters logo gold (the yellow US map)
+    label:      'THE MASTERS',
+    venue:      'Augusta National Golf Club',
+    location:   'Augusta, Georgia',
+    dates:      'April 9–13, 2026',
+    heroDecal:  'trophy',
+    icon:       '⛳',
+    logoPath:   '/masters-logo.png',
+    musicUrl:   'https://soundcloud.com/user-543843379-262071282/the-masters-theme-full-tv-version-revised-clear-intro',
+    accent:      '#006747',
+    accentMid:   '#E8C94A',
     accentLight: 'rgba(0, 103, 71, 0.18)',
-    // Deep forest green with a warm golden bloom from the top-right
     heroBg: 'linear-gradient(160deg, #001208 0%, #003020 50%, #001208 100%)',
     heroPatternColor: 'rgba(0, 103, 71, 0.14)',
     heroGlow: '0 8px 56px rgba(0, 103, 71, 0.45), 0 0 0 1px rgba(0,103,71,0.2)',
@@ -54,15 +62,17 @@ const THEMES: Record<string, TournamentTheme> = {
     cardGlow:   '0 0 32px rgba(0, 103, 71, 0.25), inset 0 1px 0 rgba(232,201,74,0.08)',
     activeBg:     'rgba(0, 103, 71, 0.28)',
     activeBorder: '#006747',
-    activeText:   '#E8C94A',          // gold text on active — matches logo
+    activeText:   '#E8C94A',
   },
 
   // ── The Players Championship — TPC Sawgrass ───────────────────────────────
-  // Ocean water blue of Pete Dye's island green 17th hole.
   'players-championship': {
-    label:   'THE PLAYERS',
-    venue:   'TPC Sawgrass · Stadium Course',
-    icon:    '🏝️',
+    label:      'THE PLAYERS',
+    venue:      'TPC Sawgrass · Stadium Course',
+    location:   'Ponte Vedra Beach, Florida',
+    dates:      'March 12–16, 2026',
+    heroDecal:  'flag-pin',
+    icon:       '🏝️',
     accent:      '#1B4F8A',
     accentMid:   '#3D80C0',
     accentLight: 'rgba(27, 79, 138, 0.15)',
@@ -77,12 +87,14 @@ const THEMES: Record<string, TournamentTheme> = {
   },
 
   // ── PGA Championship — Wanamaker Trophy ──────────────────────────────────
-  // Deep charcoal and Wanamaker gold — power and prestige.
   'pga-championship': {
-    label:    'PGA CHAMPIONSHIP',
-    venue:    'Aronimink Golf Club · Newtown Square, PA',
-    logoPath: '/pga-championship-logo.svg',
-    icon:     '🏆',
+    label:      'PGA CHAMPIONSHIP',
+    venue:      'Aronimink Golf Club · Newtown Square, PA',
+    location:   'Newtown Square, Pennsylvania',
+    dates:      'May 21–24, 2026',
+    heroDecal:  'trophy',
+    logoPath:   '/pga-championship-logo.svg',
+    icon:       '🏆',
     accent:      '#B8922A',
     accentMid:   '#D4AF37',
     accentLight: 'rgba(184, 146, 42, 0.15)',
@@ -96,31 +108,38 @@ const THEMES: Record<string, TournamentTheme> = {
     activeText:   '#D4AF37',
   },
 
-  // ── U.S. Open — USGA ─────────────────────────────────────────────────────
-  // USGA red — demanding, relentless, American.
+  // ── U.S. Open — Shinnecock Hills ─────────────────────────────────────────
+  // USGA red + ocean navy — Shinnecock is a seaside links on Long Island.
+  // Gradient mixes deep crimson with coastal midnight blue.
   'us-open': {
-    label:   'U.S. OPEN',
-    venue:   'Shinnecock Hills Golf Club',
-    icon:    '🇺🇸',
+    label:      'U.S. OPEN',
+    venue:      'Shinnecock Hills Golf Club',
+    location:   'Southampton, New York',
+    dates:      'June 19–22, 2026',
+    heroDecal:  'eagle',
+    icon:       '🇺🇸',
     accent:      '#9B1C2E',
-    accentMid:   '#C0394D',
-    accentLight: 'rgba(155, 28, 46, 0.15)',
-    heroBg: 'linear-gradient(160deg, #150308 0%, #280510 45%, #150308 100%)',
-    heroPatternColor: 'rgba(155, 28, 46, 0.12)',
-    heroGlow: '0 8px 48px rgba(155, 28, 46, 0.35)',
-    cardBorder: 'rgba(155, 28, 46, 0.45)',
-    cardGlow:   '0 0 32px rgba(155, 28, 46, 0.2)',
-    activeBg:     'rgba(155, 28, 46, 0.25)',
+    accentMid:   '#D64E65',
+    accentLight: 'rgba(155, 28, 46, 0.18)',
+    // Crimson meets midnight ocean — Shinnecock sits on the Atlantic coast
+    heroBg: 'linear-gradient(150deg, #0A0108 0%, #1E0510 35%, #180516 60%, #04101E 100%)',
+    heroPatternColor: 'rgba(155, 28, 46, 0.10)',
+    heroGlow: '0 8px 56px rgba(155, 28, 46, 0.5), 0 0 0 1px rgba(155,28,46,0.25)',
+    cardBorder: 'rgba(155, 28, 46, 0.5)',
+    cardGlow:   '0 0 40px rgba(155, 28, 46, 0.25), inset 0 1px 0 rgba(214,78,101,0.1)',
+    activeBg:     'rgba(155, 28, 46, 0.28)',
     activeBorder: '#9B1C2E',
-    activeText:   '#C0394D',
+    activeText:   '#D64E65',
   },
 
   // ── The Open Championship — Claret Jug ───────────────────────────────────
-  // Deep Royal & Ancient navy — timeless, windswept links golf.
   'the-open': {
-    label:   'THE OPEN CHAMPIONSHIP',
-    venue:   'Royal Portrush Golf Club',
-    icon:    '🏴󠁧󠁢󠁳󠁣󠁴󠁿',
+    label:      'THE OPEN CHAMPIONSHIP',
+    venue:      'Royal Portrush Golf Club',
+    location:   'Portrush, Northern Ireland',
+    dates:      'July 16–19, 2026',
+    heroDecal:  'lighthouse',
+    icon:       '🏴󠁧󠁢󠁳󠁣󠁴󠁿',
     accent:      '#00337F',
     accentMid:   '#1A5BB5',
     accentLight: 'rgba(0, 51, 127, 0.15)',
