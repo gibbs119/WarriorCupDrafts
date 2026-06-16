@@ -100,7 +100,7 @@ const THEMES: Record<string, TournamentTheme> = {
   // USGA red — demanding, relentless, American.
   'us-open': {
     label:   'U.S. OPEN',
-    venue:   'Oakmont Country Club',
+    venue:   'Shinnecock Hills Golf Club',
     icon:    '🇺🇸',
     accent:      '#9B1C2E',
     accentMid:   '#C0394D',
