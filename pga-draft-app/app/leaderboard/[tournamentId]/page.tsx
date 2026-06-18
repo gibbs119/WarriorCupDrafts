@@ -1451,6 +1451,12 @@ export default function LeaderboardPage() {
   const refreshScores = useCallback(
     async (t: Tournament, allUsers: AppUser[], isBust = false) => {
       if (!t.espnEventId) return;
+
+      // Gate: don't call the live leaderboard before the tournament starts.
+      // ESPN may return stale data from a prior completed event before R1 tees off.
+      const liveStart = t.liveScoresStart ? new Date(t.liveScoresStart).getTime() : 0;
+      if (Date.now() < liveStart) return;
+
       setRefreshing(true);
       setFetchError(null);
       try {
