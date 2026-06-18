@@ -16,6 +16,7 @@ export interface Tournament {
   name: string;
   shortName: string;
   espnEventId: string;       // Set by admin before draft
+  liveScoresStart?: string;  // ISO timestamp — leaderboard endpoint blocked before this
   fieldSize: number;         // Populated from ESPN
   maxPicks: number;          // 4 if fieldSize < 100, else 5
   status: TournamentStatus;

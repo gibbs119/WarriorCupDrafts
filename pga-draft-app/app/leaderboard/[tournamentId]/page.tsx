@@ -28,7 +28,7 @@ import {
 import { calculateLeaderboard } from '@/lib/scoring';
 import { parseLeaderboard } from '@/lib/espn';
 import type { Tournament, TeamScore, AppUser, Player } from '@/lib/types';
-import { TOURNAMENT_TZ_OFFSETS } from '@/lib/constants';
+import { TOURNAMENT_TZ_OFFSETS, TOURNAMENTS } from '@/lib/constants';
 import { RefreshCw, Wifi, WifiOff, AlertTriangle, BarChart2, List, TrendingUp, Activity, Globe, Percent, Users } from 'lucide-react';
 
 // ─── Live odds type (mirrors app/api/ai/live-odds/route.ts) ──────────────────
@@ -1451,6 +1451,14 @@ export default function LeaderboardPage() {
   const refreshScores = useCallback(
     async (t: Tournament, allUsers: AppUser[], isBust = false) => {
       if (!t.espnEventId) return;
+
+      // Gate: don't call the live leaderboard before the tournament starts.
+      // ESPN may return stale data from a prior completed event before R1 tees off.
+      // liveScoresStart lives in static constants (not Firebase), so look it up there.
+      const staticConfig = TOURNAMENTS.find(x => x.id === t.id);
+      const liveStart = staticConfig?.liveScoresStart ? new Date(staticConfig.liveScoresStart).getTime() : 0;
+      if (liveStart > 0 && Date.now() < liveStart) return;
+
       setRefreshing(true);
       setFetchError(null);
       try {
