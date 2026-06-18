@@ -181,11 +181,23 @@ export default function DraftRoomPage() {
   const fetchEspn = useCallback(async (espnEventId: string, bust = false) => {
     if (!espnEventId) return;
 
-    // Try leaderboard first (has scores), fall back to field endpoint (pre-tournament)
-    const urls = [
-      `/api/espn/leaderboard?eventId=${espnEventId}${bust ? '&bust=1' : ''}`,
-      `/api/espn/field?eventId=${espnEventId}`,
-    ];
+    // Only call the live leaderboard endpoint after the tournament has actually started.
+    // Before that, ESPN may return data from a previously completed event that shares
+    // the same event ID slot — causing fake 4-round scores to appear pre-tournament.
+    const liveStart = tournament?.liveScoresStart
+      ? new Date(tournament.liveScoresStart).getTime()
+      : 0;
+    const tournamentLive = Date.now() >= liveStart;
+
+    const urls = tournamentLive
+      ? [
+          `/api/espn/leaderboard?eventId=${espnEventId}${bust ? '&bust=1' : ''}`,
+          `/api/espn/field?eventId=${espnEventId}`,
+        ]
+      : [
+          // Pre-tournament: field endpoint only — gives us player names without stale scores
+          `/api/espn/field?eventId=${espnEventId}`,
+        ];
 
     for (const url of urls) {
       try {
