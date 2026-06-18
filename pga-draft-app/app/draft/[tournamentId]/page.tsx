@@ -19,7 +19,7 @@ import {
 } from '@/lib/db';
 import { requestPushToken, getPushPermission, type PushPermission } from '@/lib/fcm';
 import { buildSnakeDraftOrder, getCurrentPicker } from '@/lib/scoring';
-import { STATIC_FIELDS, SCORING_PLAYERS } from '@/lib/constants';
+import { STATIC_FIELDS, SCORING_PLAYERS, TOURNAMENTS } from '@/lib/constants';
 import { parseLeaderboard } from '@/lib/espn';
 import {
   buildEspnLookup,
@@ -184,10 +184,10 @@ export default function DraftRoomPage() {
     // Only call the live leaderboard endpoint after the tournament has actually started.
     // Before that, ESPN may return data from a previously completed event that shares
     // the same event ID slot — causing fake 4-round scores to appear pre-tournament.
-    const liveStart = tournament?.liveScoresStart
-      ? new Date(tournament.liveScoresStart).getTime()
-      : 0;
-    const tournamentLive = Date.now() >= liveStart;
+    // liveScoresStart is in static constants (not Firebase), look it up there.
+    const staticConfig = TOURNAMENTS.find(x => x.id === tournament?.id);
+    const liveStart = staticConfig?.liveScoresStart ? new Date(staticConfig.liveScoresStart).getTime() : 0;
+    const tournamentLive = liveStart === 0 || Date.now() >= liveStart;
 
     const urls = tournamentLive
       ? [
