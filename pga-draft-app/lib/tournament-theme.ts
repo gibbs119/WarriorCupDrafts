@@ -115,7 +115,7 @@ const THEMES: Record<string, TournamentTheme> = {
     label:      'U.S. OPEN',
     venue:      'Shinnecock Hills Golf Club',
     location:   'Southampton, New York',
-    dates:      'June 19–22, 2026',
+    dates:      'June 18–21, 2026',
     heroDecal:  'eagle',
     icon:       '🇺🇸',
     accent:      '#9B1C2E',

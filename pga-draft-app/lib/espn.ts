@@ -121,6 +121,19 @@ export function parseLeaderboard(data: ESPNLeaderboardResponse): {
   const cutMatch = details.match(/cut.*?(\d+)/i);
   if (cutMatch) cutLine = parseInt(cutMatch[1], 10);
 
+  // Pre-tournament guard: if ESPN says "Scheduled" (or no player has played a hole),
+  // scores are placeholder data (all "E") — suppress them so the draft room doesn't
+  // show a fake leaderboard before Round 1 tees off.
+  const competitionStatusName = (competition.status?.type?.name ?? '').toLowerCase();
+  const isPreTournament =
+    competitionStatusName.includes('scheduled') ||
+    competitionStatusName === 'status_scheduled' ||
+    // Fallback: if every competitor has thru = 0 / null, nothing has been played
+    competitors.every((c) => {
+      const t = c.status?.thru;
+      return t === null || t === undefined || t === 0 || t === '';
+    });
+
   const players: Record<string, Player> = {};
 
   for (const comp of competitors) {
@@ -131,16 +144,18 @@ export function parseLeaderboard(data: ESPNLeaderboardResponse): {
     const name =
       athlete.displayName ?? `${athlete.firstName ?? ''} ${athlete.lastName ?? ''}`.trim();
 
-    // Position — use ESPN's actual position field only (NOT sortOrder).
-    // sortOrder is ESPN's tee-time/alphabetical sort and shows fake pre-tournament
-    // standings. The real position only populates once players have teed off.
-    const posStr = comp.status?.position?.displayName ?? comp.status?.position?.displayValue ?? '';
-    let positionDisplay = posStr || '-';
+    // Position — suppress before R1 tees off (ESPN uses sortOrder/alphabetical,
+    // which looks like fake standings). Real positions only populate once players play.
+    let positionDisplay = '-';
     let position: number | null = null;
 
-    if (posStr && posStr !== '' && posStr !== '-') {
-      const numeric = parseInt(posStr.replace(/[^0-9]/g, ''), 10);
-      if (!isNaN(numeric)) position = numeric;
+    if (!isPreTournament) {
+      const posStr = comp.status?.position?.displayName ?? comp.status?.position?.displayValue ?? '';
+      positionDisplay = posStr || '-';
+      if (posStr && posStr !== '' && posStr !== '-') {
+        const numeric = parseInt(posStr.replace(/[^0-9]/g, ''), 10);
+        if (!isNaN(numeric)) position = numeric;
+      }
     }
 
     // Status
@@ -159,23 +174,28 @@ export function parseLeaderboard(data: ESPNLeaderboardResponse): {
       console.log('[ESPN debug] competitor stats fields:', JSON.stringify(comp.statistics.map(s => ({ name: s.name, abbr: s.abbreviation, val: s.displayValue }))));
       console.log('[ESPN debug] comp.score:', comp.score?.displayValue);
     }
-    const scoreVal =
-      comp.statistics?.find((s) =>
-        s.name === 'scoreToPar' ||
-        s.abbreviation === 'TOT' ||
-        s.name === 'topar' ||
-        s.name === 'totalScore'
-      )?.displayValue ??
-      comp.statistics?.find((s) => s.name === 'score' || s.abbreviation === 'SC')?.displayValue ??
-      comp.score?.displayValue ??
-      'E';
+    // Suppress scores before Round 1 tees off — ESPN returns 'E' for all players
+    // as a placeholder, which looks like a real leaderboard when it isn't.
+    let scoreVal = '-';
+    let thruDisplay = '-';
+    if (!isPreTournament) {
+      scoreVal =
+        comp.statistics?.find((s) =>
+          s.name === 'scoreToPar' ||
+          s.abbreviation === 'TOT' ||
+          s.name === 'topar' ||
+          s.name === 'totalScore'
+        )?.displayValue ??
+        comp.statistics?.find((s) => s.name === 'score' || s.abbreviation === 'SC')?.displayValue ??
+        comp.score?.displayValue ??
+        '-';
 
-    // Thru
-    const thruRaw =
-      comp.status?.thru?.toString() ??
-      comp.status?.period?.toString() ??
-      '-';
-    const thruDisplay = thruRaw === '18' ? 'F' : (thruRaw === '0' || thruRaw === '' ? '-' : thruRaw);
+      const thruRaw =
+        comp.status?.thru?.toString() ??
+        comp.status?.period?.toString() ??
+        '-';
+      thruDisplay = thruRaw === '18' ? 'F' : (thruRaw === '0' || thruRaw === '' ? '-' : thruRaw);
+    }
 
     // Current round number (ESPN period field: 1=R1, 2=R2, etc.)
     const currentRound = typeof comp.status?.period === 'number' ? comp.status.period : 1;

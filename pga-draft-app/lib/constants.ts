@@ -18,6 +18,8 @@ export const TOURNAMENTS = [
     shortName: 'THE PLAYERS',
     year: 2026,
     startDate: 'March 12–15, 2026',
+    // First tee time R1 (Eastern → UTC): March 12 7am ET = 11am UTC
+    liveScoresStart: '2026-03-12T11:00:00Z',
     draftDate: 'March 8, 2026',
     espnEventId: '401811937',
     fieldSize: 123,
@@ -33,6 +35,7 @@ export const TOURNAMENTS = [
     shortName: 'MASTERS',
     year: 2026,
     startDate: 'April 9–12, 2026',
+    liveScoresStart: '2026-04-09T11:00:00Z',
     draftDate: 'April 5, 2026',
     espnEventId: '401811941',
     fieldSize: 91,
@@ -48,6 +51,7 @@ export const TOURNAMENTS = [
     shortName: 'PGA CHAMP.',
     year: 2026,
     startDate: 'May 14–17, 2026',
+    liveScoresStart: '2026-05-14T11:00:00Z',
     draftDate: 'May 12, 2026',
     espnEventId: '401811947',
     fieldSize: 156,
@@ -63,6 +67,8 @@ export const TOURNAMENTS = [
     shortName: 'U.S. OPEN',
     year: 2026,
     startDate: 'June 18–21, 2026',
+    // US Open R1 tee times begin ~6:45 AM EDT Thursday June 18 = 10:45 UTC
+    liveScoresStart: '2026-06-18T10:45:00Z',
     draftDate: 'June 14, 2026',
     espnEventId: '401811952',
     fieldSize: 156,
