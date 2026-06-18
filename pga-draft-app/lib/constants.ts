@@ -66,9 +66,9 @@ export const TOURNAMENTS = [
     name: 'U.S. Open',
     shortName: 'U.S. OPEN',
     year: 2026,
-    startDate: 'June 19–22, 2026',
-    // US Open R1 tee times begin ~6:45 AM EDT Thursday June 19 = 10:45 UTC
-    liveScoresStart: '2026-06-19T10:45:00Z',
+    startDate: 'June 18–21, 2026',
+    // US Open R1 tee times begin ~6:45 AM EDT Thursday June 18 = 10:45 UTC
+    liveScoresStart: '2026-06-18T10:45:00Z',
     draftDate: 'June 14, 2026',
     espnEventId: '401811952',
     fieldSize: 156,
