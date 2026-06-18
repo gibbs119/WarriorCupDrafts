@@ -8,6 +8,13 @@ export const metadata: Metadata = {
   title: 'Warrior Cup Drafts',
   description: 'Snake draft fantasy golf — The Players & all 4 Majors',
   manifest: '/manifest.webmanifest',
+  icons: {
+    apple: '/apple-touch-icon.png',
+    icon: [
+      { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icon-512.png', sizes: '512x512', type: 'image/png' },
+    ],
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
