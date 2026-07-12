@@ -132,11 +132,11 @@ const THEMES: Record<string, TournamentTheme> = {
     activeText:   '#D64E65',
   },
 
-  // ── The Open Championship — Claret Jug ───────────────────────────────────
+  // ── The Open Championship — Royal Birkdale ───────────────────────────────
   'the-open': {
     label:      'THE OPEN CHAMPIONSHIP',
-    venue:      'Royal Portrush Golf Club',
-    location:   'Portrush, Northern Ireland',
+    venue:      'Royal Birkdale Golf Club',
+    location:   'Southport, England',
     dates:      'July 16–19, 2026',
     heroDecal:  'lighthouse',
     icon:       '🏴󠁧󠁢󠁳󠁣󠁴󠁿',
