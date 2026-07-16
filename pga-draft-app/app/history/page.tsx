@@ -83,13 +83,11 @@ function SeasonChart({ rows, liveIdx }: { rows: SeasonRow[]; liveIdx: number }) 
   const range = Math.max(maxS - minS, 10);
   const padded = range * 0.15;
 
-  // Lower score = better = higher on chart (inverted Y)
-  const scY = (s: number) => {
+  // Lower score = better = top of chart (small SVG Y = top)
+  const toY = (s: number) => {
     const t = (s - (minS - padded)) / (range + 2 * padded);
-    return PAD.t + t * cH; // low score → low t → high y (inverted below)
+    return PAD.t + t * cH;
   };
-  // Invert: best score at top
-  const toY = (s: number) => PAD.t + cH - (scY(s) - PAD.t);
   const toX = (col: number) => PAD.l + (col / (n - 1)) * cW;
 
   // Y-axis grid lines
