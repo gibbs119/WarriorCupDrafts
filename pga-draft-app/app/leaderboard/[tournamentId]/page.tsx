@@ -266,7 +266,7 @@ function fmtTeeTime(iso: string): string {
   try {
     const d = new Date(iso);
     if (isNaN(d.getTime())) return '';
-    return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short', timeZone: 'America/New_York' });
+    return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
   } catch { return ''; }
 }
 
@@ -2073,7 +2073,7 @@ export default function LeaderboardPage() {
         {view === 'teetimes' && (() => {
           const fmtTime = (iso: string) => {
             const d = new Date(iso);
-            return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short', timeZone: 'America/New_York' });
+            return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
           };
 
           // Build list of drafted players with tee times
@@ -2132,7 +2132,7 @@ export default function LeaderboardPage() {
                 <div className="space-y-2">
                   <div className="text-xs text-slate-500 mb-3 flex items-center gap-1.5">
                     <Clock size={11} />
-                    Drafted players only · {tzLabel} · {groups.filter(g => g.time !== 'Tee Time TBD').length} time slots
+                    Drafted players only · {groups.filter(g => g.time !== 'Tee Time TBD').length} time slots · your local time
                   </div>
                   {groups.map(group => (
                     <div key={group.time} className="rounded-xl overflow-hidden"
