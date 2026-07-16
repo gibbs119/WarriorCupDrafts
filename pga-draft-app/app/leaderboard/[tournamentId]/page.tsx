@@ -29,7 +29,7 @@ import { calculateLeaderboard } from '@/lib/scoring';
 import { parseLeaderboard } from '@/lib/espn';
 import type { Tournament, TeamScore, AppUser, Player } from '@/lib/types';
 import { TOURNAMENT_TZ_OFFSETS, TOURNAMENTS } from '@/lib/constants';
-import { RefreshCw, Wifi, WifiOff, AlertTriangle, BarChart2, List, TrendingUp, Activity, Globe, Percent, Users } from 'lucide-react';
+import { RefreshCw, Wifi, WifiOff, AlertTriangle, BarChart2, List, TrendingUp, Activity, Globe, Percent, Users, Clock } from 'lucide-react';
 
 // ─── Live odds type (mirrors app/api/ai/live-odds/route.ts) ──────────────────
 interface LiveOdds {
@@ -1371,7 +1371,7 @@ export default function LeaderboardPage() {
   const [users,              setUsers]              = useState<AppUser[]>([]);
   const [lastUpdated,        setLastUpdated]        = useState<Date | null>(null);
   const [refreshing,         setRefreshing]         = useState(false);
-  const [view,               setView]               = useState<'simple' | 'detailed' | 'trend' | 'movers' | 'field' | 'odds' | 'rosters'>('simple');
+  const [view,               setView]               = useState<'simple' | 'detailed' | 'trend' | 'movers' | 'field' | 'odds' | 'rosters' | 'teetimes'>('simple');
   const [roundStartScores,   setRoundStartScores]   = useState<Record<string, { score: number; rank: number }> | null>(null);
   const [fieldPlayers,       setFieldPlayers]       = useState<Record<string, Player>>({});
   const [draftedMap,         setDraftedMap]         = useState<Record<string, string>>({});  // playerName.lower → username
@@ -1452,12 +1452,57 @@ export default function LeaderboardPage() {
     async (t: Tournament, allUsers: AppUser[], isBust = false) => {
       if (!t.espnEventId) return;
 
-      // Gate: don't call the live leaderboard before the tournament starts.
-      // ESPN may return stale data from a prior completed event before R1 tees off.
+      // Determine whether the tournament is live (scoring) or pre-tournament (tee times only).
       // liveScoresStart lives in static constants (not Firebase), so look it up there.
       const staticConfig = TOURNAMENTS.find(x => x.id === t.id);
       const liveStart = staticConfig?.liveScoresStart ? new Date(staticConfig.liveScoresStart).getTime() : 0;
-      if (liveStart > 0 && Date.now() < liveStart) return;
+      const isScoreLive = liveStart === 0 || Date.now() >= liveStart;
+
+      if (!isScoreLive) {
+        // Pre-tournament: fetch ESPN for tee times only — do NOT compute scores.
+        // Tee times are validated against the expected tournament window to filter out
+        // stale data ESPN may serve from a prior event that shared the same event ID slot.
+        setRefreshing(true);
+        try {
+          const res = await fetch(`/api/espn/leaderboard?eventId=${t.espnEventId}${isBust ? '&bust=1' : ''}`);
+          if (res.ok) {
+            const data = await res.json();
+            const { players: parsed } = parseLeaderboard(data);
+            const TOLERANCE_MS = 14 * 24 * 60 * 60 * 1000; // 14 days
+            const hasFresh = Object.values(parsed).some(p => {
+              if (!p.teeTime) return false;
+              return liveStart === 0 || new Date(p.teeTime).getTime() > liveStart - TOLERANCE_MS;
+            });
+            if (hasFresh && Object.keys(parsed).length > 0) {
+              const merged: Record<string, Player> = {};
+              for (const [id, player] of Object.entries(parsed)) {
+                const teeMs = player.teeTime ? new Date(player.teeTime).getTime() : null;
+                const validTee = !teeMs || liveStart === 0 || teeMs > liveStart - TOLERANCE_MS;
+                const p = validTee ? player : { ...player, teeTime: null };
+                merged[id] = p;
+                const nameKey = player.name.toLowerCase().normalize('NFD')
+                  .replace(/[̀-ͯ]/g, '').replace(/\./g, '')
+                  .replace(/[-–]/g, ' ').replace(/\s+/g, ' ').trim();
+                merged[nameKey] = p;
+              }
+              setFieldPlayers(merged);
+              // Also populate draftedMap so the Tee Times tab knows who owns each player
+              const draftState = await getDraftState(tournamentId);
+              if (draftState) {
+                const dm: Record<string, string> = {};
+                for (const pick of draftState.picks) {
+                  dm[pick.playerName.toLowerCase().normalize('NFD')
+                    .replace(/[̀-ͯ]/g, '').replace(/\./g, '')
+                    .replace(/[-–]/g, ' ').replace(/\s+/g, ' ').trim()] = pick.username;
+                }
+                setDraftedMap(dm);
+              }
+            }
+          }
+        } catch { /* best-effort — tee times are non-critical pre-tournament */ }
+        finally { setRefreshing(false); }
+        return;
+      }
 
       setRefreshing(true);
       setFetchError(null);
@@ -1821,7 +1866,7 @@ export default function LeaderboardPage() {
         {/* Tab row — scrollable */}
         <div className="overflow-x-auto scrollbar-hide mb-4">
           <div className="flex gap-1 min-w-max p-1 rounded-xl" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
-            {([['simple','Board',<List size={11}/>], ['detailed','Detail',<BarChart2 size={11}/>], ['trend','Trend',<TrendingUp size={11}/>], ['movers','Movers',<Activity size={11}/>], ['field','Field',<Globe size={11}/>], ['rosters','Rosters',<Users size={11}/>], ['odds','Odds',<Percent size={11}/>]] as const).map(([v, label, icon]) => (
+            {([['simple','Board',<List size={11}/>], ['detailed','Detail',<BarChart2 size={11}/>], ['trend','Trend',<TrendingUp size={11}/>], ['movers','Movers',<Activity size={11}/>], ['teetimes','Tee Times',<Clock size={11}/>], ['field','Field',<Globe size={11}/>], ['rosters','Rosters',<Users size={11}/>], ['odds','Odds',<Percent size={11}/>]] as const).map(([v, label, icon]) => (
               <button key={v} onClick={() => setView(v as any)}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition-all whitespace-nowrap rounded-lg"
                 style={view === v
@@ -2023,6 +2068,107 @@ export default function LeaderboardPage() {
         {view === 'rosters' && (
           <RostersView teams={teamScores} myUserId={appUser.uid} playersMap={fieldPlayers} />
         )}
+
+        {/* TEE TIMES view */}
+        {view === 'teetimes' && (() => {
+          const tzOffset = TOURNAMENT_TZ_OFFSETS[tournamentId] ?? -4;
+          const tzLabel  = tzOffset === 1 ? 'BST' : tzOffset === 0 ? 'GMT' : tzOffset === -4 ? 'EDT' : tzOffset === -5 ? 'CDT' : 'local';
+
+          const fmtTime = (iso: string) => {
+            const d = new Date(iso);
+            const local = new Date(d.getTime() + tzOffset * 60 * 60 * 1000);
+            const h = local.getUTCHours();
+            const m = local.getUTCMinutes().toString().padStart(2, '0');
+            const ampm = h >= 12 ? 'PM' : 'AM';
+            return `${h % 12 || 12}:${m} ${ampm} ${tzLabel}`;
+          };
+
+          // Build list of drafted players with tee times
+          type TeeEntry = { playerName: string; username: string; teeTime: string | null };
+          const entries: TeeEntry[] = [];
+          const seen = new Set<string>();
+
+          for (const [nameKey, username] of Object.entries(draftedMap)) {
+            if (seen.has(nameKey)) continue;
+            seen.add(nameKey);
+            const player = fieldPlayers[nameKey];
+            if (!player) continue;
+            entries.push({ playerName: player.name, username, teeTime: player.teeTime ?? null });
+          }
+
+          // Sort: tee times first (ascending), then nulls
+          entries.sort((a, b) => {
+            if (!a.teeTime && !b.teeTime) return a.playerName.localeCompare(b.playerName);
+            if (!a.teeTime) return 1;
+            if (!b.teeTime) return -1;
+            return new Date(a.teeTime).getTime() - new Date(b.teeTime).getTime();
+          });
+
+          // Group by formatted tee time
+          const groups: { time: string; players: TeeEntry[] }[] = [];
+          for (const entry of entries) {
+            const timeLabel = entry.teeTime ? fmtTime(entry.teeTime) : 'Tee Time TBD';
+            const last = groups[groups.length - 1];
+            if (last && last.time === timeLabel) {
+              last.players.push(entry);
+            } else {
+              groups.push({ time: timeLabel, players: [entry] });
+            }
+          }
+
+          const hasAny = entries.length > 0;
+
+          // User-color map derived from teamScores or a fixed palette
+          const userColors: Record<string, string> = {};
+          const palette = ['#E8C94A','#3D80C0','#34d399','#f87171','#a78bfa','#fb923c','#38bdf8','#f472b6'];
+          const allUsernames = [...new Set(entries.map(e => e.username))];
+          allUsernames.forEach((u, i) => { userColors[u] = palette[i % palette.length]; });
+
+          return (
+            <div>
+              {!hasAny ? (
+                <div className="text-center py-16 rounded-xl"
+                  style={{ border: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.02)' }}>
+                  <div className="text-3xl mb-3">⏱</div>
+                  <div className="font-bebas text-xl tracking-wider text-slate-400 mb-1">Tee Times Not Yet Available</div>
+                  <div className="text-xs text-slate-600 max-w-xs mx-auto">
+                    ESPN typically releases tee times 1–2 days before Round 1.
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="text-xs text-slate-500 mb-3 flex items-center gap-1.5">
+                    <Clock size={11} />
+                    Drafted players only · {tzLabel} · {groups.filter(g => g.time !== 'Tee Time TBD').length} time slots
+                  </div>
+                  {groups.map(group => (
+                    <div key={group.time} className="rounded-xl overflow-hidden"
+                      style={{ border: '1px solid rgba(255,255,255,0.07)', background: 'rgba(255,255,255,0.02)' }}>
+                      <div className="px-3 py-2 flex items-center gap-2"
+                        style={{ background: 'rgba(255,255,255,0.04)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                        <Clock size={11} className="text-slate-500" />
+                        <span className="text-xs font-bold tracking-wide" style={{ color: theme.accentMid }}>
+                          {group.time}
+                        </span>
+                      </div>
+                      <div className="divide-y" style={{ borderColor: 'rgba(255,255,255,0.04)' }}>
+                        {group.players.map(p => (
+                          <div key={p.playerName} className="px-3 py-2.5 flex items-center justify-between">
+                            <span className="text-sm font-medium text-white">{p.playerName}</span>
+                            <span className="text-xs font-bold tracking-widest px-2 py-0.5 rounded-full"
+                              style={{ color: userColors[p.username], background: `${userColors[p.username]}18` }}>
+                              {p.username.toUpperCase()}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* ODDS view */}
         {view === 'odds' && (
