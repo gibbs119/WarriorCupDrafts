@@ -266,7 +266,7 @@ function fmtTeeTime(iso: string): string {
   try {
     const d = new Date(iso);
     if (isNaN(d.getTime())) return '';
-    return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
+    return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short', timeZone: 'America/New_York' });
   } catch { return ''; }
 }
 
@@ -2071,16 +2071,9 @@ export default function LeaderboardPage() {
 
         {/* TEE TIMES view */}
         {view === 'teetimes' && (() => {
-          const tzOffset = TOURNAMENT_TZ_OFFSETS[tournamentId] ?? -4;
-          const tzLabel  = tzOffset === 1 ? 'BST' : tzOffset === 0 ? 'GMT' : tzOffset === -4 ? 'EDT' : tzOffset === -5 ? 'CDT' : 'local';
-
           const fmtTime = (iso: string) => {
             const d = new Date(iso);
-            const local = new Date(d.getTime() + tzOffset * 60 * 60 * 1000);
-            const h = local.getUTCHours();
-            const m = local.getUTCMinutes().toString().padStart(2, '0');
-            const ampm = h >= 12 ? 'PM' : 'AM';
-            return `${h % 12 || 12}:${m} ${ampm} ${tzLabel}`;
+            return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short', timeZone: 'America/New_York' });
           };
 
           // Build list of drafted players with tee times
