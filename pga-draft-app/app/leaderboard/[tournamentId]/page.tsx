@@ -1458,8 +1458,10 @@ export default function LeaderboardPage() {
       const liveStart = staticConfig?.liveScoresStart ? new Date(staticConfig.liveScoresStart).getTime() : 0;
       const isScoreLive = liveStart === 0 || Date.now() >= liveStart;
 
-      if (!isScoreLive) {
+      if (!isScoreLive && !hasScoresRef.current) {
         // Pre-tournament: fetch ESPN for tee times only — do NOT compute scores.
+        // Guard: if live scores are already loaded (hasScoresRef), skip this path entirely
+        // so we never overwrite good data with pre-tournament tee-time-only data.
         // Tee times are validated against the expected tournament window to filter out
         // stale data ESPN may serve from a prior event that shared the same event ID slot.
         setRefreshing(true);
@@ -1559,12 +1561,20 @@ export default function LeaderboardPage() {
         await savePlayers(tournamentId, parsed);
 
         const draftState = await getDraftState(tournamentId);
-        if (!draftState) return;
+        if (!draftState) {
+          setFetchError('Draft picks not found — refresh to retry.');
+          return;
+        }
 
         const userPicksMap: Record<string, { username: string; picks: typeof draftState.picks }> = {};
         for (const user of allUsers) {
           const picks = draftState.picks.filter(p => p.userId === user.uid);
           if (picks.length > 0) userPicksMap[user.uid] = { username: user.username, picks };
+        }
+
+        if (Object.keys(userPicksMap).length === 0) {
+          setFetchError('No draft picks found for this tournament.');
+          return;
         }
 
         const mergedMap: Record<string, Player> = { ...parsed };
