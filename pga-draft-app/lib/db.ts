@@ -67,6 +67,28 @@ export async function initializeDraft(tournamentId: string, snakeDraftOrder: str
   await set(ref(db, `drafts/${tournamentId}`), state);
 }
 
+/**
+ * Write a complete pre-built set of picks directly to Firebase.
+ * Used by the admin emergency-import flow when the draft node is missing.
+ * The picks array should already be in snake-draft order.
+ */
+export async function importDraftPicks(
+  tournamentId: string,
+  picks: DraftPick[],
+  userIds: string[]
+): Promise<void> {
+  const totalPicks = picks.length;
+  const state: DraftState = {
+    tournamentId,
+    picks,
+    currentPickIndex: totalPicks,
+    snakeDraftOrder: userIds, // simple placeholder — not used for scoring
+    status: 'complete',
+  };
+  await set(ref(db, `drafts/${tournamentId}`), state);
+  await update(ref(db, `tournaments/${tournamentId}`), { draftComplete: true });
+}
+
 export async function submitPick(
   tournamentId: string,
   pick: DraftPick,

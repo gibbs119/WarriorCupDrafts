@@ -9,6 +9,7 @@ import {
   getAllTournaments, updateTournament, initializeDraft,
   getAllUsers, getDraftState, getDraftOrderFromResults, saveRankedOrder,
   resetDraft, clearDraftPicks, undoLastPick, getReedRuleStatus, setReedRuleStatus,
+  importDraftPicks,
 } from '@/lib/db';
 import { buildSnakeDraftOrder, calculateLeaderboard } from '@/lib/scoring';
 import { parseLeaderboard } from '@/lib/espn';
@@ -46,6 +47,10 @@ export default function AdminPage() {
   const [recapError, setRecapError] = useState<{ tournamentId: string; msg: string } | null>(null);
   const [reedRuleStates, setReedRuleStates] = useState<Record<string, boolean>>({});
   const [reedRuleSaving, setReedRuleSaving] = useState<string | null>(null);
+
+  // Emergency picks import
+  const [importPicksId, setImportPicksId] = useState<string | null>(null);
+  const [importPickInputs, setImportPickInputs] = useState<Record<string, string>>({});
 
   const [newUsername, setNewUsername] = useState('');
   const [newEmail, setNewEmail] = useState('');
@@ -246,6 +251,49 @@ export default function AdminPage() {
       toast.error('Failed to update Reed Rule status.');
     } finally {
       setReedRuleSaving(null);
+    }
+  }
+
+  async function handleImportPicks(t: Tournament) {
+    const maxPicks = t.maxPicks || 5;
+    const picks: import('@/lib/types').DraftPick[] = [];
+    let pickNumber = 1;
+    const filledUsers = users.filter((u) => (importPickInputs[u.uid] ?? '').trim());
+    if (filledUsers.length === 0) {
+      toast.error('Enter at least one user\'s picks before importing.');
+      return;
+    }
+    for (const u of filledUsers) {
+      const raw = importPickInputs[u.uid] ?? '';
+      const names = raw.split('\n').map((s) => s.trim()).filter(Boolean);
+      if (names.length !== maxPicks) {
+        toast.error(`${u.username} needs exactly ${maxPicks} picks (got ${names.length})`);
+        return;
+      }
+      for (let i = 0; i < names.length; i++) {
+        const name = names[i];
+        picks.push({
+          userId: u.uid,
+          username: u.username,
+          playerId: name, // scoring engine falls back to name matching
+          playerName: name,
+          pickNumber: pickNumber++,
+          round: i + 1,
+          timestamp: Date.now(),
+        });
+      }
+    }
+    setSaving(true);
+    try {
+      await importDraftPicks(t.id, picks, users.map((u) => u.uid));
+      toast.success(`Picks imported for ${t.name}! Leaderboard should load now.`);
+      setImportPicksId(null);
+      setImportPickInputs({});
+    } catch (e) {
+      console.error(e);
+      toast.error('Import failed — check console for details.');
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -601,6 +649,17 @@ export default function AdminPage() {
                       🚩 Reed Rule {reedRuleStates[t.id] ? 'ON' : 'OFF'}
                     </button>
 
+                    {/* Emergency picks import — for active tournaments where draft node is missing */}
+                    {(t.status === 'active' || t.status === 'drafting') && (
+                      <button
+                        onClick={() => setImportPicksId(importPicksId === t.id ? null : t.id)}
+                        className="text-xs py-1.5 px-3 rounded-lg font-bold transition-all"
+                        style={{ background: 'rgba(251,191,36,0.08)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.2)' }}
+                        title="Re-enter picks manually if the draft node is missing from Firebase">
+                        ⚡ Re-Enter Picks
+                      </button>
+                    )}
+
                     {/* Generate Draft Grades — show once draft is done (draftComplete flag or active/completed status) */}
                     {(t.draftComplete || t.status === 'active' || t.status === 'completed') && (
                       <button
@@ -651,6 +710,42 @@ export default function AdminPage() {
                       </button>
                     )}
                   </div>
+
+                  {/* Emergency picks import form */}
+                  {importPicksId === t.id && (
+                    <div className="mt-4 border-t border-yellow-800 pt-4 space-y-3">
+                      <div className="flex items-start gap-2">
+                        <span className="text-yellow-400 text-lg">⚡</span>
+                        <div>
+                          <p className="text-yellow-300 text-sm font-bold">Re-Enter Draft Picks</p>
+                          <p className="text-slate-400 text-xs">Enter {t.maxPicks || 5} player names per user (one per line). Player names are matched by name — exact spelling from ESPN preferred but not required.</p>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {users.map((u) => (
+                          <div key={u.uid}>
+                            <label className="text-xs font-bold text-slate-300 block mb-1">{u.username}</label>
+                            <textarea
+                              rows={t.maxPicks || 5}
+                              value={importPickInputs[u.uid] ?? ''}
+                              onChange={(e) => setImportPickInputs((prev) => ({ ...prev, [u.uid]: e.target.value }))}
+                              placeholder={`Player 1\nPlayer 2\nPlayer 3\nPlayer 4\nPlayer 5`}
+                              className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white font-mono focus:outline-none focus:ring-2 focus:ring-yellow-600 resize-none"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => handleImportPicks(t)} disabled={saving}
+                          className="text-sm py-2 px-4 rounded-lg font-bold transition-all disabled:opacity-40"
+                          style={{ background: '#C9A227', color: '#0D1F38' }}>
+                          {saving ? 'Importing…' : 'Import Picks'}
+                        </button>
+                        <button onClick={() => { setImportPicksId(null); setImportPickInputs({}); }}
+                          className="btn-secondary text-sm">Cancel</button>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Edit form */}
                   {editingId === t.id && (
