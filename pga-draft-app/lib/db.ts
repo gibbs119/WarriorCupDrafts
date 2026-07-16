@@ -44,7 +44,15 @@ export async function updateTournament(id: string, data: Partial<Tournament>) {
 
 export async function getDraftState(tournamentId: string): Promise<DraftState | null> {
   const snap = await get(ref(db, `drafts/${tournamentId}`));
-  return snap.exists() ? (snap.val() as DraftState) : null;
+  if (!snap.exists()) return null;
+  const val = snap.val() as DraftState;
+  // Firebase RTDB sometimes returns array-indexed objects instead of real arrays
+  // (e.g. {0:…,1:…}) when the array was written via runTransaction. Normalize here
+  // so all callers can safely call .filter()/.map() without extra type-guards.
+  if (val.picks && !Array.isArray(val.picks)) {
+    val.picks = Object.values(val.picks as unknown as Record<string, DraftPick>);
+  }
+  return val;
 }
 
 export function subscribeDraftState(
@@ -65,6 +73,28 @@ export async function initializeDraft(tournamentId: string, snakeDraftOrder: str
     status: 'open',
   };
   await set(ref(db, `drafts/${tournamentId}`), state);
+}
+
+/**
+ * Write a complete pre-built set of picks directly to Firebase.
+ * Used by the admin emergency-import flow when the draft node is missing.
+ * The picks array should already be in snake-draft order.
+ */
+export async function importDraftPicks(
+  tournamentId: string,
+  picks: DraftPick[],
+  userIds: string[]
+): Promise<void> {
+  const totalPicks = picks.length;
+  const state: DraftState = {
+    tournamentId,
+    picks,
+    currentPickIndex: totalPicks,
+    snakeDraftOrder: userIds, // simple placeholder — not used for scoring
+    status: 'complete',
+  };
+  await set(ref(db, `drafts/${tournamentId}`), state);
+  await update(ref(db, `tournaments/${tournamentId}`), { draftComplete: true });
 }
 
 export async function submitPick(
