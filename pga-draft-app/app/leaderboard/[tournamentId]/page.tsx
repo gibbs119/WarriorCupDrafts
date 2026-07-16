@@ -1491,8 +1491,11 @@ export default function LeaderboardPage() {
               // Also populate draftedMap so the Tee Times tab knows who owns each player
               const draftState = await getDraftState(tournamentId);
               if (draftState) {
+                const prePicks = Array.isArray(draftState.picks)
+                  ? draftState.picks
+                  : Object.values(draftState.picks as unknown as Record<string, (typeof draftState.picks)[0]>);
                 const dm: Record<string, string> = {};
-                for (const pick of draftState.picks) {
+                for (const pick of prePicks) {
                   dm[pick.playerName.toLowerCase().normalize('NFD')
                     .replace(/[̀-ͯ]/g, '').replace(/\./g, '')
                     .replace(/[-–]/g, ' ').replace(/\s+/g, ' ').trim()] = pick.username;
@@ -1566,9 +1569,15 @@ export default function LeaderboardPage() {
           return;
         }
 
+        // Firebase RTDB may return an array-like object {0:…,1:…} instead of a real array
+        // after transactions. Normalize to a proper array before calling .filter().
+        const allPicks: typeof draftState.picks = Array.isArray(draftState.picks)
+          ? draftState.picks
+          : Object.values(draftState.picks as unknown as Record<string, (typeof draftState.picks)[0]>);
+
         const userPicksMap: Record<string, { username: string; picks: typeof draftState.picks }> = {};
         for (const user of allUsers) {
-          const picks = draftState.picks.filter(p => p.userId === user.uid);
+          const picks = allPicks.filter(p => p.userId === user.uid);
           if (picks.length > 0) userPicksMap[user.uid] = { username: user.username, picks };
         }
 
