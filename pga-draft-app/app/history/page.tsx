@@ -266,9 +266,14 @@ export default function HistoryPage() {
       setStats(Object.entries(st).map(([username, s]) => ({ username, ...s })).sort((a,b) => a.total - b.total));
 
       // ── Build 2026 season from locked data ─────────────────────────────────
+      // Match by tournament ID (no year filter — IDs are unique per season).
+      // If somehow multiple entries share an ID, keep the most recently locked one.
+      const seasonIds = new Set(SEASON_COLS.map(c => c.id));
       const lockedByTournId: Record<string, LockedTournament> = {};
       for (const lt of Object.values(locked)) {
-        if ((lt.year ?? new Date(lt.lockedAt).getFullYear()) === 2026) {
+        if (!seasonIds.has(lt.tournamentId)) continue;
+        const existing = lockedByTournId[lt.tournamentId];
+        if (!existing || new Date(lt.lockedAt).getTime() > new Date(existing.lockedAt).getTime()) {
           lockedByTournId[lt.tournamentId] = lt;
         }
       }
@@ -357,8 +362,9 @@ export default function HistoryPage() {
 
       const liveTeams = calculateLeaderboard(userPicksMap, players, OPEN_CONFIG.cutLine);
 
-      // Merge live scores into rowMap
-      const merged = { ...rowMap };
+      // Merge live scores — deep-copy scores arrays to avoid mutating rowMap
+      const merged: Record<string, { username: string; scores: (number | null)[] }> = {};
+      for (const [u, v] of Object.entries(rowMap)) merged[u] = { username: v.username, scores: [...v.scores] };
       for (const team of liveTeams) {
         if (!merged[team.username]) {
           merged[team.username] = { username: team.username, scores: SEASON_COLS.map(() => null) };
