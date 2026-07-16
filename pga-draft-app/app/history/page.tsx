@@ -74,16 +74,25 @@ function SeasonChart({ rows, liveIdx }: { rows: SeasonRow[]; liveIdx: number }) 
   const cH = H - PAD.t - PAD.b;
   const n  = SEASON_COLS.length;
 
-  // Collect all real scores (exclude DNS sentinel)
-  const allScores = rows.flatMap(r => r.scores).filter((s): s is number => s !== null && s < 9000);
-  if (allScores.length === 0) return null;
+  // Build cumulative scores per row: cumRow[ci] = sum of scores[0..ci]
+  const cumRows = rows.map(row => {
+    let running = 0;
+    return row.scores.map(s => {
+      if (s === null || s >= 9000) return null;
+      running += s;
+      return running;
+    });
+  });
 
-  const minS = Math.min(...allScores);
-  const maxS = Math.max(...allScores);
+  const allCum = cumRows.flat().filter((s): s is number => s !== null);
+  if (allCum.length === 0) return null;
+
+  const minS = Math.min(...allCum);
+  const maxS = Math.max(...allCum);
   const range = Math.max(maxS - minS, 10);
   const padded = range * 0.15;
 
-  // Lower score = better = top of chart (small SVG Y = top)
+  // Lower cumulative = better = top of chart
   const toY = (s: number) => {
     const t = (s - (minS - padded)) / (range + 2 * padded);
     return PAD.t + t * cH;
@@ -124,8 +133,8 @@ function SeasonChart({ rows, liveIdx }: { rows: SeasonRow[]; liveIdx: number }) 
       {/* Lines + dots per user */}
       {rows.map((row, ri) => {
         const color = SEASON_COLORS[ri % SEASON_COLORS.length];
-        const pts = row.scores
-          .map((s, ci) => (s !== null && s < 9000 ? { x: toX(ci), y: toY(s), ci } : null))
+        const pts = cumRows[ri]
+          .map((s, ci) => (s !== null ? { x: toX(ci), y: toY(s), ci } : null))
           .filter((p): p is { x: number; y: number; ci: number } => p !== null);
 
         if (pts.length === 0) return null;
@@ -503,7 +512,7 @@ export default function HistoryPage() {
               {/* Trend chart */}
               <div className="card">
                 <h3 className="font-bebas text-lg tracking-wider text-white mb-3 flex items-center gap-2">
-                  <TrendingUp size={15} style={{color:'#E8C94A'}} /> Tournament-by-Tournament Scores
+                  <TrendingUp size={15} style={{color:'#E8C94A'}} /> Cumulative Season Score
                   <span className="text-xs font-sans font-normal ml-1" style={{color:'rgba(148,163,184,0.4)'}}>lower = better</span>
                 </h3>
                 <SeasonChart rows={season2026} liveIdx={liveColIdx} />
