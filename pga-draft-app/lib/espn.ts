@@ -125,14 +125,34 @@ export function parseLeaderboard(data: ESPNLeaderboardResponse): {
   // scores are placeholder data (all "E") — suppress them so the draft room doesn't
   // show a fake leaderboard before Round 1 tees off.
   const competitionStatusName = (competition.status?.type?.name ?? '').toLowerCase();
+
+  // Between rounds (e.g. R1 done, R2 not yet started) ESPN resets every player's
+  // thru to 0 for the upcoming round. The "every thru=0" fallback below would
+  // wrongly flag this as pre-tournament. Guard against it by checking whether ESPN
+  // is already showing real leaderboard positions — if so, at least one round has
+  // been played and this is definitely NOT pre-tournament.
+  const hasPlayersWithPositions = competitors.some((c) => {
+    const pos = c.status?.position?.displayName ?? c.status?.position?.displayValue ?? '';
+    return pos !== '' && pos !== '-' && pos !== '--';
+  });
+  // Also check for completed round scores in statistics (R1/R2/R3/R4 labels)
+  const hasCompletedRoundScores = competitors.some((c) =>
+    c.statistics?.some((s) => {
+      const m = (s.abbreviation ?? '').toUpperCase().match(/^R([1-4])$/);
+      return m && s.displayValue && !['—', '-', '--'].includes(s.displayValue);
+    })
+  );
+
   const isPreTournament =
-    competitionStatusName.includes('scheduled') ||
-    competitionStatusName === 'status_scheduled' ||
-    // Fallback: if every competitor has thru = 0 / null, nothing has been played
-    competitors.every((c) => {
-      const t = c.status?.thru;
-      return t === null || t === undefined || t === 0 || t === '';
-    });
+    !hasPlayersWithPositions &&
+    !hasCompletedRoundScores &&
+    (competitionStatusName.includes('scheduled') ||
+      competitionStatusName === 'status_scheduled' ||
+      // Fallback: if every competitor has thru = 0 / null, nothing has been played
+      competitors.every((c) => {
+        const t = c.status?.thru;
+        return t === null || t === undefined || t === 0 || t === '';
+      }));
 
   const players: Record<string, Player> = {};
 
