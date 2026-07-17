@@ -29,7 +29,7 @@ import { calculateLeaderboard } from '@/lib/scoring';
 import { parseLeaderboard } from '@/lib/espn';
 import type { Tournament, TeamScore, AppUser, Player } from '@/lib/types';
 import { TOURNAMENT_TZ_OFFSETS, TOURNAMENTS } from '@/lib/constants';
-import { RefreshCw, Wifi, WifiOff, AlertTriangle, BarChart2, List, TrendingUp, Activity, Globe, Percent, Users, Clock } from 'lucide-react';
+import { RefreshCw, WifiOff, AlertTriangle, BarChart2, List, TrendingUp, Activity, Globe, Percent, Users, Clock } from 'lucide-react';
 
 // ─── Live odds type (mirrors app/api/ai/live-odds/route.ts) ──────────────────
 interface LiveOdds {
@@ -1551,7 +1551,7 @@ export default function LeaderboardPage() {
           if (hasScoresRef.current) {
             setIsStale(true);
           } else {
-            setFetchError("No scores yet — tournament hasn't started.");
+            setFetchError('No player data from ESPN yet. Retrying…');
           }
           return;
         }
@@ -1569,8 +1569,7 @@ export default function LeaderboardPage() {
           return;
         }
 
-        // Firebase RTDB may return an array-like object {0:…,1:…} instead of a real array
-        // after transactions. Normalize to a proper array before calling .filter().
+        // getDraftState normalizes picks to a real array; this is a defensive fallback.
         const allPicks: typeof draftState.picks = Array.isArray(draftState.picks)
           ? draftState.picks
           : Object.values(draftState.picks as unknown as Record<string, (typeof draftState.picks)[0]>);

@@ -23,8 +23,10 @@ export interface Tournament {
   draftOrder: string[];      // Array of UIDs in snake order
   draftComplete: boolean;
   startDate: string;         // Display string e.g. "March 13-16, 2025"
+  draftDate?: string;        // Display string e.g. "March 8, 2026"
   cutLine: number;           // Position number of cut line (e.g. 65)
   year: number;
+  scoreLocked?: boolean;     // True after admin runs Lock Scores
 }
 
 // ─── Draft ───────────────────────────────────────────────────────────────────
