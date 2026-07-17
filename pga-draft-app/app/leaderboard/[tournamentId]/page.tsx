@@ -1039,28 +1039,29 @@ function FieldLeaderboard({
           {isWdDq ? '—' : (p.thru !== '-' ? p.thru : '—')}
         </div>
 
-        {/* Score — current round + total (show for cut players too, for posterity) */}
-        <div className="shrink-0 w-16 text-right">
-          {isWdDq ? (
-            <div className="text-sm font-bold font-mono text-slate-600">—</div>
-          ) : (() => {
+        {/* Rd — current round score */}
+        <div className="shrink-0 w-10 text-right">
+          {(() => {
             const rdScore = p.roundScores?.[(p.currentRound ?? 1) - 1] ?? null;
-            const showRd = rdScore !== null && p.thru !== '-';
-            const scoreStyle = isCut ? { color: '#64748b' } : { color: scoreColor };
+            const showRd = !isWdDq && rdScore !== null && p.thru !== '-';
+            if (!showRd) return <span className="text-xs font-mono text-slate-600">—</span>;
             return (
-              <>
-                {showRd && (
-                  <div className="text-xs font-mono" style={isCut ? { color: '#64748b' } : { color: golfScoreColor(rdScore!) }}>
-                    {rdScore}
-                  </div>
-                )}
-                <div className={showRd ? 'text-xs font-mono text-slate-400' : 'text-sm font-bold font-mono'} style={showRd ? {} : scoreStyle}>
-                  {p.score || '—'}
-                </div>
-                {showRd && <div className="text-xs text-slate-700" style={{ fontSize: '9px' }}>total</div>}
-              </>
+              <span className="text-xs font-mono font-bold" style={isCut ? { color: '#64748b' } : { color: golfScoreColor(rdScore!) }}>
+                {rdScore}
+              </span>
             );
           })()}
+        </div>
+
+        {/* Tot — cumulative tournament total */}
+        <div className="shrink-0 w-12 text-right">
+          {isWdDq ? (
+            <span className="text-xs font-mono text-slate-600">—</span>
+          ) : (
+            <span className="text-sm font-bold font-mono" style={isCut ? { color: '#64748b' } : { color: scoreColor }}>
+              {p.score || '—'}
+            </span>
+          )}
         </div>
       </div>
     );
@@ -1088,7 +1089,8 @@ function FieldLeaderboard({
         <div className="w-9 text-right shrink-0">Pos</div>
         <div className="flex-1">Player</div>
         <div className="w-7 text-right shrink-0">Thru</div>
-        <div className="w-16 text-right shrink-0">Rd / Tot</div>
+        <div className="w-10 text-right shrink-0">Rd</div>
+        <div className="w-12 text-right shrink-0">Tot</div>
       </div>
 
       {/* Active players */}
