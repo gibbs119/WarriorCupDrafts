@@ -48,7 +48,9 @@ const SEASON_COLS = [
   { id: 'the-open',            label: 'The Open', live: true },
 ] as const;
 
-const OPEN_CONFIG = TOURNAMENTS.find(t => t.id === 'the-open')!;
+const LIVE_COL_IDX  = SEASON_COLS.findIndex(c => c.live);
+const LIVE_COL_ID   = SEASON_COLS[LIVE_COL_IDX]?.id ?? 'the-open';
+const OPEN_CONFIG   = TOURNAMENTS.find(t => t.id === LIVE_COL_ID)!;
 
 // ─── Colours ──────────────────────────────────────────────────────────────────
 
@@ -327,8 +329,7 @@ export default function HistoryPage() {
 
   // ── Fetch live Open scores and merge ─────────────────────────────────────
   async function fetchLiveOpen(rowMap: Record<string, { username: string; scores: (number | null)[] }>) {
-    const liveColIdx = SEASON_COLS.findIndex(c => c.live);
-    if (liveColIdx < 0) return;
+    if (LIVE_COL_IDX < 0) return;
 
     const now = Date.now();
     const liveStart = OPEN_CONFIG.liveScoresStart ? new Date(OPEN_CONFIG.liveScoresStart).getTime() : 0;
@@ -369,7 +370,7 @@ export default function HistoryPage() {
         if (!merged[team.username]) {
           merged[team.username] = { username: team.username, scores: SEASON_COLS.map(() => null) };
         }
-        merged[team.username].scores[liveColIdx] = team.top3Score >= 9000 ? null : team.top3Score;
+        merged[team.username].scores[LIVE_COL_IDX] = team.top3Score >= 9000 ? null : team.top3Score;
       }
 
       setSeason2026(buildRankedRows(merged));
@@ -388,8 +389,7 @@ export default function HistoryPage() {
     return rows;
   }
 
-  const liveColIdx = SEASON_COLS.findIndex(c => c.live);
-  const hasLiveScores = season2026.some(r => r.scores[liveColIdx] !== null);
+  const hasLiveScores = season2026.some(r => r.scores[LIVE_COL_IDX] !== null);
 
   if (loading || !appUser) return (
     <div className="min-h-screen page"><Navigation />
@@ -457,10 +457,10 @@ export default function HistoryPage() {
                       <th className="text-left px-2 py-2.5 font-semibold text-xs uppercase tracking-wider" style={{color:'rgba(148,163,184,0.4)'}}>Player</th>
                       {SEASON_COLS.map((col, ci) => (
                         <th key={col.id} className="text-center px-2 py-2.5 font-semibold text-xs uppercase tracking-wider whitespace-nowrap" style={{
-                          color: ci === liveColIdx ? '#E8C94A' : 'rgba(148,163,184,0.4)',
+                          color: ci === LIVE_COL_IDX ? '#E8C94A' : 'rgba(148,163,184,0.4)',
                           minWidth: '52px',
                         }}>
-                          {col.label}{ci === liveColIdx && hasLiveScores ? ' 🔴' : ''}
+                          {col.label}{ci === LIVE_COL_IDX && hasLiveScores ? ' 🔴' : ''}
                         </th>
                       ))}
                       <th className="text-center px-3 py-2.5 font-bold text-xs uppercase tracking-wider" style={{color:'rgba(148,163,184,0.6)',minWidth:'52px'}}>Total</th>
@@ -483,7 +483,7 @@ export default function HistoryPage() {
                             {isMe && <span className="ml-1.5 text-xs" style={{color:'rgba(0,107,182,0.8)'}}>you</span>}
                           </td>
                           {row.scores.map((s, ci) => {
-                            const isLive = ci === liveColIdx;
+                            const isLive = ci === LIVE_COL_IDX;
                             const val = fmtScore(s);
                             const color = s === null ? 'rgba(148,163,184,0.2)'
                               : s < 0 ? '#34d399'
@@ -521,7 +521,7 @@ export default function HistoryPage() {
                   <TrendingUp size={15} style={{color:'#E8C94A'}} /> Cumulative Season Score
                   <span className="text-xs font-sans font-normal ml-1" style={{color:'rgba(148,163,184,0.4)'}}>lower = better</span>
                 </h3>
-                <SeasonChart rows={season2026} liveIdx={liveColIdx} />
+                <SeasonChart rows={season2026} liveIdx={LIVE_COL_IDX} />
                 <ChartLegend rows={season2026} appUsername={appUser.username} />
               </div>
             </div>

@@ -104,7 +104,8 @@ export function parseLeaderboard(data: ESPNLeaderboardResponse): {
   fieldSize: number;
   cutLine: number;
 } {
-  // Handle core API competitor list shape (3rd endpoint)
+  // Defensive guard: if response has the core API shape (items array, no events), parse it.
+  // The core API endpoint is excluded from our rotation but this handles unexpected responses.
   if ((data as unknown as ESPNFieldResponse)?.items && !(data as ESPNLeaderboardResponse)?.events) {
     return parseCoreApiCompetitors(data as unknown as ESPNFieldResponse);
   }
@@ -189,11 +190,6 @@ export function parseLeaderboard(data: ESPNLeaderboardResponse): {
     // Total score to par (cumulative tournament, not just today's round).
     // ESPN puts the overall total in statistics as 'scoreToPar' / 'TOT'.
     // comp.score is the current-round score — only use as last resort.
-    // Debug: log stats for first player so we can verify field names in Vercel logs
-    if (Object.keys(players).length === 0 && comp.statistics?.length) {
-      console.log('[ESPN debug] competitor stats fields:', JSON.stringify(comp.statistics.map(s => ({ name: s.name, abbr: s.abbreviation, val: s.displayValue }))));
-      console.log('[ESPN debug] comp.score:', comp.score?.displayValue);
-    }
     // Suppress scores before Round 1 tees off — ESPN returns 'E' for all players
     // as a placeholder, which looks like a real leaderboard when it isn't.
     let scoreVal = '-';
@@ -322,15 +318,6 @@ function parseCoreApiCompetitors(data: ESPNFieldResponse): {
   return { players, fieldSize: items.length, cutLine: 65 };
 }
 
-// ─── Parse pre-tournament field ───────────────────────────────────────────────
-
-export function parseField(data: ESPNFieldResponse): { id: string; name: string }[] {
-  const items = data?.items ?? [];
-  return items.map((item) => ({
-    id: String(item.athlete?.id ?? item.id ?? ''),
-    name: item.athlete?.displayName ?? item.athlete?.fullName ?? 'Unknown',
-  }));
-}
 
 // ─── TypeScript shapes (simplified) ──────────────────────────────────────────
 

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import Navigation from '@/components/Navigation';
@@ -197,7 +197,7 @@ export default function AdminPage() {
       const randomOrder: string[] = shuffleArray(users.map((u) => u.uid));
       // 2. Save ESPN ID + draft order
       await updateTournament(t.id, {
-        espnEventId: t.espnEventId || '401811937',
+        espnEventId: t.espnEventId,
         draftOrder: randomOrder,
         cutLine: 65,
       });
@@ -375,7 +375,7 @@ export default function AdminPage() {
       const data = await res.json();
       if (res.ok) {
         toast.success(`Scores locked for ${t.name}! ${data.teamScores?.length ?? 0} teams recorded.`, { id: toastId });
-        setTournaments((prev) => prev.map((x) => x.id === t.id ? { ...x, status: 'completed', scoreLocked: true } as typeof x : x));
+        setTournaments((prev) => prev.map((x) => x.id === t.id ? { ...x, status: 'completed', scoreLocked: true } : x));
       } else {
         toast.error(`Lock failed: ${data.error}`, { id: toastId });
       }
@@ -557,7 +557,7 @@ export default function AdminPage() {
                     </div>
                     <p className="text-slate-400 text-xs mt-1">
                       📅 {t.startDate}
-                      {(t as any).draftDate && <span className="text-slate-500"> · Draft: {(t as any).draftDate}</span>}
+                      {t.draftDate && <span className="text-slate-500"> · Draft: {t.draftDate}</span>}
                     </p>
                     <p className="text-slate-500 text-xs mt-0.5">
                       ESPN ID: <span className="font-mono" style={{ color: t.espnEventId ? '#4ade80' : '#f87171' }}>{t.espnEventId || '⚠ not set'}</span>
@@ -854,8 +854,8 @@ export default function AdminPage() {
                   </thead>
                   <tbody>
                     {users.map((u) => (
-                      <>
-                        <tr key={u.uid} className="border-b border-slate-700/50">
+                      <React.Fragment key={u.uid}>
+                        <tr className="border-b border-slate-700/50">
                           <td className="py-2 font-medium text-white">{u.username}</td>
                           <td className="py-2 text-slate-400 text-xs">{u.email}</td>
                           <td className="py-2">
@@ -905,7 +905,7 @@ export default function AdminPage() {
                             </td>
                           </tr>
                         )}
-                      </>
+                      </React.Fragment>
                     ))}
                   </tbody>
                 </table>

@@ -60,7 +60,14 @@ export function subscribeDraftState(
   callback: (state: DraftState | null) => void
 ): () => void {
   const r = ref(db, `drafts/${tournamentId}`);
-  onValue(r, (snap) => callback(snap.exists() ? snap.val() : null));
+  onValue(r, (snap) => {
+    if (!snap.exists()) { callback(null); return; }
+    const val = snap.val() as DraftState;
+    if (val.picks && !Array.isArray(val.picks)) {
+      val.picks = Object.values(val.picks as unknown as Record<string, DraftPick>);
+    }
+    callback(val);
+  });
   return () => off(r);
 }
 
@@ -347,8 +354,8 @@ export async function denyWDRequest(
   await update(ref(db, `wdRequests/${tournamentId}/${requestKey}`), {
     ...request,
     status: 'denied',
-    approvedAt: Date.now(),
-    approvedBy: adminName,
+    deniedAt: Date.now(),
+    deniedBy: adminName,
     note,
   });
 }
