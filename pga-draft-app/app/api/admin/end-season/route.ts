@@ -2,36 +2,56 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminServices } from '@/lib/fcm-admin';
 import type { GolferSeasonStats, UserSeasonStats, SeasonArchive } from '@/lib/types';
 
-const SEASON_IDS = ['players-championship', 'masters', 'pga-championship', 'us-open', 'the-open'] as const;
-const SEASON_LABELS: Record<string, string> = {
-  'players-championship': 'The Players Championship',
-  'masters': 'The Masters',
-  'pga-championship': 'PGA Championship',
-  'us-open': 'U.S. Open',
-  'the-open': 'The Open Championship',
-};
-
-async function callOpenAI(prompt: string): Promise<string> {
-  const apiKey = process.env.OPENAI_API_KEY ?? '';
-  if (!apiKey) throw new Error('OPENAI_API_KEY not set');
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: prompt }],
-      max_tokens: 1200,
-      temperature: 0.9,
-    }),
-  });
-  if (!res.ok) {
-    const t = await res.text();
-    throw new Error(`OpenAI ${res.status}: ${t.slice(0, 300)}`);
+async function callAI(prompt: string): Promise<string> {
+  // Try Anthropic first, fall back to OpenAI
+  const anthropicKey = process.env.ANTHROPIC_API_KEY ?? '';
+  if (anthropicKey) {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': anthropicKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 1200,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
+    if (!res.ok) {
+      const t = await res.text();
+      throw new Error(`Anthropic ${res.status}: ${t.slice(0, 300)}`);
+    }
+    const data = await res.json();
+    const text = data.content?.[0]?.text;
+    if (!text) throw new Error('Anthropic returned empty response');
+    return text;
   }
-  const data = await res.json();
-  const text = data.choices?.[0]?.message?.content;
-  if (!text) throw new Error('OpenAI returned empty response');
-  return text;
+
+  const openaiKey = process.env.OPENAI_API_KEY ?? '';
+  if (openaiKey) {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${openaiKey}` },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 1200,
+        temperature: 0.9,
+      }),
+    });
+    if (!res.ok) {
+      const t = await res.text();
+      throw new Error(`OpenAI ${res.status}: ${t.slice(0, 300)}`);
+    }
+    const data = await res.json();
+    const text = data.choices?.[0]?.message?.content;
+    if (!text) throw new Error('OpenAI returned empty response');
+    return text;
+  }
+
+  throw new Error('No AI API key set — add ANTHROPIC_API_KEY or OPENAI_API_KEY to environment variables');
 }
 
 export async function POST(req: NextRequest) {
@@ -50,10 +70,14 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'No season archive found — run End Season first' }, { status: 404 });
       }
       const existing = archiveSnap.val() as SeasonArchive;
-      const recap = await buildRecap(existing);
-      await db.ref(`seasons/${year}/recap`).set(recap);
-      await db.ref(`seasons/${year}/generatedAt`).set(Date.now());
-      return NextResponse.json({ success: true, recap });
+      try {
+        const recap = await buildRecap(existing, year);
+        await db.ref(`seasons/${year}/recap`).set(recap);
+        await db.ref(`seasons/${year}/generatedAt`).set(Date.now());
+        return NextResponse.json({ success: true, recap });
+      } catch (e) {
+        return NextResponse.json({ error: String(e) }, { status: 500 });
+      }
     }
 
     // Guard: don't overwrite unless forced
@@ -64,7 +88,33 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ── 1. Load all locked scores ───────────────────────────────────────────
+    // ── 1. Load tournament IDs for this season from Firebase ───────────────────
+    // Fall back to the 5 standard IDs if no year-tagged tournaments found
+    const STANDARD_IDS = ['players-championship', 'masters', 'pga-championship', 'us-open', 'the-open'];
+    let seasonTournIds: string[] = [];
+    {
+      const tSnap = await db.ref('tournaments').get();
+      if (tSnap.exists()) {
+        type TRow = { id: string; year?: number; sequence?: number };
+        const all = Object.values(tSnap.val() as Record<string, TRow>);
+        const forYear = all.filter(t => t.year === year).sort((a, b) => (a.sequence ?? 99) - (b.sequence ?? 99));
+        seasonTournIds = forYear.length > 0 ? forYear.map(t => t.id) : STANDARD_IDS;
+      } else {
+        seasonTournIds = STANDARD_IDS;
+      }
+    }
+
+    // Build display labels from Firebase tournament names
+    const tournLabels: Record<string, string> = {};
+    {
+      await Promise.all(seasonTournIds.map(async (id) => {
+        const snap = await db.ref(`tournaments/${id}/name`).get();
+        if (snap.exists()) tournLabels[id] = snap.val() as string;
+        else tournLabels[id] = id;
+      }));
+    }
+
+    // ── 2. Load all locked scores for this season ───────────────────────────────
     type LockedTs = {
       tournamentId: string; tournamentName: string; year: number;
       lockedAt: string; lockedBy: string;
@@ -72,20 +122,28 @@ export async function POST(req: NextRequest) {
         players?: { playerName: string; points: number; countsInTop3: boolean; positionDisplay: string }[] }[];
     };
     const lockedScores: Record<string, LockedTs> = {};
-    await Promise.all(SEASON_IDS.map(async (id) => {
+    await Promise.all(seasonTournIds.map(async (id) => {
       const snap = await db.ref(`lockedScores/${id}`).get();
-      if (snap.exists()) lockedScores[id] = snap.val() as LockedTs;
+      if (snap.exists()) {
+        const val = snap.val() as LockedTs;
+        // Only include tournaments that belong to this season's year
+        if (!val.year || val.year === year) {
+          lockedScores[id] = val;
+        }
+      }
     }));
 
-    const completedIds = SEASON_IDS.filter(id => id in lockedScores);
+    const completedIds = seasonTournIds.filter(id => id in lockedScores);
     if (completedIds.length === 0) {
-      return NextResponse.json({ error: 'No locked scores found for any 2026 tournament' }, { status: 400 });
+      return NextResponse.json({
+        error: `No locked scores found for any ${year} tournament. Lock at least one tournament first.`,
+      }, { status: 400 });
     }
 
-    // ── 2. Load all draft picks ─────────────────────────────────────────────
+    // ── 3. Load all draft picks ─────────────────────────────────────────────────
     type Pick = { userId: string; username: string; playerName: string; pickNumber: number };
     const draftPicks: Record<string, Pick[]> = {};
-    await Promise.all(SEASON_IDS.map(async (id) => {
+    await Promise.all(seasonTournIds.map(async (id) => {
       const snap = await db.ref(`drafts/${id}/picks`).get();
       if (snap.exists()) {
         const val = snap.val();
@@ -95,7 +153,7 @@ export async function POST(req: NextRequest) {
       }
     }));
 
-    // ── 3. Build season standings ───────────────────────────────────────────
+    // ── 4. Build season standings ───────────────────────────────────────────────
     const userTotals: Record<string, {
       userId: string; username: string;
       byTournament: Record<string, number>;
@@ -103,7 +161,9 @@ export async function POST(req: NextRequest) {
     }> = {};
 
     for (const [tournId, lt] of Object.entries(lockedScores)) {
-      for (const ts of lt.teamScores ?? []) {
+      const teams = Array.isArray(lt.teamScores) ? lt.teamScores : Object.values(lt.teamScores ?? {});
+      for (const ts of teams) {
+        if (!ts || !ts.userId) continue;
         if (!userTotals[ts.userId]) {
           userTotals[ts.userId] = { userId: ts.userId, username: ts.username, byTournament: {}, total: 0 };
         }
@@ -117,13 +177,12 @@ export async function POST(req: NextRequest) {
       .map((u, i) => ({ ...u, rank: i + 1 }));
 
     if (seasonStandings.length === 0) {
-      return NextResponse.json({ error: 'No team scores found in locked data' }, { status: 400 });
+      return NextResponse.json({ error: 'No team scores found in locked data. Check that picks and scores are properly saved.' }, { status: 400 });
     }
 
     const champion = { ...seasonStandings[0] };
 
-    // ── 4. Build golfer and user draft stats ────────────────────────────────
-    // Accumulator: intermediate with sums before averaging
+    // ── 5. Build golfer and user draft stats ────────────────────────────────────
     type GolferAcc = Omit<GolferSeasonStats, 'avgPickSpot' | 'avgPoints'> & { pickSpotSum: number; pointsSum: number };
     type UserAcc = Omit<UserSeasonStats, 'avgPointsPerPick'> & { pointsSum: number };
 
@@ -132,17 +191,22 @@ export async function POST(req: NextRequest) {
 
     for (const [tournId, lt] of Object.entries(lockedScores)) {
       const picks = draftPicks[tournId] ?? [];
+      const teams = Array.isArray(lt.teamScores) ? lt.teamScores : Object.values(lt.teamScores ?? {});
 
       // Build per-user score lookup: userId → playerName → { points, positionDisplay }
       const scoreByUser: Record<string, Record<string, { points: number; positionDisplay: string }>> = {};
-      for (const ts of lt.teamScores ?? []) {
+      for (const ts of teams) {
+        if (!ts || !ts.userId) continue;
         scoreByUser[ts.userId] = {};
-        for (const ps of ts.players ?? []) {
-          scoreByUser[ts.userId][ps.playerName] = { points: ps.points, positionDisplay: ps.positionDisplay ?? '-' };
+        const players = Array.isArray(ts.players) ? ts.players : Object.values(ts.players ?? {});
+        for (const ps of players) {
+          if (ps && ps.playerName) {
+            scoreByUser[ts.userId][ps.playerName] = { points: ps.points, positionDisplay: ps.positionDisplay ?? '-' };
+          }
         }
       }
 
-      const tournName = lt.tournamentName;
+      const tournName = lt.tournamentName || tournLabels[tournId] || tournId;
 
       for (const pick of picks) {
         const score = scoreByUser[pick.userId]?.[pick.playerName];
@@ -199,7 +263,6 @@ export async function POST(req: NextRequest) {
         if (score.points > u.worstPick.points) {
           u.worstPick = { playerName: pick.playerName, tournamentName: tournName, points: score.points, pickNumber: pick.pickNumber, positionDisplay: score.positionDisplay };
         }
-        // Steal score: rewards scoring well AND being picked late
         const valueScore = -score.points + pick.pickNumber / 2;
         if (valueScore > u.biggestSteal.valueScore) {
           u.biggestSteal = { playerName: pick.playerName, tournamentName: tournName, points: score.points, pickNumber: pick.pickNumber, positionDisplay: score.positionDisplay, valueScore };
@@ -219,14 +282,13 @@ export async function POST(req: NextRequest) {
       .map(({ pointsSum, ...u }) => ({
         ...u,
         avgPointsPerPick: u.totalPicks > 0 ? Math.round((pointsSum / u.totalPicks) * 10) / 10 : 0,
-        // Fix sentinel: if bestPick/worstPick still has placeholder, clear name
         bestPick: u.bestPick.playerName ? u.bestPick : { ...u.bestPick, playerName: '—' },
         worstPick: u.worstPick.playerName ? u.worstPick : { ...u.worstPick, playerName: '—' },
         biggestSteal: u.biggestSteal.playerName ? u.biggestSteal : { ...u.biggestSteal, playerName: '—' },
       }))
       .sort((a, b) => a.avgPointsPerPick - b.avgPointsPerPick);
 
-    // ── 5. Build the archive object (before AI) ─────────────────────────────
+    // ── 6. Build the archive object ─────────────────────────────────────────────
     const archive: SeasonArchive = {
       year,
       champion: { userId: champion.userId, username: champion.username, totalPoints: champion.total },
@@ -238,16 +300,15 @@ export async function POST(req: NextRequest) {
       lockedBy,
     };
 
-    // ── 6. Generate AI recap ────────────────────────────────────────────────
+    // ── 7. Generate AI recap (non-fatal) ────────────────────────────────────────
     try {
-      archive.recap = await buildRecap(archive);
+      archive.recap = await buildRecap(archive, year);
     } catch (e) {
-      // Don't fail the whole archive if AI is unavailable
       console.warn('[EndSeason] AI recap failed:', e);
       archive.recap = '';
     }
 
-    // ── 7. Save to Firebase ─────────────────────────────────────────────────
+    // ── 8. Save to Firebase ─────────────────────────────────────────────────────
     await db.ref(`seasons/${year}`).set(archive);
 
     return NextResponse.json({
@@ -255,6 +316,7 @@ export async function POST(req: NextRequest) {
       champion: archive.champion,
       standings: seasonStandings.length,
       golfers: golferStats.length,
+      tournaments: completedIds.length,
       hasRecap: !!archive.recap,
     });
   } catch (err) {
@@ -265,41 +327,39 @@ export async function POST(req: NextRequest) {
 
 // ── AI recap builder ────────────────────────────────────────────────────────
 
-async function buildRecap(archive: SeasonArchive): Promise<string> {
+async function buildRecap(archive: SeasonArchive, year = 2026): Promise<string> {
   const standingsText = archive.seasonStandings
     .map(s => `${s.rank}. ${s.username} — ${s.total > 0 ? '+' : ''}${s.total} pts`)
     .join('\n');
 
   const tourneyWinners = archive.seasonStandings[0]
-    ? SEASON_IDS.map(id => {
+    ? Object.keys(archive.seasonStandings[0].byTournament).map(id => {
         const scores = archive.seasonStandings.map(s => ({
           username: s.username,
           score: s.byTournament[id] ?? null,
         })).filter(x => x.score !== null).sort((a, b) => (a.score ?? 0) - (b.score ?? 0));
         if (scores.length === 0) return null;
         const winner = scores[0];
-        return `${SEASON_LABELS[id] ?? id}: ${winner.username} (${winner.score! > 0 ? '+' : ''}${winner.score} pts)`;
+        return `${id}: ${winner.username} (${winner.score! > 0 ? '+' : ''}${winner.score} pts)`;
       }).filter(Boolean).join('\n')
     : '';
 
-  // Best overall golfer performance
   const bestGolfer = archive.golferStats[0];
   const bestSteal = archive.userDraftStats
     .map(u => u.biggestSteal)
     .filter(s => s.playerName && s.playerName !== '—')
     .sort((a, b) => b.valueScore - a.valueScore)[0];
-
   const mostDrafted = [...archive.golferStats].sort((a, b) => b.timesDrafted - a.timesDrafted)[0];
   const biggestBust = [...archive.golferStats].sort((a, b) => b.totalPoints - a.totalPoints)[0];
 
   const notableMoments = [
-    bestGolfer ? `Best golfer performance: ${bestGolfer.playerName} scored ${bestGolfer.totalPoints} total pts across ${bestGolfer.timesDrafted} draft(s)` : null,
-    bestSteal ? `Biggest steal of the season: ${bestSteal.playerName} (pick #${bestSteal.pickNumber}, finished ${bestSteal.positionDisplay}, ${bestSteal.points} pts) — drafted by ${archive.userDraftStats.find(u => u.biggestSteal.playerName === bestSteal.playerName && u.biggestSteal.valueScore === bestSteal.valueScore)?.username ?? '?'}` : null,
-    mostDrafted ? `Most drafted golfer: ${mostDrafted.playerName} (drafted ${mostDrafted.timesDrafted}x, avg pick #${mostDrafted.avgPickSpot}, avg ${mostDrafted.avgPoints} pts)` : null,
+    bestGolfer ? `Best golfer: ${bestGolfer.playerName} scored ${bestGolfer.totalPoints} total pts across ${bestGolfer.timesDrafted} draft(s)` : null,
+    bestSteal ? `Biggest steal: ${bestSteal.playerName} (pick #${bestSteal.pickNumber}, finished ${bestSteal.positionDisplay}, ${bestSteal.points} pts)` : null,
+    mostDrafted ? `Most drafted: ${mostDrafted.playerName} (drafted ${mostDrafted.timesDrafted}x, avg pick #${mostDrafted.avgPickSpot}, avg ${mostDrafted.avgPoints} pts)` : null,
     biggestBust ? `Biggest bust: ${biggestBust.playerName} averaged ${biggestBust.avgPoints} pts — ouch` : null,
   ].filter(Boolean).join('\n');
 
-  const prompt = `You are the commissioner of a private golf fantasy draft league called "Warrior Cup." The 2026 major championship season just ended. Write a fun, punchy 3-4 paragraph season recap for the group chat. Use a casual, slightly trash-talking tone — like you're texting your buddies. No asterisks, no headers, no special formatting — plain text only.
+  const prompt = `You are the commissioner of a private golf fantasy draft league called "Warrior Cup." The ${year} major championship season just ended. Write a fun, punchy 3-4 paragraph season recap for the group chat. Use a casual, slightly trash-talking tone — like you're texting your buddies. No asterisks, no headers, no special formatting — plain text only.
 
 SEASON CHAMPION: ${archive.champion.username} (${archive.champion.totalPoints > 0 ? '+' : ''}${archive.champion.totalPoints} pts)
 
@@ -314,5 +374,5 @@ ${notableMoments}
 
 Write the recap now — make it memorable and fun. Congratulate the champion, roast whoever finished last, and highlight the biggest steal and bust of the season.`;
 
-  return callOpenAI(prompt);
+  return callAI(prompt);
 }

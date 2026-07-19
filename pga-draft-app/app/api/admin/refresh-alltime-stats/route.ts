@@ -99,10 +99,13 @@ export async function POST(_req: NextRequest) {
       g.performances.push(perf);
     }
 
+    // Firebase keys cannot contain . # $ [ ] / — sanitize player names
+    const safeKey = (name: string) => name.replace(/[.#$[\]/]/g, '_');
+
     const now = Date.now();
     const allTimeStats: Record<string, GolferAllTimeStats> = {};
     for (const [name, acc] of Object.entries(golferAcc)) {
-      allTimeStats[name] = {
+      allTimeStats[safeKey(name)] = {
         playerName: acc.playerName,
         timesDrafted: acc.timesDrafted,
         avgPickSpot: acc.timesDrafted > 0 ? Math.round((acc.pickSpotSum / acc.timesDrafted) * 10) / 10 : 0,
