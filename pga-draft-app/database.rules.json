@@ -156,6 +156,14 @@
       ".read": "auth != null",
       // Written only by Firebase Admin SDK (refresh-alltime-stats route) — block client writes
       ".write": false
+    },
+
+    "allTimeTeamData": {
+      // Cross-season manager/team aggregate (titles, records, tendencies, head-to-head)
+      // read by the History "All-Time → Managers" tab.
+      ".read": "auth != null",
+      // Written only by Firebase Admin SDK (refresh-alltime-stats route) — block client writes
+      ".write": false
     }
 
   }

@@ -177,6 +177,10 @@ export interface GolferAllTimeStats {
   avgPoints: number;
   bestFinish: string;
   bestPositionNumeric: number;
+  // Slot performance: avg(pickSlot - finishRank). Positive = finishes better
+  // than where drafted (overperformer / steal); negative = underperforms slot.
+  slotPerformance: number;
+  avgFinishRank: number;
   lastUpdated: number;
   performances: {
     tournamentId: string;
@@ -187,6 +191,41 @@ export interface GolferAllTimeStats {
     points: number;
     positionDisplay: string;
   }[];
+}
+
+// ─── All-Time Team / Manager Stats ────────────────────────────────────────────
+
+export interface ManagerAllTimeStats {
+  userId: string;
+  username: string;
+  titles: number;                 // Warrior Cup championships won
+  seasonsPlayed: number;
+  careerPoints: number;           // sum of season totals
+  avgSeasonFinish: number;        // avg final standings rank across seasons
+  bestSeason: { year: number; rank: number; points: number } | null;
+  worstSeason: { year: number; rank: number; points: number } | null;
+  // Per-tournament (base id) record across all seasons
+  tournamentRecords: Record<string, {
+    tournamentName: string;
+    count: number;
+    best: number;                 // best (lowest) top3Score
+    worst: number;
+    avg: number;
+    wins: number;                 // times this manager had the low score at that event
+  }>;
+  // Draft tendencies
+  totalPicks: number;
+  slotSkill: number;              // avg(pickSlot - finishRank) across all picks
+  mostDrafted: { playerName: string; count: number }[];
+  bestSteal: { playerName: string; year: number; tournamentName: string; pickNumber: number; positionDisplay: string; points: number } | null;
+  worstBust: { playerName: string; year: number; tournamentName: string; pickNumber: number; positionDisplay: string; points: number } | null;
+}
+
+export interface AllTimeTeamData {
+  managers: ManagerAllTimeStats[];
+  // Head-to-head: key "usernameA|usernameB" (sorted) → season finish record
+  headToHead: Record<string, { a: string; b: string; aWins: number; bWins: number; seasons: number }>;
+  lastUpdated: number;
 }
 
 // ─── History ─────────────────────────────────────────────────────────────────
