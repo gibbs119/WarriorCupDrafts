@@ -73,10 +73,19 @@ export async function POST(req: NextRequest) {
       scoreLocked: true, scoreLockedAt: lockedAt, status: 'completed',
     });
 
-    const SEQUENCE = ['players-championship','masters','pga-championship','us-open','the-open'];
-    const nextIdx = SEQUENCE.indexOf(tournamentId) + 1;
-    if (nextIdx < SEQUENCE.length) {
-      await db.ref(`tournaments/${SEQUENCE[nextIdx]}`).update({ draftOrder: rankedUids });
+    // Find and update the next tournament's draft order dynamically
+    {
+      const tYear = new Date(lockedAt).getFullYear();
+      const allTSnap = await db.ref('tournaments').get();
+      if (allTSnap.exists()) {
+        type TRow = { id: string; year?: number; sequence?: number; status?: string };
+        const allT = Object.values(allTSnap.val() as Record<string, TRow>)
+          .filter(tt => (!tt.year || tt.year === tYear) && tt.status !== 'completed')
+          .sort((a, b) => (a.sequence ?? 99) - (b.sequence ?? 99));
+        if (allT.length > 0) {
+          await db.ref(`tournaments/${allT[0].id}`).update({ draftOrder: rankedUids });
+        }
+      }
     }
 
     return NextResponse.json({ success: true, lockedAt, teamScores, playerCount: Object.keys(playersMap).length });
