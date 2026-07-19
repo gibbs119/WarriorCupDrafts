@@ -6,11 +6,13 @@ import { useAuth } from '@/lib/AuthContext';
 import Navigation from '@/components/Navigation';
 import { get, ref } from 'firebase/database';
 import { db } from '@/lib/firebase';
-import { Trophy, Lock, ChevronDown, ChevronRight, Users, Calendar, TrendingUp, RefreshCw, Radio } from 'lucide-react';
+import { Trophy, Lock, ChevronDown, ChevronRight, Users, Calendar, TrendingUp, RefreshCw, Radio, Star, Copy, Check, BarChart2 } from 'lucide-react';
 import { TOURNAMENTS } from '@/lib/constants';
 import { parseLeaderboard } from '@/lib/espn';
 import { calculateLeaderboard } from '@/lib/scoring';
-import { getDraftState } from '@/lib/db';
+import { getDraftState, getSeasonArchive } from '@/lib/db';
+import confetti from 'canvas-confetti';
+import type { SeasonArchive } from '@/lib/types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -214,16 +216,24 @@ export default function HistoryPage() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const liveTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Season archive (analytics + AI recap)
+  const [archive, setArchive] = useState<SeasonArchive | null>(null);
+  const [recapCopied, setRecapCopied] = useState(false);
+  const [analyticsOpen, setAnalyticsOpen] = useState(false);
+  const confettiFiredRef = useRef(false);
+
   useEffect(() => { if (!loading && !appUser) router.push('/'); }, [loading, appUser, router]);
 
   // ── Load locked scores + historical picks ─────────────────────────────────
   useEffect(() => {
     if (!appUser) return;
     async function load() {
-      const [lockedSnap, histSnap] = await Promise.all([
+      const [lockedSnap, histSnap, archiveData] = await Promise.all([
         get(ref(db, 'lockedScores')),
         get(ref(db, 'historicalDrafts')),
+        getSeasonArchive(2026).catch(() => null),
       ]);
+      if (archiveData) setArchive(archiveData);
       const locked: Record<string, LockedTournament> = lockedSnap.exists() ? lockedSnap.val() : {};
       const historical: Record<string, HistoricalDraft> = histSnap.exists() ? histSnap.val() : {};
 
@@ -389,6 +399,18 @@ export default function HistoryPage() {
     return rows;
   }
 
+  // Fire confetti once per session when season archive loads
+  useEffect(() => {
+    if (!archive || confettiFiredRef.current) return;
+    if (sessionStorage.getItem('warrior-cup-confetti-2026')) return;
+    confettiFiredRef.current = true;
+    sessionStorage.setItem('warrior-cup-confetti-2026', '1');
+    // Gold + white burst
+    confetti({ particleCount: 150, spread: 100, origin: { y: 0.35 }, colors: ['#E8C94A','#C9A227','#fff','#fbbf24','#f59e0b'] });
+    setTimeout(() => confetti({ particleCount: 80, spread: 80, origin: { y: 0.4, x: 0.2 }, colors: ['#E8C94A','#C9A227','#fff'] }), 350);
+    setTimeout(() => confetti({ particleCount: 80, spread: 80, origin: { y: 0.4, x: 0.8 }, colors: ['#E8C94A','#C9A227','#fff'] }), 500);
+  }, [archive]);
+
   const hasLiveScores = season2026.some(r => r.scores[LIVE_COL_IDX] !== null);
 
   if (loading || !appUser) return (
@@ -410,6 +432,35 @@ export default function HistoryPage() {
 
         {/* ── 2026 Season Standings ── */}
         <section>
+
+          {/* Champion Banner — shown once admin runs End Season */}
+          {archive && (
+            <div className="mb-6 rounded-2xl px-6 py-5 relative overflow-hidden"
+              style={{background:'linear-gradient(135deg, rgba(201,162,39,0.22) 0%, rgba(232,201,74,0.12) 50%, rgba(201,162,39,0.08) 100%)', border:'1px solid rgba(201,162,39,0.4)'}}>
+              {/* Subtle shimmer stripe */}
+              <div className="absolute inset-0 pointer-events-none" style={{background:'linear-gradient(105deg, transparent 40%, rgba(232,201,74,0.07) 50%, transparent 60%)'}} />
+              <div className="relative flex items-center gap-4">
+                <div className="text-5xl select-none" style={{filter:'drop-shadow(0 0 16px rgba(232,201,74,0.6))'}}>🏆</div>
+                <div>
+                  <p className="text-xs uppercase tracking-widest font-semibold" style={{color:'rgba(201,162,39,0.7)'}}>2026 Warrior Cup Champion</p>
+                  <h2 className="font-bebas text-4xl tracking-widest mt-0.5" style={{color:'#E8C94A',textShadow:'0 0 20px rgba(232,201,74,0.4)'}}>{archive.champion.username}</h2>
+                  <p className="text-sm mt-1" style={{color:'rgba(201,162,39,0.6)'}}>
+                    {archive.champion.totalPoints > 0 ? '+' : ''}{archive.champion.totalPoints} pts season total
+                  </p>
+                </div>
+                <div className="ml-auto hidden sm:flex flex-col items-end gap-1">
+                  {archive.seasonStandings.slice(1, 3).map((s, i) => (
+                    <div key={s.userId} className="flex items-center gap-2 text-sm">
+                      <span style={{color:'rgba(148,163,184,0.4)'}}>{i === 0 ? '🥈' : '🥉'}</span>
+                      <span style={{color:'rgba(148,163,184,0.5)'}}>{s.username}</span>
+                      <span className="font-mono" style={{color:'rgba(148,163,184,0.35)'}}>{s.total > 0 ? '+' : ''}{s.total}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="flex items-center justify-between mb-4">
             <div>
               <p className="text-xs uppercase tracking-widest font-semibold mb-0.5" style={{color:'rgba(148,163,184,0.5)'}}>Current Year</p>
@@ -524,6 +575,165 @@ export default function HistoryPage() {
                 <SeasonChart rows={season2026} liveIdx={LIVE_COL_IDX} />
                 <ChartLegend rows={season2026} appUsername={appUser.username} />
               </div>
+
+              {/* ── Season Analytics (only after End Season is run) ── */}
+              {archive && (
+                <div className="space-y-4">
+
+                  {/* Collapsible analytics header */}
+                  <button
+                    onClick={() => setAnalyticsOpen(o => !o)}
+                    className="w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all"
+                    style={{background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.07)'}}>
+                    <span className="font-bebas text-xl tracking-widest text-white flex items-center gap-2">
+                      <BarChart2 size={18} style={{color:'#E8C94A'}} /> Season Analytics
+                    </span>
+                    {analyticsOpen
+                      ? <ChevronDown size={15} style={{color:'rgba(148,163,184,0.4)'}} />
+                      : <ChevronRight size={15} style={{color:'rgba(148,163,184,0.4)'}} />}
+                  </button>
+
+                  {analyticsOpen && (
+                    <div className="space-y-4">
+
+                      {/* Draft Quality Leaderboard */}
+                      <div className="card" style={{padding:0}}>
+                        <div className="px-4 pt-4 pb-3" style={{borderBottom:'1px solid rgba(255,255,255,0.06)'}}>
+                          <h3 className="font-bebas text-lg tracking-wider text-white flex items-center gap-2">
+                            <Star size={14} style={{color:'#E8C94A'}} /> Draft Quality by Manager
+                          </h3>
+                          <p className="text-xs mt-0.5" style={{color:'rgba(148,163,184,0.4)'}}>Avg pts/pick lower = better · Steal = best score relative to pick position</p>
+                        </div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm min-w-[560px]">
+                            <thead>
+                              <tr style={{borderBottom:'1px solid rgba(255,255,255,0.06)'}}>
+                                {['Manager','Picks','Avg Pts/Pick','Best Pick','Worst Pick','Biggest Steal'].map(h => (
+                                  <th key={h} className="text-left px-3 py-2.5 text-xs font-semibold uppercase tracking-wider" style={{color:'rgba(148,163,184,0.4)'}}>{h}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {archive.userDraftStats.map((u) => {
+                                const isMe = u.username === appUser.username;
+                                return (
+                                  <tr key={u.userId} style={{borderBottom:'1px solid rgba(255,255,255,0.04)',background:isMe?'rgba(0,107,182,0.08)':'transparent'}}>
+                                    <td className="px-3 py-2.5 font-semibold text-white">{u.username}{isMe && <span className="ml-1 text-xs" style={{color:'rgba(0,107,182,0.7)'}}>you</span>}</td>
+                                    <td className="px-3 py-2.5 text-center font-mono text-xs" style={{color:'rgba(148,163,184,0.5)'}}>{u.totalPicks}</td>
+                                    <td className="px-3 py-2.5 text-center">
+                                      <span className="font-mono text-sm font-bold" style={{color:u.avgPointsPerPick<0?'#34d399':u.avgPointsPerPick<20?'#facc15':'#94a3b8'}}>
+                                        {u.avgPointsPerPick>0?'+':''}{u.avgPointsPerPick}
+                                      </span>
+                                    </td>
+                                    <td className="px-3 py-2.5">
+                                      <div className="text-xs text-white truncate max-w-[120px]">{u.bestPick.playerName}</div>
+                                      <div className="text-xs font-mono" style={{color:'#34d399'}}>{u.bestPick.points>0?'+':''}{u.bestPick.points} ({u.bestPick.positionDisplay})</div>
+                                    </td>
+                                    <td className="px-3 py-2.5">
+                                      <div className="text-xs text-white truncate max-w-[120px]">{u.worstPick.playerName}</div>
+                                      <div className="text-xs font-mono" style={{color:'#f87171'}}>{u.worstPick.points>0?'+':''}{u.worstPick.points}</div>
+                                    </td>
+                                    <td className="px-3 py-2.5">
+                                      <div className="text-xs text-white truncate max-w-[120px]">{u.biggestSteal.playerName}</div>
+                                      <div className="text-xs font-mono" style={{color:'#E8C94A'}}>Pick #{u.biggestSteal.pickNumber} → {u.biggestSteal.positionDisplay}</div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+
+                      {/* Top Golfer Performances */}
+                      <div className="card" style={{padding:0}}>
+                        <div className="px-4 pt-4 pb-3" style={{borderBottom:'1px solid rgba(255,255,255,0.06)'}}>
+                          <h3 className="font-bebas text-lg tracking-wider text-white flex items-center gap-2">
+                            <Trophy size={14} style={{color:'#C9A227'}} /> Golfer Season Stats
+                          </h3>
+                          <p className="text-xs mt-0.5" style={{color:'rgba(148,163,184,0.4)'}}>Players drafted across all 5 majors · sorted by total points (lower = better)</p>
+                        </div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm min-w-[480px]">
+                            <thead>
+                              <tr style={{borderBottom:'1px solid rgba(255,255,255,0.06)'}}>
+                                {['Golfer','Times Drafted','Avg Pick','Best Finish','Total Pts','Avg Pts'].map(h => (
+                                  <th key={h} className="text-left px-3 py-2.5 text-xs font-semibold uppercase tracking-wider" style={{color:'rgba(148,163,184,0.4)'}}>{h}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {archive.golferStats.slice(0, 20).map((g, i) => (
+                                <tr key={g.playerName} style={{borderBottom:'1px solid rgba(255,255,255,0.03)'}}>
+                                  <td className="px-3 py-2.5">
+                                    <span className="text-xs font-mono mr-1.5" style={{color:'rgba(148,163,184,0.3)'}}>{i+1}.</span>
+                                    <span className="text-white text-sm">{g.playerName}</span>
+                                  </td>
+                                  <td className="px-3 py-2.5 text-center">
+                                    <span className="text-xs font-mono" style={{color:g.timesDrafted>=3?'#E8C94A':'rgba(148,163,184,0.5)'}}>{g.timesDrafted}×</span>
+                                  </td>
+                                  <td className="px-3 py-2.5 text-center">
+                                    <span className="text-xs font-mono" style={{color:'rgba(148,163,184,0.5)'}}>{g.avgPickSpot}</span>
+                                  </td>
+                                  <td className="px-3 py-2.5 text-center">
+                                    <span className="text-xs font-mono font-bold" style={{color:g.bestPositionNumeric<=10?'#34d399':g.bestPositionNumeric<=30?'#facc15':'#94a3b8'}}>{g.bestFinish}</span>
+                                  </td>
+                                  <td className="px-3 py-2.5 text-center">
+                                    <span className="font-mono font-bold text-sm" style={{color:g.totalPoints<0?'#34d399':g.totalPoints<40?'#facc15':'#94a3b8'}}>
+                                      {g.totalPoints>0?'+':''}{g.totalPoints}
+                                    </span>
+                                  </td>
+                                  <td className="px-3 py-2.5 text-center">
+                                    <span className="font-mono text-xs" style={{color:g.avgPoints<0?'#34d399':'rgba(148,163,184,0.5)'}}>
+                                      {g.avgPoints>0?'+':''}{g.avgPoints}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                        {archive.golferStats.length > 20 && (
+                          <div className="px-4 py-2 text-xs" style={{color:'rgba(148,163,184,0.25)'}}>
+                            Showing top 20 of {archive.golferStats.length} drafted golfers
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* AI Season Recap */}
+                  {archive.recap && (
+                    <div className="card" style={{background:'rgba(139,92,246,0.06)',border:'1px solid rgba(139,92,246,0.2)'}}>
+                      <div className="flex items-start justify-between mb-3">
+                        <h3 className="font-bebas text-lg tracking-wider text-white flex items-center gap-2">
+                          ✨ AI Season Recap
+                          <span className="text-xs font-sans font-normal" style={{color:'rgba(148,163,184,0.4)'}}>generated by GPT-4o mini</span>
+                        </h3>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(archive.recap);
+                            setRecapCopied(true);
+                            setTimeout(() => setRecapCopied(false), 2500);
+                          }}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shrink-0"
+                          style={{background:'rgba(139,92,246,0.15)',border:'1px solid rgba(139,92,246,0.3)',color:recapCopied?'#34d399':'#c4b5fd'}}>
+                          {recapCopied ? <><Check size={12} /> Copied!</> : <><Copy size={12} /> Copy for Group Chat</>}
+                        </button>
+                      </div>
+                      <div className="text-sm leading-relaxed whitespace-pre-wrap" style={{color:'rgba(226,232,240,0.85)'}}>
+                        {archive.recap}
+                      </div>
+                      <div className="mt-3 pt-3 text-xs" style={{borderTop:'1px solid rgba(255,255,255,0.05)',color:'rgba(148,163,184,0.25)'}}>
+                        Generated {new Date(archive.generatedAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}
+                        {' · '}{archive.lockedBy ? `by ${archive.lockedBy}` : ''}
+                      </div>
+                    </div>
+                  )}
+
+                </div>
+              )}
+
             </div>
           )}
         </section>

@@ -821,6 +821,85 @@ export default function AdminPage() {
                 {seeding ? 'Importing…' : '📂 Import Historical Picks'}
               </button>
             </div>
+
+            {/* End Season */}
+            <div className="card mt-4" style={{ border: '1px solid rgba(201,162,39,0.3)', background: 'rgba(201,162,39,0.05)' }}>
+              <h3 className="font-bebas text-lg tracking-wider text-white mb-1 flex items-center gap-2">
+                <Trophy size={16} className="text-yellow-400" /> End 2026 Season
+              </h3>
+              <p className="text-slate-400 text-sm mb-3">
+                Locks final standings, computes draft analytics, and generates an AI season recap.
+                Run after The Open scores are locked. Safe to re-run with <code className="text-yellow-300">force:true</code>.
+              </p>
+              <div className="flex gap-2 flex-wrap">
+                <button
+                  disabled={saving}
+                  onClick={async () => {
+                    if (!confirm('End the 2026 season?\n\nThis will compute season analytics and generate an AI recap. If an archive already exists you\'ll be prompted to overwrite.')) return;
+                    setSaving(true);
+                    const toastId = toast.loading('Computing season analytics…');
+                    try {
+                      let res = await fetch('/api/admin/end-season', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ year: 2026, lockedBy: appUser?.username }),
+                      });
+                      if (res.status === 409) {
+                        if (!confirm('Season archive already exists. Overwrite with fresh data?')) {
+                          toast.dismiss(toastId);
+                          setSaving(false);
+                          return;
+                        }
+                        res = await fetch('/api/admin/end-season', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ year: 2026, lockedBy: appUser?.username, force: true }),
+                        });
+                      }
+                      const data = await res.json();
+                      if (res.ok) {
+                        toast.success(`🏆 Season archived! Champion: ${data.champion?.username}. ${data.hasRecap ? 'AI recap generated.' : 'No API key — add OPENAI_API_KEY for recap.'}`, { id: toastId, duration: 6000 });
+                      } else {
+                        toast.error(`Failed: ${data.error}`, { id: toastId });
+                      }
+                    } catch {
+                      toast.error('Network error.', { id: toastId });
+                    } finally {
+                      setSaving(false);
+                    }
+                  }}
+                  className="text-sm py-2 px-4 rounded-lg font-bold transition-all disabled:opacity-40"
+                  style={{ background: '#C9A227', color: '#0D1F38' }}>
+                  {saving ? '⏳ Computing…' : '🏆 End Season & Archive'}
+                </button>
+                <button
+                  disabled={saving}
+                  onClick={async () => {
+                    setSaving(true);
+                    const toastId = toast.loading('Regenerating AI recap…');
+                    try {
+                      const res = await fetch('/api/admin/end-season', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ year: 2026, lockedBy: appUser?.username, recapOnly: true }),
+                      });
+                      const data = await res.json();
+                      if (res.ok) {
+                        toast.success('AI recap regenerated!', { id: toastId });
+                      } else {
+                        toast.error(`Failed: ${data.error}`, { id: toastId });
+                      }
+                    } catch {
+                      toast.error('Network error.', { id: toastId });
+                    } finally {
+                      setSaving(false);
+                    }
+                  }}
+                  className="btn-secondary text-sm disabled:opacity-40">
+                  {saving ? '⏳…' : '✨ Regen AI Recap'}
+                </button>
+              </div>
+            </div>
           </div>
         )}
 

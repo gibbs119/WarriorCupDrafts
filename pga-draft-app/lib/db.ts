@@ -1,6 +1,6 @@
 import { ref, get, set, update, push, onValue, off, runTransaction, DatabaseReference } from 'firebase/database';
 import { db } from './firebase';
-import type { Tournament, DraftState, DraftPick, AppUser, Player, WDReplacement, RosterEdit } from './types';
+import type { Tournament, DraftState, DraftPick, AppUser, Player, WDReplacement, RosterEdit, SeasonArchive } from './types';
 import { TOURNAMENTS, USERS } from './constants';
 
 // ─── Tournaments ─────────────────────────────────────────────────────────────
@@ -665,4 +665,15 @@ export async function getReedRuleStatus(tournamentId: string): Promise<boolean> 
 
 export async function setReedRuleStatus(tournamentId: string, active: boolean): Promise<void> {
   await set(ref(db, `reedRule/${tournamentId}`), active);
+}
+
+// ─── Season Archive ───────────────────────────────────────────────────────────
+
+export async function getSeasonArchive(year: number): Promise<SeasonArchive | null> {
+  const snap = await get(ref(db, `seasons/${year}`));
+  return snap.exists() ? (snap.val() as SeasonArchive) : null;
+}
+
+export async function saveSeasonArchive(year: number, data: SeasonArchive): Promise<void> {
+  await set(ref(db, `seasons/${year}`), data);
 }
