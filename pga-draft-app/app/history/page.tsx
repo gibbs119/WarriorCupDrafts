@@ -76,6 +76,10 @@ const fmtScore = (s: number | null) => {
   return s > 0 ? `+${s}` : `${s}`;
 };
 
+// Pick-points display: unmatched / no-show golfers (>= 9000) render as a
+// missed cut rather than the raw +9999 sentinel.
+const fmtPts = (p: number) => p >= 9000 ? 'MC' : (p > 0 ? `+${p}` : `${p}`);
+
 // ─── Season Trend Chart ───────────────────────────────────────────────────────
 
 function SeasonChart({ rows, liveIdx, cols }: { rows: SeasonRow[]; liveIdx: number; cols: SeasonColDef[] }) {
@@ -246,6 +250,42 @@ function golfersForSeason(all: GolferAllTimeStats[], year: number): GolferAllTim
     slotPerformance: a.n ? round1(a.slotSum / a.n) : 0,
     avgFinishRank: a.n ? round1(a.finSum / a.n) : 0,
   }));
+}
+
+// Recompute per-manager draft quality for a season from the clean performance
+// log (used to self-heal the season archive if it was built before the sentinel fix).
+type ManagerQuality = {
+  username: string;
+  totalPicks: number;
+  avgPointsPerPick: number;
+  bestPick: { playerName: string; points: number; positionDisplay: string };
+  worstPick: { playerName: string; points: number; positionDisplay: string };
+  biggestSteal: { playerName: string; pickNumber: number; positionDisplay: string };
+};
+function managerQualityForSeason(all: GolferAllTimeStats[], year: number): ManagerQuality[] {
+  const round1 = (v: number) => Math.round(v * 10) / 10;
+  const acc: Record<string, { m: ManagerQuality; ptsSum: number; bestSteal: number }> = {};
+  for (const golfer of all) {
+    for (const p of golfer.performances ?? []) {
+      if (p.year !== year || !p.draftedBy) continue;
+      const a = (acc[p.draftedBy] ??= {
+        m: { username: p.draftedBy, totalPicks: 0, avgPointsPerPick: 0,
+             bestPick: { playerName: '', points: Infinity, positionDisplay: '-' },
+             worstPick: { playerName: '', points: -Infinity, positionDisplay: '-' },
+             biggestSteal: { playerName: '', pickNumber: 0, positionDisplay: '-' } },
+        ptsSum: 0, bestSteal: -Infinity,
+      });
+      a.m.totalPicks++;
+      a.ptsSum += p.points;
+      if (p.points < a.m.bestPick.points) a.m.bestPick = { playerName: golfer.playerName, points: p.points, positionDisplay: p.positionDisplay };
+      if (p.points > a.m.worstPick.points) a.m.worstPick = { playerName: golfer.playerName, points: p.points, positionDisplay: p.positionDisplay };
+      const val = -p.points + p.pickNumber / 2;
+      if (val > a.bestSteal) { a.bestSteal = val; a.m.biggestSteal = { playerName: golfer.playerName, pickNumber: p.pickNumber, positionDisplay: p.positionDisplay }; }
+    }
+  }
+  return Object.values(acc)
+    .map(a => ({ ...a.m, avgPointsPerPick: a.m.totalPicks ? round1(a.ptsSum / a.m.totalPicks) : 0 }))
+    .sort((x, y) => x.avgPointsPerPick - y.avgPointsPerPick);
 }
 
 // ─── Slot-performance badge ───────────────────────────────────────────────────
@@ -987,10 +1027,18 @@ export default function HistoryPage() {
                               </tr>
                             </thead>
                             <tbody>
-                              {archive.userDraftStats.map((u) => {
+                              {(() => {
+                                const recomputed = managerQualityForSeason(allTimeGolferStats, archive.year);
+                                const rows: ManagerQuality[] = recomputed.length ? recomputed : archive.userDraftStats.map(u => ({
+                                  username: u.username, totalPicks: u.totalPicks, avgPointsPerPick: u.avgPointsPerPick,
+                                  bestPick: { playerName: u.bestPick.playerName, points: u.bestPick.points, positionDisplay: u.bestPick.positionDisplay },
+                                  worstPick: { playerName: u.worstPick.playerName, points: u.worstPick.points, positionDisplay: u.worstPick.positionDisplay },
+                                  biggestSteal: { playerName: u.biggestSteal.playerName, pickNumber: u.biggestSteal.pickNumber, positionDisplay: u.biggestSteal.positionDisplay },
+                                }));
+                                return rows.map((u) => {
                                 const isMe = u.username === appUser.username;
                                 return (
-                                  <tr key={u.userId} style={{borderBottom:'1px solid rgba(255,255,255,0.04)',background:isMe?'rgba(0,107,182,0.08)':'transparent'}}>
+                                  <tr key={u.username} style={{borderBottom:'1px solid rgba(255,255,255,0.04)',background:isMe?'rgba(0,107,182,0.08)':'transparent'}}>
                                     <td className="px-3 py-2.5 font-semibold text-white">{u.username}{isMe && <span className="ml-1 text-xs" style={{color:'rgba(0,107,182,0.7)'}}>you</span>}</td>
                                     <td className="px-3 py-2.5 text-center font-mono text-xs" style={{color:'rgba(148,163,184,0.5)'}}>{u.totalPicks}</td>
                                     <td className="px-3 py-2.5 text-center">
@@ -1000,11 +1048,11 @@ export default function HistoryPage() {
                                     </td>
                                     <td className="px-3 py-2.5">
                                       <div className="text-xs text-white truncate max-w-[120px]">{u.bestPick.playerName}</div>
-                                      <div className="text-xs font-mono" style={{color:'#34d399'}}>{u.bestPick.points>0?'+':''}{u.bestPick.points} ({u.bestPick.positionDisplay})</div>
+                                      <div className="text-xs font-mono" style={{color:'#34d399'}}>{fmtPts(u.bestPick.points)} ({u.bestPick.positionDisplay})</div>
                                     </td>
                                     <td className="px-3 py-2.5">
                                       <div className="text-xs text-white truncate max-w-[120px]">{u.worstPick.playerName}</div>
-                                      <div className="text-xs font-mono" style={{color:'#f87171'}}>{u.worstPick.points>0?'+':''}{u.worstPick.points}</div>
+                                      <div className="text-xs font-mono" style={{color:'#f87171'}}>{fmtPts(u.worstPick.points)}</div>
                                     </td>
                                     <td className="px-3 py-2.5">
                                       <div className="text-xs text-white truncate max-w-[120px]">{u.biggestSteal.playerName}</div>
@@ -1012,7 +1060,8 @@ export default function HistoryPage() {
                                     </td>
                                   </tr>
                                 );
-                              })}
+                              });
+                              })()}
                             </tbody>
                           </table>
                         </div>
@@ -1036,7 +1085,11 @@ export default function HistoryPage() {
                               </tr>
                             </thead>
                             <tbody>
-                              {archive.golferStats.slice(0, 20).map((g, i) => (
+                              {(() => {
+                                const recomputed = golfersForSeason(allTimeGolferStats, archive.year);
+                                const gs = (recomputed.length ? recomputed : archive.golferStats)
+                                  .slice().sort((a, b) => a.totalPoints - b.totalPoints);
+                                return gs.slice(0, 20).map((g, i) => (
                                 <tr key={g.playerName} style={{borderBottom:'1px solid rgba(255,255,255,0.03)'}}>
                                   <td className="px-3 py-2.5">
                                     <span className="text-xs font-mono mr-1.5" style={{color:'rgba(148,163,184,0.3)'}}>{i+1}.</span>
@@ -1053,7 +1106,7 @@ export default function HistoryPage() {
                                   </td>
                                   <td className="px-3 py-2.5 text-center">
                                     <span className="font-mono font-bold text-sm" style={{color:g.totalPoints<0?'#34d399':g.totalPoints<40?'#facc15':'#94a3b8'}}>
-                                      {g.totalPoints>0?'+':''}{g.totalPoints}
+                                      {fmtScore(g.totalPoints)}
                                     </span>
                                   </td>
                                   <td className="px-3 py-2.5 text-center">
@@ -1062,15 +1115,11 @@ export default function HistoryPage() {
                                     </span>
                                   </td>
                                 </tr>
-                              ))}
+                                ));
+                              })()}
                             </tbody>
                           </table>
                         </div>
-                        {archive.golferStats.length > 20 && (
-                          <div className="px-4 py-2 text-xs" style={{color:'rgba(148,163,184,0.25)'}}>
-                            Showing top 20 of {archive.golferStats.length} drafted golfers
-                          </div>
-                        )}
                       </div>
                     </div>
                   )}

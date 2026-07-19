@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminServices } from '@/lib/fcm-admin';
 import type { GolferSeasonStats, UserSeasonStats, SeasonArchive } from '@/lib/types';
 
+// Firebase may return arrays as keyed objects — normalize either shape to an array.
+function asArray<T>(v: T[] | Record<string, T> | null | undefined): T[] {
+  return Array.isArray(v) ? v : Object.values(v ?? {});
+}
+
 async function callAI(prompt: string): Promise<string> {
   // Try Anthropic first, fall back to OpenAI
   const anthropicKey = process.env.ANTHROPIC_API_KEY ?? '';
@@ -166,7 +171,7 @@ export async function POST(req: NextRequest) {
     }> = {};
 
     for (const [tournId, lt] of Object.entries(lockedScores)) {
-      const teams = Array.isArray(lt.teamScores) ? lt.teamScores : Object.values(lt.teamScores ?? {});
+      const teams = asArray(lt.teamScores);
       for (const ts of teams) {
         if (!ts || !ts.userId) continue;
         if (!userTotals[ts.userId]) {
@@ -196,14 +201,14 @@ export async function POST(req: NextRequest) {
 
     for (const [tournId, lt] of Object.entries(lockedScores)) {
       const picks = draftPicks[tournId] ?? [];
-      const teams = Array.isArray(lt.teamScores) ? lt.teamScores : Object.values(lt.teamScores ?? {});
+      const teams = asArray(lt.teamScores);
 
       // Build per-user score lookup: userId → playerName → { points, positionDisplay }
       const scoreByUser: Record<string, Record<string, { points: number; positionDisplay: string }>> = {};
       for (const ts of teams) {
         if (!ts || !ts.userId) continue;
         scoreByUser[ts.userId] = {};
-        const players = Array.isArray(ts.players) ? ts.players : Object.values(ts.players ?? {});
+        const players = asArray(ts.players);
         for (const ps of players) {
           if (ps && ps.playerName) {
             scoreByUser[ts.userId][ps.playerName] = {
