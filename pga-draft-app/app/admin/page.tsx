@@ -552,7 +552,7 @@ export default function AdminPage() {
             { id: toastId, duration: 9000 }
           );
         } else {
-          toast.success(`All-time stats updated: ${data.golfers} golfers, ${data.performances} performances.`, { id: toastId, duration: 5000 });
+          toast.success(`All-time stats updated: ${data.golfers} golfers, ${data.managers ?? 0} managers, ${data.performances} performances.`, { id: toastId, duration: 5000 });
         }
       } else {
         toast.error(`Failed: ${data.error}`, { id: toastId });

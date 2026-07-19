@@ -1,6 +1,6 @@
 import { ref, get, set, update, push, onValue, off, runTransaction, DatabaseReference } from 'firebase/database';
 import { db } from './firebase';
-import type { Tournament, DraftState, DraftPick, AppUser, Player, WDReplacement, RosterEdit, SeasonArchive, GolferAllTimeStats } from './types';
+import type { Tournament, DraftState, DraftPick, AppUser, Player, WDReplacement, RosterEdit, SeasonArchive, GolferAllTimeStats, AllTimeTeamData } from './types';
 import { TOURNAMENTS, USERS } from './constants';
 
 // ─── Tournaments ─────────────────────────────────────────────────────────────
@@ -714,4 +714,10 @@ export async function getAlltimeGolferStats(): Promise<GolferAllTimeStats[]> {
   if (!snap.exists()) return [];
   return Object.values(snap.val() as Record<string, GolferAllTimeStats>)
     .sort((a, b) => a.totalPoints - b.totalPoints);
+}
+
+export async function getAllTimeTeamData(): Promise<AllTimeTeamData | null> {
+  const snap = await get(ref(db, 'allTimeTeamData'));
+  if (!snap.exists()) return null;
+  return snap.val() as AllTimeTeamData;
 }

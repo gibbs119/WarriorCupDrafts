@@ -9,9 +9,9 @@ import { db } from '@/lib/firebase';
 import { Trophy, Lock, ChevronDown, ChevronRight, Users, Calendar, TrendingUp, RefreshCw, Radio, Star, Copy, Check, BarChart2 } from 'lucide-react';
 import { parseLeaderboard } from '@/lib/espn';
 import { calculateLeaderboard } from '@/lib/scoring';
-import { getDraftState, getSeasonArchive, getTournamentsByYear, getAlltimeGolferStats } from '@/lib/db';
+import { getDraftState, getSeasonArchive, getTournamentsByYear, getAlltimeGolferStats, getAllTimeTeamData } from '@/lib/db';
 import confetti from 'canvas-confetti';
-import type { SeasonArchive, GolferAllTimeStats } from '@/lib/types';
+import type { SeasonArchive, GolferAllTimeStats, AllTimeTeamData, ManagerAllTimeStats } from '@/lib/types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -205,6 +205,306 @@ function ChartLegend({ rows, appUsername }: { rows: SeasonRow[]; appUsername: st
   );
 }
 
+// ─── Finish-rank helper (mirrors the aggregation route) ──────────────────────
+const MISSED_CUT_RANK = 60;
+function finishRankOf(positionDisplay: string, points: number): number {
+  if (points >= 9000) return MISSED_CUT_RANK;
+  const n = parseInt((positionDisplay ?? '').replace(/[^0-9]/g, ''), 10);
+  return !isNaN(n) && n > 0 ? n : MISSED_CUT_RANK;
+}
+
+// Derive per-golfer stats for a single season from the stored performance log.
+function golfersForSeason(all: GolferAllTimeStats[], year: number): GolferAllTimeStats[] {
+  const round1 = (v: number) => Math.round(v * 10) / 10;
+  const acc: Record<string, { g: GolferAllTimeStats; pickSum: number; ptsSum: number; slotSum: number; finSum: number; n: number }> = {};
+  for (const golfer of all) {
+    for (const p of golfer.performances ?? []) {
+      if (p.year !== year) continue;
+      const key = golfer.playerName;
+      const a = (acc[key] ??= {
+        g: { playerName: golfer.playerName, timesDrafted: 0, avgPickSpot: 0, totalPoints: 0, avgPoints: 0,
+             bestFinish: '-', bestPositionNumeric: 9999, slotPerformance: 0, avgFinishRank: 0, lastUpdated: golfer.lastUpdated, performances: [] },
+        pickSum: 0, ptsSum: 0, slotSum: 0, finSum: 0, n: 0,
+      });
+      a.n++;
+      a.pickSum += p.pickNumber;
+      a.ptsSum += p.points;
+      a.g.totalPoints += p.points;
+      const fin = finishRankOf(p.positionDisplay, p.points);
+      a.slotSum += (p.pickNumber - fin);
+      a.finSum += fin;
+      const posNum = parseInt((p.positionDisplay ?? '').replace(/[^0-9]/g, ''), 10);
+      if (!isNaN(posNum) && posNum > 0 && posNum < a.g.bestPositionNumeric) { a.g.bestPositionNumeric = posNum; a.g.bestFinish = p.positionDisplay; }
+      a.g.performances.push(p);
+    }
+  }
+  return Object.values(acc).map(a => ({
+    ...a.g,
+    timesDrafted: a.n,
+    avgPickSpot: a.n ? round1(a.pickSum / a.n) : 0,
+    avgPoints: a.n ? round1(a.ptsSum / a.n) : 0,
+    slotPerformance: a.n ? round1(a.slotSum / a.n) : 0,
+    avgFinishRank: a.n ? round1(a.finSum / a.n) : 0,
+  }));
+}
+
+// ─── Slot-performance badge ───────────────────────────────────────────────────
+// slotPerformance = avg(pickSlot - finishRank). Positive = beats draft slot.
+
+function slotLabel(v: number): { text: string; color: string; bg: string } {
+  if (v >= 8)  return { text: 'Steal',        color: '#34d399', bg: 'rgba(52,211,153,0.15)' };
+  if (v >= 2)  return { text: 'Overperforms', color: '#4ade80', bg: 'rgba(74,222,128,0.12)' };
+  if (v > -2)  return { text: 'On slot',       color: 'rgba(148,163,184,0.7)', bg: 'rgba(255,255,255,0.05)' };
+  if (v > -8)  return { text: 'Underperforms', color: '#fb923c', bg: 'rgba(251,146,60,0.12)' };
+  return { text: 'Reach',         color: '#f87171', bg: 'rgba(248,113,113,0.15)' };
+}
+
+function SlotBadge({ v }: { v: number }) {
+  const s = slotLabel(v);
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold whitespace-nowrap"
+      style={{ color: s.color, background: s.bg }}>
+      {v > 0 ? '+' : ''}{v} · {s.text}
+    </span>
+  );
+}
+
+// ─── All-Time Team / Manager analysis ─────────────────────────────────────────
+
+function TeamAnalysis({
+  data, appUsername, view, setView,
+}: {
+  data: AllTimeTeamData;
+  appUsername: string;
+  view: 'standings' | 'records' | 'tendencies' | 'h2h';
+  setView: (v: 'standings' | 'records' | 'tendencies' | 'h2h') => void;
+}) {
+  const managers = data.managers ?? [];
+  const known = managers.some(m => m.username === appUsername) ? appUsername : (managers[0]?.username ?? '');
+  const [sel, setSel] = useState<string>(known);
+  const selMgr = managers.find(m => m.username === sel) ?? managers[0];
+
+  const TABS: { id: typeof view; label: string }[] = [
+    { id: 'standings',  label: '🏆 Standings' },
+    { id: 'records',    label: '📊 Records' },
+    { id: 'tendencies', label: '🎯 Draft Tendencies' },
+    { id: 'h2h',        label: '⚔️ Head-to-Head' },
+  ];
+
+  // Distinct tournament ids across managers (for records table), ordered
+  const tournIds: { id: string; name: string }[] = (() => {
+    const map: Record<string, string> = {};
+    for (const m of managers) for (const [id, r] of Object.entries(m.tournamentRecords ?? {})) map[id] = r.tournamentName;
+    return Object.entries(map)
+      .sort(([a], [b]) => tSort(a) - tSort(b))
+      .map(([id, name]) => ({ id, name }));
+  })();
+
+  const ManagerChips = () => (
+    <div className="flex flex-wrap gap-1.5 mb-4">
+      {managers.map(m => (
+        <button key={m.username} onClick={() => setSel(m.username)}
+          className="px-2.5 py-1 rounded-lg text-xs font-semibold transition-all"
+          style={sel === m.username
+            ? { background: '#1B3A9E', color: '#fff' }
+            : { background: 'rgba(255,255,255,0.05)', color: 'rgba(148,163,184,0.6)', border: '1px solid rgba(255,255,255,0.07)' }}>
+          {m.username}{m.username === appUsername ? ' (you)' : ''}
+        </button>
+      ))}
+    </div>
+  );
+
+  return (
+    <div className="space-y-4">
+      {/* Analysis sub-tabs */}
+      <div className="flex gap-1.5 flex-wrap">
+        {TABS.map(t => (
+          <button key={t.id} onClick={() => setView(t.id)}
+            className="px-3 py-1.5 rounded-lg text-xs font-bold tracking-wide transition-all"
+            style={view === t.id
+              ? { background: 'rgba(201,162,39,0.18)', color: '#E8C94A', border: '1px solid rgba(201,162,39,0.4)' }
+              : { background: 'rgba(255,255,255,0.04)', color: 'rgba(148,163,184,0.55)', border: '1px solid rgba(255,255,255,0.06)' }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Standings ── */}
+      {view === 'standings' && (
+        <div className="card" style={{ padding: 0 }}>
+          <div className="px-4 pt-4 pb-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+            <h3 className="font-bebas text-xl tracking-wider text-white">Career Standings</h3>
+            <p className="text-xs mt-0.5" style={{ color: 'rgba(148,163,184,0.4)' }}>Titles, career points & finishes across all seasons</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[560px]">
+              <thead>
+                <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                  {['#', 'Manager', 'Titles', 'Seasons', 'Career Pts', 'Avg Finish', 'Best', 'Worst'].map(h => (
+                    <th key={h} className="text-left px-3 py-2.5 text-xs font-semibold uppercase tracking-wider" style={{ color: 'rgba(148,163,184,0.4)' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {managers.map((m, i) => {
+                  const isMe = m.username === appUsername;
+                  return (
+                    <tr key={m.username} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', background: isMe ? 'rgba(0,107,182,0.08)' : 'transparent' }}>
+                      <td className="px-3 py-2.5 text-xs font-mono" style={{ color: 'rgba(148,163,184,0.3)' }}>{i + 1}.</td>
+                      <td className="px-3 py-2.5 font-semibold text-white whitespace-nowrap">{m.username}{isMe && <span className="ml-1 text-xs" style={{ color: 'rgba(0,107,182,0.7)' }}>you</span>}</td>
+                      <td className="px-3 py-2.5">
+                        <span className="font-mono font-bold" style={{ color: m.titles > 0 ? '#E8C94A' : 'rgba(148,163,184,0.4)' }}>
+                          {m.titles > 0 ? '🏆'.repeat(Math.min(m.titles, 3)) : ''}{m.titles > 3 ? `×${m.titles}` : ''} {m.titles === 0 ? '—' : ''}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 text-center font-mono text-xs" style={{ color: 'rgba(148,163,184,0.5)' }}>{m.seasonsPlayed}</td>
+                      <td className="px-3 py-2.5 font-mono text-sm" style={{ color: m.careerPoints < 0 ? '#34d399' : '#94a3b8' }}>{m.careerPoints > 0 ? '+' : ''}{m.careerPoints}</td>
+                      <td className="px-3 py-2.5 text-center font-mono text-xs" style={{ color: 'rgba(148,163,184,0.6)' }}>{m.avgSeasonFinish}</td>
+                      <td className="px-3 py-2.5 text-xs whitespace-nowrap" style={{ color: '#34d399' }}>{m.bestSeason ? `${rankIcon(m.bestSeason.rank)} ${m.bestSeason.year}` : '—'}</td>
+                      <td className="px-3 py-2.5 text-xs whitespace-nowrap" style={{ color: 'rgba(248,113,113,0.7)' }}>{m.worstSeason ? `${m.worstSeason.rank}. ${m.worstSeason.year}` : '—'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── Tournament Records ── */}
+      {view === 'records' && selMgr && (
+        <div className="card" style={{ padding: 0 }}>
+          <div className="px-4 pt-4 pb-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+            <h3 className="font-bebas text-xl tracking-wider text-white">Tournament Records</h3>
+            <p className="text-xs mt-0.5" style={{ color: 'rgba(148,163,184,0.4)' }}>Each manager&apos;s record at every major · lower score = better</p>
+          </div>
+          <div className="px-4 pt-4"><ManagerChips /></div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[480px]">
+              <thead>
+                <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                  {['Major', 'Played', 'Wins', 'Best', 'Worst', 'Avg'].map(h => (
+                    <th key={h} className="text-left px-3 py-2.5 text-xs font-semibold uppercase tracking-wider" style={{ color: 'rgba(148,163,184,0.4)' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {tournIds.map(({ id, name }) => {
+                  const r = selMgr.tournamentRecords?.[id];
+                  return (
+                    <tr key={id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                      <td className="px-3 py-2.5 text-white text-sm whitespace-nowrap">{SEASON_SHORT_LABELS[id] ?? name}</td>
+                      {r ? (
+                        <>
+                          <td className="px-3 py-2.5 text-center font-mono text-xs" style={{ color: 'rgba(148,163,184,0.5)' }}>{r.count}</td>
+                          <td className="px-3 py-2.5 text-center font-mono text-xs" style={{ color: r.wins > 0 ? '#E8C94A' : 'rgba(148,163,184,0.4)' }}>{r.wins > 0 ? `${r.wins}🏆` : '—'}</td>
+                          <td className="px-3 py-2.5 font-mono text-sm font-bold" style={{ color: '#34d399' }}>{fmtScore(r.best)}</td>
+                          <td className="px-3 py-2.5 font-mono text-xs" style={{ color: 'rgba(248,113,113,0.7)' }}>{fmtScore(r.worst)}</td>
+                          <td className="px-3 py-2.5 font-mono text-xs" style={{ color: 'rgba(148,163,184,0.6)' }}>{r.avg}</td>
+                        </>
+                      ) : (
+                        <td colSpan={5} className="px-3 py-2.5 text-xs italic" style={{ color: 'rgba(148,163,184,0.3)' }}>Never played</td>
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── Draft Tendencies ── */}
+      {view === 'tendencies' && selMgr && (
+        <div className="space-y-4">
+          <div className="card">
+            <ManagerChips />
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.04)' }}>
+                <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(148,163,184,0.4)' }}>Draft Skill</p>
+                <SlotBadge v={selMgr.slotSkill} />
+                <p className="text-xs mt-1.5" style={{ color: 'rgba(148,163,184,0.35)' }}>{selMgr.totalPicks} career picks · value vs draft slot</p>
+              </div>
+              <div className="rounded-xl p-3" style={{ background: 'rgba(52,211,153,0.08)', border: '1px solid rgba(52,211,153,0.2)' }}>
+                <p className="text-xs uppercase tracking-widest mb-1" style={{ color: '#34d399' }}>Best Steal</p>
+                {selMgr.bestSteal ? (
+                  <>
+                    <p className="text-white text-sm font-semibold truncate">{selMgr.bestSteal.playerName}</p>
+                    <p className="text-xs" style={{ color: 'rgba(148,163,184,0.5)' }}>Pick #{selMgr.bestSteal.pickNumber} → {selMgr.bestSteal.positionDisplay} · {selMgr.bestSteal.tournamentName} {selMgr.bestSteal.year}</p>
+                  </>
+                ) : <p className="text-xs italic" style={{ color: 'rgba(148,163,184,0.3)' }}>—</p>}
+              </div>
+              <div className="rounded-xl p-3" style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)' }}>
+                <p className="text-xs uppercase tracking-widest mb-1" style={{ color: '#f87171' }}>Worst Bust</p>
+                {selMgr.worstBust ? (
+                  <>
+                    <p className="text-white text-sm font-semibold truncate">{selMgr.worstBust.playerName}</p>
+                    <p className="text-xs" style={{ color: 'rgba(148,163,184,0.5)' }}>Pick #{selMgr.worstBust.pickNumber} → {selMgr.worstBust.positionDisplay} · {selMgr.worstBust.tournamentName} {selMgr.worstBust.year}</p>
+                  </>
+                ) : <p className="text-xs italic" style={{ color: 'rgba(148,163,184,0.3)' }}>—</p>}
+              </div>
+            </div>
+          </div>
+          <div className="card">
+            <h4 className="font-bebas text-lg tracking-wider text-white mb-3">Most Drafted by {selMgr.username}</h4>
+            {selMgr.mostDrafted?.length ? (
+              <div className="space-y-1.5">
+                {selMgr.mostDrafted.map((d, i) => (
+                  <div key={d.playerName} className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm" style={{ background: 'rgba(255,255,255,0.04)' }}>
+                    <span className="w-5 text-center text-xs" style={{ color: 'rgba(148,163,184,0.4)' }}>{i + 1}.</span>
+                    <span className="flex-1 text-white font-semibold">{d.playerName}</span>
+                    <span className="font-mono text-xs" style={{ color: '#E8C94A' }}>{d.count}×</span>
+                  </div>
+                ))}
+              </div>
+            ) : <p className="text-xs italic" style={{ color: 'rgba(148,163,184,0.3)' }}>No picks recorded.</p>}
+          </div>
+        </div>
+      )}
+
+      {/* ── Head-to-Head ── */}
+      {view === 'h2h' && selMgr && (
+        <div className="card" style={{ padding: 0 }}>
+          <div className="px-4 pt-4 pb-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+            <h3 className="font-bebas text-xl tracking-wider text-white">Head-to-Head</h3>
+            <p className="text-xs mt-0.5" style={{ color: 'rgba(148,163,184,0.4)' }}>Seasons finishing above each rival</p>
+          </div>
+          <div className="px-4 pt-4"><ManagerChips /></div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[420px]">
+              <thead>
+                <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                  {['Rival', 'Record (W–L)', 'Seasons', ''].map(h => (
+                    <th key={h} className="text-left px-3 py-2.5 text-xs font-semibold uppercase tracking-wider" style={{ color: 'rgba(148,163,184,0.4)' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {managers.filter(o => o.username !== selMgr.username).map(o => {
+                  const [a, b] = [selMgr.username, o.username].sort();
+                  const rec = data.headToHead?.[`${a}|${b}`];
+                  const myWins = !rec ? 0 : (selMgr.username === a ? rec.aWins : rec.bWins);
+                  const theirWins = !rec ? 0 : (selMgr.username === a ? rec.bWins : rec.aWins);
+                  const seasons = rec?.seasons ?? 0;
+                  const winning = myWins > theirWins, losing = theirWins > myWins;
+                  return (
+                    <tr key={o.username} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                      <td className="px-3 py-2.5 text-white text-sm whitespace-nowrap">{o.username}</td>
+                      <td className="px-3 py-2.5 font-mono text-sm font-bold" style={{ color: winning ? '#34d399' : losing ? '#f87171' : 'rgba(148,163,184,0.6)' }}>{myWins}–{theirWins}</td>
+                      <td className="px-3 py-2.5 font-mono text-xs" style={{ color: 'rgba(148,163,184,0.4)' }}>{seasons}</td>
+                      <td className="px-3 py-2.5 text-xs" style={{ color: winning ? '#34d399' : losing ? '#f87171' : 'rgba(148,163,184,0.4)' }}>{seasons === 0 ? '' : winning ? 'leads' : losing ? 'trails' : 'even'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function HistoryPage() {
@@ -237,7 +537,12 @@ export default function HistoryPage() {
   const [allTimeGolferStats, setAllTimeGolferStats] = useState<GolferAllTimeStats[]>([]);
   const [allTimeView, setAllTimeView] = useState<'managers' | 'golfers'>('managers');
   const [golferShowAll, setGolferShowAll] = useState(false);
-  const [golferSort, setGolferSort] = useState<'total' | 'drafted' | 'avg' | 'pick'>('total');
+  const [golferSort, setGolferSort] = useState<'total' | 'drafted' | 'avg' | 'pick' | 'slot'>('total');
+  const [golferSeason, setGolferSeason] = useState<'all' | number>('all');
+
+  // All-time team/manager data (titles, records, tendencies, head-to-head)
+  const [teamData, setTeamData] = useState<AllTimeTeamData | null>(null);
+  const [teamAnalysis, setTeamAnalysis] = useState<'standings' | 'records' | 'tendencies' | 'h2h'>('standings');
 
   // Tab navigation
   const [activeTab, setActiveTab] = useState<'season' | 'alltime'>('season');
@@ -248,15 +553,17 @@ export default function HistoryPage() {
   useEffect(() => {
     if (!appUser) return;
     async function load() {
-      const [lockedSnap, histSnap, archiveData, yearTournaments, golferStats] = await Promise.all([
+      const [lockedSnap, histSnap, archiveData, yearTournaments, golferStats, allTeamData] = await Promise.all([
         get(ref(db, 'lockedScores')),
         get(ref(db, 'historicalDrafts')),
         getSeasonArchive(CURRENT_YEAR).catch(() => null),
         getTournamentsByYear(CURRENT_YEAR),
         getAlltimeGolferStats().catch(() => []),
+        getAllTimeTeamData().catch(() => null),
       ]);
       if (archiveData) setArchive(archiveData);
       setAllTimeGolferStats(golferStats);
+      setTeamData(allTeamData);
       const locked: Record<string, LockedTournament> = lockedSnap.exists() ? lockedSnap.val() : {};
       const historical: Record<string, HistoricalDraft> = histSnap.exists() ? histSnap.val() : {};
 
@@ -841,6 +1148,18 @@ export default function HistoryPage() {
               </p>
             </div>
           ) : (
+            <div className="space-y-6">
+
+            {/* Team analysis: titles, records, tendencies, head-to-head */}
+            {teamData && teamData.managers?.length > 0 && (
+              <TeamAnalysis data={teamData} appUsername={appUser.username} view={teamAnalysis} setView={setTeamAnalysis} />
+            )}
+            {!teamData && (
+              <div className="card text-center py-6 text-sm" style={{color:'rgba(148,163,184,0.4)'}}>
+                Career manager analytics appear once Gibbs runs <strong>Refresh All-Time Golfer Stats</strong> in Admin.
+              </div>
+            )}
+
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
 
               {/* All-time stats */}
@@ -1049,17 +1368,25 @@ export default function HistoryPage() {
               </div>
 
             </div>
+            </div>
           ))}
 
           {(() => {
-            const sortedGolfers = [...allTimeGolferStats].sort((a, b) => {
-              if (golferSort === 'total') return a.totalPoints - b.totalPoints;
+            // Available seasons from the performance log (newest first)
+            const yearsSet = new Set<number>();
+            for (const g of allTimeGolferStats) for (const p of g.performances ?? []) if (p.year) yearsSet.add(p.year);
+            const years = [...yearsSet].sort((a, b) => b - a);
+
+            const baseGolfers = golferSeason === 'all' ? allTimeGolferStats : golfersForSeason(allTimeGolferStats, golferSeason);
+            const sortedGolfers = [...baseGolfers].sort((a, b) => {
               if (golferSort === 'drafted') return b.timesDrafted - a.timesDrafted;
               if (golferSort === 'avg') return a.avgPoints - b.avgPoints;
               if (golferSort === 'pick') return a.avgPickSpot - b.avgPickSpot;
+              if (golferSort === 'slot') return b.slotPerformance - a.slotPerformance;
               return a.totalPoints - b.totalPoints;
             });
             const visibleGolfers = golferShowAll ? sortedGolfers : sortedGolfers.slice(0, 50);
+            const scopeLabel = golferSeason === 'all' ? 'all seasons' : `${golferSeason} season`;
             return allTimeView === 'golfers' && (
               allTimeGolferStats.length === 0 ? (
                 <div className="card text-center py-8 text-sm" style={{color:'rgba(148,163,184,0.4)'}}>
@@ -1067,17 +1394,37 @@ export default function HistoryPage() {
                 </div>
               ) : (
                 <div className="space-y-4">
+                  {/* Season scope selector */}
+                  <div className="flex flex-wrap gap-1.5">
+                    <button onClick={() => setGolferSeason('all')}
+                      className="px-3 py-1.5 rounded-lg text-xs font-bold tracking-wide transition-all"
+                      style={golferSeason === 'all'
+                        ? { background: '#1B3A9E', color: '#fff' }
+                        : { background: 'rgba(255,255,255,0.05)', color: 'rgba(148,163,184,0.6)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                      All-Time
+                    </button>
+                    {years.map(y => (
+                      <button key={y} onClick={() => setGolferSeason(y)}
+                        className="px-3 py-1.5 rounded-lg text-xs font-bold tracking-wide transition-all"
+                        style={golferSeason === y
+                          ? { background: '#1B3A9E', color: '#fff' }
+                          : { background: 'rgba(255,255,255,0.05)', color: 'rgba(148,163,184,0.6)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                        {y}
+                      </button>
+                    ))}
+                  </div>
+
                   <div className="card" style={{padding:0}}>
                     <div className="px-4 pt-4 pb-3" style={{borderBottom:'1px solid rgba(255,255,255,0.06)'}}>
                       <h3 className="font-bebas text-xl tracking-wider text-white flex items-center gap-2">
-                        ⛳ All-Time Golfer Stats
+                        ⛳ Golfer Stats {golferSeason !== 'all' && <span className="text-sm" style={{color:'#E8C94A'}}>· {golferSeason}</span>}
                       </h3>
                       <p className="text-xs mt-0.5" style={{color:'rgba(148,163,184,0.4)'}}>
-                        {allTimeGolferStats.length} golfers drafted across all seasons · click column headers to sort
+                        {sortedGolfers.length} golfers drafted across {scopeLabel} · Slot = value vs draft position · tap headers to sort
                       </p>
                     </div>
                     <div className="overflow-x-auto">
-                      <table className="w-full text-sm min-w-[540px]">
+                      <table className="w-full text-sm min-w-[620px]">
                         <thead>
                           <tr style={{borderBottom:'1px solid rgba(255,255,255,0.06)'}}>
                             <th className="text-left px-3 py-2.5 text-xs font-semibold uppercase tracking-wider w-8" style={{color:'rgba(148,163,184,0.4)'}}>#</th>
@@ -1087,6 +1434,7 @@ export default function HistoryPage() {
                               { key: 'pick',    label: 'Avg Pick' },
                               { key: 'total',   label: 'Total Pts' },
                               { key: 'avg',     label: 'Avg Pts' },
+                              { key: 'slot',    label: 'Slot' },
                             ].map(col => (
                               <th key={col.key}
                                 onClick={() => setGolferSort(col.key as typeof golferSort)}
@@ -1102,7 +1450,7 @@ export default function HistoryPage() {
                           {visibleGolfers.map((g, i) => (
                             <tr key={g.playerName} style={{borderBottom:'1px solid rgba(255,255,255,0.03)'}}>
                               <td className="px-3 py-2 text-xs font-mono" style={{color:'rgba(148,163,184,0.3)'}}>{i+1}.</td>
-                              <td className="px-3 py-2 font-semibold text-white text-sm">{g.playerName}</td>
+                              <td className="px-3 py-2 font-semibold text-white text-sm whitespace-nowrap">{g.playerName}</td>
                               <td className="px-3 py-2 text-center">
                                 <span className="text-xs font-mono" style={{color: g.timesDrafted >= 5 ? '#E8C94A' : g.timesDrafted >= 3 ? '#facc15' : 'rgba(148,163,184,0.5)'}}>
                                   {g.timesDrafted}×
@@ -1122,6 +1470,9 @@ export default function HistoryPage() {
                                 </span>
                               </td>
                               <td className="px-3 py-2 text-center">
+                                <SlotBadge v={g.slotPerformance} />
+                              </td>
+                              <td className="px-3 py-2 text-center">
                                 <span className="text-xs font-mono font-bold" style={{color: g.bestPositionNumeric <= 5 ? '#34d399' : g.bestPositionNumeric <= 15 ? '#facc15' : '#94a3b8'}}>
                                   {g.bestFinish}
                                 </span>
@@ -1131,12 +1482,12 @@ export default function HistoryPage() {
                         </tbody>
                       </table>
                     </div>
-                    {!golferShowAll && allTimeGolferStats.length > 50 && (
+                    {!golferShowAll && sortedGolfers.length > 50 && (
                       <button
                         onClick={() => setGolferShowAll(true)}
                         className="w-full py-3 text-xs transition-colors hover:text-white"
                         style={{color:'rgba(148,163,184,0.35)',borderTop:'1px solid rgba(255,255,255,0.05)'}}>
-                        Show all {allTimeGolferStats.length} golfers
+                        Show all {sortedGolfers.length} golfers
                       </button>
                     )}
                     {allTimeGolferStats.length > 0 && (

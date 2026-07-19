@@ -106,13 +106,18 @@ export async function POST(req: NextRequest) {
 
     // Build display labels from Firebase tournament names
     const tournLabels: Record<string, string> = {};
+    const cutLineById: Record<string, number> = {};
     {
       await Promise.all(seasonTournIds.map(async (id) => {
-        const snap = await db.ref(`tournaments/${id}/name`).get();
-        if (snap.exists()) tournLabels[id] = snap.val() as string;
-        else tournLabels[id] = id;
+        const snap = await db.ref(`tournaments/${id}`).get();
+        const t = snap.exists() ? snap.val() as { name?: string; cutLine?: number } : null;
+        tournLabels[id] = t?.name ?? id;
+        if (typeof t?.cutLine === 'number') cutLineById[id] = t.cutLine;
       }));
     }
+    // Unmatched / no-show golfers (points >= 9000) score as a missed cut, not the sentinel
+    const fixPoints = (tournId: string, points: number) => points >= 9000 ? (cutLineById[tournId] ?? 65) + 1 : points;
+    const fixDisplay = (points: number, display: string) => points >= 9000 && !/\d/.test(display ?? '') ? 'CUT' : (display ?? '-');
 
     // ── 2. Load all locked scores for this season ───────────────────────────────
     type LockedTs = {
@@ -201,7 +206,10 @@ export async function POST(req: NextRequest) {
         const players = Array.isArray(ts.players) ? ts.players : Object.values(ts.players ?? {});
         for (const ps of players) {
           if (ps && ps.playerName) {
-            scoreByUser[ts.userId][ps.playerName] = { points: ps.points, positionDisplay: ps.positionDisplay ?? '-' };
+            scoreByUser[ts.userId][ps.playerName] = {
+              points: fixPoints(tournId, ps.points),
+              positionDisplay: fixDisplay(ps.points, ps.positionDisplay ?? '-'),
+            };
           }
         }
       }
