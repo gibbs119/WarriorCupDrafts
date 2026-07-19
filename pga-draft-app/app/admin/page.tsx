@@ -922,6 +922,25 @@ export default function AdminPage() {
                 <button onClick={refreshAlltimeStats} disabled={refreshingStats} className="btn-secondary text-sm disabled:opacity-50">
                   {refreshingStats ? '⏳ Computing…' : '📊 Refresh All-Time Golfer Stats'}
                 </button>
+                <button
+                  onClick={async () => {
+                    const toastId = toast.loading('Tagging 2026 tournaments…');
+                    try {
+                      const res = await fetch('/api/admin/tag-season-tournaments', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ year: 2026 }),
+                      });
+                      const data = await res.json();
+                      if (res.ok) toast.success(data.message ?? 'Done', { id: toastId });
+                      else toast.error(`Failed: ${data.error}`, { id: toastId });
+                    } catch {
+                      toast.error('Network error.', { id: toastId });
+                    }
+                  }}
+                  className="btn-secondary text-sm">
+                  🏷️ Tag 2026 Tournaments
+                </button>
               </div>
             </div>
 

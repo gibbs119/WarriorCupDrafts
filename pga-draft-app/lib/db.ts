@@ -684,9 +684,21 @@ export async function getTournamentsByYear(year: number): Promise<Tournament[]> 
   const snap = await get(ref(db, 'tournaments'));
   if (!snap.exists()) return [];
   const all = Object.values(snap.val() as Record<string, Tournament>);
-  return all
-    .filter(t => t.year === year)
-    .sort((a, b) => (a.sequence ?? 99) - (b.sequence ?? 99));
+
+  // Primary: tournaments explicitly tagged with this year
+  const yearTagged = all.filter(t => t.year === year);
+  if (yearTagged.length > 0) {
+    return yearTagged.sort((a, b) => (a.sequence ?? 99) - (b.sequence ?? 99));
+  }
+
+  // Fallback: if no tournaments have year tags at all, treat all as belonging
+  // to the current season (legacy data from before year-tagging was introduced)
+  const anyTagged = all.some(t => t.year != null);
+  if (!anyTagged) {
+    return all.sort((a, b) => (a.sequence ?? 99) - (b.sequence ?? 99));
+  }
+
+  return [];
 }
 
 export async function createTournamentsBatch(tournaments: Tournament[]): Promise<void> {
