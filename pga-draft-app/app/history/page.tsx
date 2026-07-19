@@ -222,6 +222,9 @@ export default function HistoryPage() {
   const [analyticsOpen, setAnalyticsOpen] = useState(false);
   const confettiFiredRef = useRef(false);
 
+  // Tab navigation
+  const [activeTab, setActiveTab] = useState<'season' | 'alltime'>('season');
+
   useEffect(() => { if (!loading && !appUser) router.push('/'); }, [loading, appUser, router]);
 
   // ── Load locked scores + historical picks ─────────────────────────────────
@@ -428,10 +431,29 @@ export default function HistoryPage() {
       <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[900px] h-64 pointer-events-none"
         style={{background:'radial-gradient(ellipse, rgba(0,107,182,0.1) 0%, transparent 70%)'}} />
 
-      <main className="relative z-10 max-w-6xl mx-auto px-4 py-8 space-y-8">
+      <main className="relative z-10 max-w-6xl mx-auto px-4 py-8 space-y-6">
+
+        {/* ── Tab navigation ── */}
+        <div className="flex gap-2">
+          {([
+            { key: 'season',  label: '2026 Season',  icon: '🏆' },
+            { key: 'alltime', label: 'All-Time',      icon: '📜' },
+          ] as const).map(({ key, label, icon }) => (
+            <button
+              key={key}
+              onClick={() => setActiveTab(key)}
+              className="px-5 py-2 rounded-xl text-sm font-bold tracking-wide transition-all"
+              style={activeTab === key
+                ? { background: '#1B3A9E', color: '#fff', border: '1px solid rgba(27,58,158,0.6)' }
+                : { background: 'rgba(255,255,255,0.05)', color: 'rgba(148,163,184,0.7)', border: '1px solid rgba(255,255,255,0.07)' }
+              }>
+              {icon} {label}
+            </button>
+          ))}
+        </div>
 
         {/* ── 2026 Season Standings ── */}
-        <section>
+        {activeTab === 'season' && <section>
 
           {/* Champion Banner — shown once admin runs End Season */}
           {archive && (
@@ -736,10 +758,10 @@ export default function HistoryPage() {
 
             </div>
           )}
-        </section>
+        </section>}
 
         {/* ── All-Time Section ── */}
-        <section>
+        {activeTab === 'alltime' && <section>
           <div className="mb-6">
             <p className="text-xs uppercase tracking-widest font-semibold mb-1" style={{color:'rgba(148,163,184,0.5)'}}>All-Time Records</p>
             <h1 className="font-bebas text-4xl tracking-widest text-white flex items-center gap-3">
@@ -971,7 +993,7 @@ export default function HistoryPage() {
 
             </div>
           )}
-        </section>
+        </section>}
 
       </main>
     </div>
