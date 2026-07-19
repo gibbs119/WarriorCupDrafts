@@ -169,6 +169,26 @@ export interface SeasonArchive {
   lockedBy: string;
 }
 
+export interface GolferAllTimeStats {
+  playerName: string;
+  timesDrafted: number;
+  avgPickSpot: number;
+  totalPoints: number;
+  avgPoints: number;
+  bestFinish: string;
+  bestPositionNumeric: number;
+  lastUpdated: number;
+  performances: {
+    tournamentId: string;
+    tournamentName: string;
+    year: number;
+    draftedBy: string;
+    pickNumber: number;
+    points: number;
+    positionDisplay: string;
+  }[];
+}
+
 // ─── History ─────────────────────────────────────────────────────────────────
 
 export interface TournamentResult {

@@ -1,6 +1,6 @@
 import { ref, get, set, update, push, onValue, off, runTransaction, DatabaseReference } from 'firebase/database';
 import { db } from './firebase';
-import type { Tournament, DraftState, DraftPick, AppUser, Player, WDReplacement, RosterEdit, SeasonArchive } from './types';
+import type { Tournament, DraftState, DraftPick, AppUser, Player, WDReplacement, RosterEdit, SeasonArchive, GolferAllTimeStats } from './types';
 import { TOURNAMENTS, USERS } from './constants';
 
 // ─── Tournaments ─────────────────────────────────────────────────────────────
@@ -695,4 +695,11 @@ export async function createTournamentsBatch(tournaments: Tournament[]): Promise
     updates[`tournaments/${t.id}`] = t;
   }
   await update(ref(db), updates);
+}
+
+export async function getAlltimeGolferStats(): Promise<GolferAllTimeStats[]> {
+  const snap = await get(ref(db, 'allTimeGolferStats'));
+  if (!snap.exists()) return [];
+  return Object.values(snap.val() as Record<string, GolferAllTimeStats>)
+    .sort((a, b) => a.totalPoints - b.totalPoints);
 }

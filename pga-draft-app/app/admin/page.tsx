@@ -62,6 +62,7 @@ export default function AdminPage() {
   const [draftOrderInput, setDraftOrderInput] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [seeding, setSeeding] = useState(false);
+  const [refreshingStats, setRefreshingStats] = useState(false);
   const [generatingRecap, setGeneratingRecap] = useState(false);
   const [recapPickingId, setRecapPickingId] = useState<string | null>(null);
   const [recapError, setRecapError] = useState<{ tournamentId: string; msg: string } | null>(null);
@@ -407,6 +408,8 @@ export default function AdminPage() {
       if (res.ok) {
         toast.success(`Scores locked for ${t.name}! ${data.teamScores?.length ?? 0} teams recorded.`, { id: toastId });
         setTournaments((prev) => prev.map((x) => x.id === t.id ? { ...x, status: 'completed', scoreLocked: true } : x));
+        // fire-and-forget — auto-refresh all-time stats after each lock
+        fetch('/api/admin/refresh-alltime-stats', { method: 'POST' }).catch(() => {});
       } else {
         toast.error(`Lock failed: ${data.error}`, { id: toastId });
       }
@@ -530,6 +533,21 @@ export default function AdminPage() {
       toast.error('Network error during seed.', { id: toastId });
     } finally {
       setSeeding(false);
+    }
+  }
+
+  async function refreshAlltimeStats() {
+    setRefreshingStats(true);
+    const toastId = toast.loading('Computing all-time golfer stats…');
+    try {
+      const res = await fetch('/api/admin/refresh-alltime-stats', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok) toast.success(`All-time stats updated: ${data.golfers} golfers, ${data.performances} performances.`, { id: toastId, duration: 5000 });
+      else toast.error(`Failed: ${data.error}`, { id: toastId });
+    } catch {
+      toast.error('Network error.', { id: toastId });
+    } finally {
+      setRefreshingStats(false);
     }
   }
 
@@ -897,9 +915,14 @@ export default function AdminPage() {
             <div className="card mt-6">
               <h3 className="font-bebas text-lg tracking-wider text-white mb-3">Historical Data</h3>
               <p className="text-slate-400 text-sm mb-3">Import pick history from 2019–2025 for the History page.</p>
-              <button onClick={seedHistoricalData} disabled={seeding} className="btn-secondary text-sm disabled:opacity-50">
-                {seeding ? 'Importing…' : '📂 Import Historical Picks'}
-              </button>
+              <div className="flex gap-2 flex-wrap">
+                <button onClick={seedHistoricalData} disabled={seeding} className="btn-secondary text-sm disabled:opacity-50">
+                  {seeding ? 'Importing…' : '📂 Import Historical Picks'}
+                </button>
+                <button onClick={refreshAlltimeStats} disabled={refreshingStats} className="btn-secondary text-sm disabled:opacity-50">
+                  {refreshingStats ? '⏳ Computing…' : '📊 Refresh All-Time Golfer Stats'}
+                </button>
+              </div>
             </div>
 
             {/* Season Setup */}

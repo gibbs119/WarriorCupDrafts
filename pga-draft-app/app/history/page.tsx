@@ -9,9 +9,9 @@ import { db } from '@/lib/firebase';
 import { Trophy, Lock, ChevronDown, ChevronRight, Users, Calendar, TrendingUp, RefreshCw, Radio, Star, Copy, Check, BarChart2 } from 'lucide-react';
 import { parseLeaderboard } from '@/lib/espn';
 import { calculateLeaderboard } from '@/lib/scoring';
-import { getDraftState, getSeasonArchive, getTournamentsByYear } from '@/lib/db';
+import { getDraftState, getSeasonArchive, getTournamentsByYear, getAlltimeGolferStats } from '@/lib/db';
 import confetti from 'canvas-confetti';
-import type { SeasonArchive } from '@/lib/types';
+import type { SeasonArchive, GolferAllTimeStats } from '@/lib/types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -233,6 +233,12 @@ export default function HistoryPage() {
   const [analyticsOpen, setAnalyticsOpen] = useState(false);
   const confettiFiredRef = useRef(false);
 
+  // All-time golfer stats
+  const [allTimeGolferStats, setAllTimeGolferStats] = useState<GolferAllTimeStats[]>([]);
+  const [allTimeView, setAllTimeView] = useState<'managers' | 'golfers'>('managers');
+  const [golferShowAll, setGolferShowAll] = useState(false);
+  const [golferSort, setGolferSort] = useState<'total' | 'drafted' | 'avg' | 'pick'>('total');
+
   // Tab navigation
   const [activeTab, setActiveTab] = useState<'season' | 'alltime'>('season');
 
@@ -242,13 +248,15 @@ export default function HistoryPage() {
   useEffect(() => {
     if (!appUser) return;
     async function load() {
-      const [lockedSnap, histSnap, archiveData, yearTournaments] = await Promise.all([
+      const [lockedSnap, histSnap, archiveData, yearTournaments, golferStats] = await Promise.all([
         get(ref(db, 'lockedScores')),
         get(ref(db, 'historicalDrafts')),
         getSeasonArchive(CURRENT_YEAR).catch(() => null),
         getTournamentsByYear(CURRENT_YEAR),
+        getAlltimeGolferStats().catch(() => []),
       ]);
       if (archiveData) setArchive(archiveData);
+      setAllTimeGolferStats(golferStats);
       const locked: Record<string, LockedTournament> = lockedSnap.exists() ? lockedSnap.val() : {};
       const historical: Record<string, HistoricalDraft> = histSnap.exists() ? histSnap.val() : {};
 
@@ -808,7 +816,21 @@ export default function HistoryPage() {
             </p>
           </div>
 
-          {fetching ? (
+          {/* Sub-toggle: Managers vs Golfers */}
+          <div className="flex gap-2 mb-5">
+            {(['managers', 'golfers'] as const).map(v => (
+              <button key={v} onClick={() => setAllTimeView(v)}
+                className="px-4 py-1.5 rounded-lg text-xs font-bold tracking-wide transition-all"
+                style={allTimeView === v
+                  ? { background: '#1B3A9E', color: '#fff', border: '1px solid rgba(27,58,158,0.6)' }
+                  : { background: 'rgba(255,255,255,0.05)', color: 'rgba(148,163,184,0.6)', border: '1px solid rgba(255,255,255,0.07)' }
+                }>
+                {v === 'managers' ? '👤 Managers' : '⛳ Golfers'}
+              </button>
+            ))}
+          </div>
+
+          {allTimeView === 'managers' && (fetching ? (
             <div className="space-y-4">
               {[1,2,3,4].map(i => <div key={i} className="skeleton h-20 rounded-xl" />)}
             </div>
@@ -1028,7 +1050,106 @@ export default function HistoryPage() {
               </div>
 
             </div>
-          )}
+          ))}
+
+          {(() => {
+            const sortedGolfers = [...allTimeGolferStats].sort((a, b) => {
+              if (golferSort === 'total') return a.totalPoints - b.totalPoints;
+              if (golferSort === 'drafted') return b.timesDrafted - a.timesDrafted;
+              if (golferSort === 'avg') return a.avgPoints - b.avgPoints;
+              if (golferSort === 'pick') return a.avgPickSpot - b.avgPickSpot;
+              return a.totalPoints - b.totalPoints;
+            });
+            const visibleGolfers = golferShowAll ? sortedGolfers : sortedGolfers.slice(0, 50);
+            return allTimeView === 'golfers' && (
+              allTimeGolferStats.length === 0 ? (
+                <div className="card text-center py-8 text-sm" style={{color:'rgba(148,163,184,0.4)'}}>
+                  No all-time golfer stats yet. Ask Gibbs to run <strong>Refresh All-Time Golfer Stats</strong> in the Admin panel.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="card" style={{padding:0}}>
+                    <div className="px-4 pt-4 pb-3" style={{borderBottom:'1px solid rgba(255,255,255,0.06)'}}>
+                      <h3 className="font-bebas text-xl tracking-wider text-white flex items-center gap-2">
+                        ⛳ All-Time Golfer Stats
+                      </h3>
+                      <p className="text-xs mt-0.5" style={{color:'rgba(148,163,184,0.4)'}}>
+                        {allTimeGolferStats.length} golfers drafted across all seasons · click column headers to sort
+                      </p>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm min-w-[540px]">
+                        <thead>
+                          <tr style={{borderBottom:'1px solid rgba(255,255,255,0.06)'}}>
+                            <th className="text-left px-3 py-2.5 text-xs font-semibold uppercase tracking-wider w-8" style={{color:'rgba(148,163,184,0.4)'}}>#</th>
+                            <th className="text-left px-3 py-2.5 text-xs font-semibold uppercase tracking-wider" style={{color:'rgba(148,163,184,0.4)'}}>Golfer</th>
+                            {[
+                              { key: 'drafted', label: 'Drafted' },
+                              { key: 'pick',    label: 'Avg Pick' },
+                              { key: 'total',   label: 'Total Pts' },
+                              { key: 'avg',     label: 'Avg Pts' },
+                            ].map(col => (
+                              <th key={col.key}
+                                onClick={() => setGolferSort(col.key as typeof golferSort)}
+                                className="text-center px-3 py-2.5 text-xs font-semibold uppercase tracking-wider cursor-pointer select-none transition-colors hover:text-white"
+                                style={{color: golferSort === col.key ? '#E8C94A' : 'rgba(148,163,184,0.4)'}}>
+                                {col.label}{golferSort === col.key ? ' ▲' : ''}
+                              </th>
+                            ))}
+                            <th className="text-center px-3 py-2.5 text-xs font-semibold uppercase tracking-wider" style={{color:'rgba(148,163,184,0.4)'}}>Best</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {visibleGolfers.map((g, i) => (
+                            <tr key={g.playerName} style={{borderBottom:'1px solid rgba(255,255,255,0.03)'}}>
+                              <td className="px-3 py-2 text-xs font-mono" style={{color:'rgba(148,163,184,0.3)'}}>{i+1}.</td>
+                              <td className="px-3 py-2 font-semibold text-white text-sm">{g.playerName}</td>
+                              <td className="px-3 py-2 text-center">
+                                <span className="text-xs font-mono" style={{color: g.timesDrafted >= 5 ? '#E8C94A' : g.timesDrafted >= 3 ? '#facc15' : 'rgba(148,163,184,0.5)'}}>
+                                  {g.timesDrafted}×
+                                </span>
+                              </td>
+                              <td className="px-3 py-2 text-center">
+                                <span className="text-xs font-mono" style={{color:'rgba(148,163,184,0.5)'}}>#{g.avgPickSpot}</span>
+                              </td>
+                              <td className="px-3 py-2 text-center">
+                                <span className="font-mono font-bold text-sm" style={{color: g.totalPoints < 0 ? '#34d399' : g.totalPoints < 40 ? '#facc15' : '#94a3b8'}}>
+                                  {g.totalPoints > 0 ? '+' : ''}{g.totalPoints}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2 text-center">
+                                <span className="font-mono text-xs" style={{color: g.avgPoints < 0 ? '#34d399' : 'rgba(148,163,184,0.5)'}}>
+                                  {g.avgPoints > 0 ? '+' : ''}{g.avgPoints}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2 text-center">
+                                <span className="text-xs font-mono font-bold" style={{color: g.bestPositionNumeric <= 5 ? '#34d399' : g.bestPositionNumeric <= 15 ? '#facc15' : '#94a3b8'}}>
+                                  {g.bestFinish}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {!golferShowAll && allTimeGolferStats.length > 50 && (
+                      <button
+                        onClick={() => setGolferShowAll(true)}
+                        className="w-full py-3 text-xs transition-colors hover:text-white"
+                        style={{color:'rgba(148,163,184,0.35)',borderTop:'1px solid rgba(255,255,255,0.05)'}}>
+                        Show all {allTimeGolferStats.length} golfers
+                      </button>
+                    )}
+                    {allTimeGolferStats.length > 0 && (
+                      <div className="px-4 py-2 text-xs" style={{borderTop:'1px solid rgba(255,255,255,0.04)',color:'rgba(148,163,184,0.2)'}}>
+                        Updated {new Date(allTimeGolferStats[0]?.lastUpdated ?? 0).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            );
+          })()}
         </section>}
 
       </main>
