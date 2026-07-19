@@ -457,13 +457,54 @@ function TeamAnalysis({
       {/* ── Draft Tendencies ── */}
       {view === 'tendencies' && selMgr && (
         <div className="space-y-4">
+          {/* Draft Skill leaderboard — beats slot expectation, rewards late steals */}
+          <div className="card" style={{ padding: 0 }}>
+            <div className="px-4 pt-4 pb-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+              <h3 className="font-bebas text-xl tracking-wider text-white">Draft Skill Ratings</h3>
+              <p className="text-xs mt-0.5" style={{ color: 'rgba(148,163,184,0.4)' }}>
+                Points a manager beats the score their draft slots typically yield · nailing an early pick is expected, turning a late slot into a low score is skill
+              </p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[360px]">
+                <thead>
+                  <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                    {['#', 'Manager', 'Picks', 'Draft Skill'].map(h => (
+                      <th key={h} className="text-left px-3 py-2.5 text-xs font-semibold uppercase tracking-wider" style={{ color: 'rgba(148,163,184,0.4)' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...managers].sort((a, b) => b.slotSkill - a.slotSkill).map((m, i) => {
+                    const isMe = m.username === appUsername;
+                    const pos = m.slotSkill > 0;
+                    return (
+                      <tr key={m.username} onClick={() => setSel(m.username)}
+                        className="cursor-pointer"
+                        style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', background: m.username === sel ? 'rgba(27,58,158,0.12)' : isMe ? 'rgba(0,107,182,0.06)' : 'transparent' }}>
+                        <td className="px-3 py-2.5 text-xs font-mono" style={{ color: 'rgba(148,163,184,0.3)' }}>{i + 1}.</td>
+                        <td className="px-3 py-2.5 font-semibold text-white whitespace-nowrap">{m.username}{isMe && <span className="ml-1 text-xs" style={{ color: 'rgba(0,107,182,0.7)' }}>you</span>}</td>
+                        <td className="px-3 py-2.5 font-mono text-xs" style={{ color: 'rgba(148,163,184,0.5)' }}>{m.totalPicks}</td>
+                        <td className="px-3 py-2.5 font-mono text-sm font-bold" style={{ color: pos ? '#34d399' : m.slotSkill < 0 ? '#f87171' : 'rgba(148,163,184,0.6)' }}>
+                          {pos ? '+' : ''}{m.slotSkill} <span className="text-xs font-sans font-normal" style={{ color: 'rgba(148,163,184,0.4)' }}>pts</span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
           <div className="card">
             <ManagerChips />
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.04)' }}>
                 <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(148,163,184,0.4)' }}>Draft Skill</p>
-                <SlotBadge v={selMgr.slotSkill} />
-                <p className="text-xs mt-1.5" style={{ color: 'rgba(148,163,184,0.35)' }}>{selMgr.totalPicks} career picks · value vs draft slot</p>
+                <span className="font-mono text-lg font-bold" style={{ color: selMgr.slotSkill > 0 ? '#34d399' : selMgr.slotSkill < 0 ? '#f87171' : 'rgba(148,163,184,0.7)' }}>
+                  {selMgr.slotSkill > 0 ? '+' : ''}{selMgr.slotSkill} pts
+                </span>
+                <p className="text-xs mt-1.5" style={{ color: 'rgba(148,163,184,0.35)' }}>{selMgr.totalPicks} career picks · vs what their slots typically score</p>
               </div>
               <div className="rounded-xl p-3" style={{ background: 'rgba(52,211,153,0.08)', border: '1px solid rgba(52,211,153,0.2)' }}>
                 <p className="text-xs uppercase tracking-widest mb-1" style={{ color: '#34d399' }}>Best Steal</p>

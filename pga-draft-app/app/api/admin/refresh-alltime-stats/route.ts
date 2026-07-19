@@ -289,21 +289,40 @@ export async function POST(_req: NextRequest) {
       if (winners.includes(t.username)) rec.wins++;
     }
 
+    // League-wide expected points by draft slot. Draft skill is measured as how
+    // much a manager BEATS the score their slots typically yield — so nailing an
+    // obvious #1 pick is "expected" (near zero), while turning a #32 slot into a
+    // low score is a genuine steal. Windowed average smooths sparse high slots.
+    const slotPts: Record<number, number[]> = {};
+    for (const p of allPerfs) (slotPts[p.pickNumber] ??= []).push(p.points);
+    const expectedForSlot = (slot: number): number => {
+      let sum = 0, n = 0;
+      for (let s = slot - 3; s <= slot + 3; s++) {
+        const arr = slotPts[s];
+        if (arr) for (const v of arr) { sum += v; n++; }
+      }
+      return n > 0 ? sum / n : 0;
+    };
+    // value > 0 = scored better (lower) than the slot's expectation
+    const slotValue = (perf: PerfEntry) => expectedForSlot(perf.pickNumber) - perf.points;
+
     // Draft tendencies from performances
     const draftCount: Record<string, Record<string, number>> = {};   // username → player → count
-    const slotAgg: Record<string, { sum: number; n: number }> = {};  // username → slot delta
+    const slotAgg: Record<string, { sum: number; n: number }> = {};  // username → slot value
+    const bestStealVal: Record<string, number> = {};
+    const worstBustVal: Record<string, number> = {};
     for (const perf of allPerfs) {
       const m = ensureMgr(perf.draftedBy);
       m.totalPicks++;
       (draftCount[perf.draftedBy] ??= {});
       draftCount[perf.draftedBy][perf.playerName] = (draftCount[perf.draftedBy][perf.playerName] ?? 0) + 1;
-      const delta = perf.pickNumber - perf.finishRank;
+      const val = slotValue(perf);
       (slotAgg[perf.draftedBy] ??= { sum: 0, n: 0 });
-      slotAgg[perf.draftedBy].sum += delta;
+      slotAgg[perf.draftedBy].sum += val;
       slotAgg[perf.draftedBy].n++;
       const asPick = { playerName: perf.playerName, year: perf.year, tournamentName: perf.tournamentName, pickNumber: perf.pickNumber, positionDisplay: perf.positionDisplay, points: perf.points };
-      if (!m.bestSteal || delta > (m.bestSteal.pickNumber - finishRankOf(m.bestSteal.positionDisplay, m.bestSteal.points))) m.bestSteal = asPick;
-      if (!m.worstBust || delta < (m.worstBust.pickNumber - finishRankOf(m.worstBust.positionDisplay, m.worstBust.points))) m.worstBust = asPick;
+      if (m.bestSteal === null || val > bestStealVal[perf.draftedBy]) { m.bestSteal = asPick; bestStealVal[perf.draftedBy] = val; }
+      if (m.worstBust === null || val < worstBustVal[perf.draftedBy]) { m.worstBust = asPick; worstBustVal[perf.draftedBy] = val; }
     }
 
     for (const [username, m] of Object.entries(mgrAcc)) {
