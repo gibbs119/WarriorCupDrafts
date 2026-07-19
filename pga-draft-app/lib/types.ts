@@ -27,6 +27,7 @@ export interface Tournament {
   cutLine: number;           // Position number of cut line (e.g. 65)
   year: number;
   scoreLocked?: boolean;     // True after admin runs Lock Scores
+  sequence?: number;         // Position within the season schedule (1-indexed)
 }
 
 // ─── Draft ───────────────────────────────────────────────────────────────────
@@ -119,6 +120,73 @@ export interface RosterEdit {
   newPickId: string;
   newPickName: string;
   reason?: string;
+}
+
+// ─── Season Archive ───────────────────────────────────────────────────────────
+
+export interface GolferSeasonStats {
+  playerName: string;
+  timesDrafted: number;
+  avgPickSpot: number;        // average overall pick number across all drafts
+  totalPoints: number;        // sum of points scored for all drafters
+  avgPoints: number;
+  bestFinish: string;         // e.g. "T2" — best positionDisplay across all tourneys
+  bestPositionNumeric: number; // numeric for sorting (9999 = no finish)
+  performances: {
+    tournamentId: string;
+    tournamentName: string;
+    draftedBy: string;
+    pickNumber: number;
+    points: number;
+    positionDisplay: string;
+  }[];
+}
+
+export interface UserSeasonStats {
+  userId: string;
+  username: string;
+  totalPicks: number;
+  avgPointsPerPick: number;
+  bestPick: { playerName: string; tournamentName: string; points: number; pickNumber: number; positionDisplay: string };
+  worstPick: { playerName: string; tournamentName: string; points: number; pickNumber: number; positionDisplay: string };
+  biggestSteal: { playerName: string; tournamentName: string; points: number; pickNumber: number; positionDisplay: string; valueScore: number };
+}
+
+export interface SeasonArchive {
+  year: number;
+  champion: { userId: string; username: string; totalPoints: number };
+  seasonStandings: {
+    userId: string;
+    username: string;
+    total: number;
+    rank: number;
+    byTournament: Record<string, number>;  // tournamentId → top3Score
+  }[];
+  golferStats: GolferSeasonStats[];
+  userDraftStats: UserSeasonStats[];
+  recap: string;
+  generatedAt: number;
+  lockedBy: string;
+}
+
+export interface GolferAllTimeStats {
+  playerName: string;
+  timesDrafted: number;
+  avgPickSpot: number;
+  totalPoints: number;
+  avgPoints: number;
+  bestFinish: string;
+  bestPositionNumeric: number;
+  lastUpdated: number;
+  performances: {
+    tournamentId: string;
+    tournamentName: string;
+    year: number;
+    draftedBy: string;
+    pickNumber: number;
+    points: number;
+    positionDisplay: string;
+  }[];
 }
 
 // ─── History ─────────────────────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 import { ref, get, set, update, push, onValue, off, runTransaction, DatabaseReference } from 'firebase/database';
 import { db } from './firebase';
-import type { Tournament, DraftState, DraftPick, AppUser, Player, WDReplacement, RosterEdit } from './types';
+import type { Tournament, DraftState, DraftPick, AppUser, Player, WDReplacement, RosterEdit, SeasonArchive, GolferAllTimeStats } from './types';
 import { TOURNAMENTS, USERS } from './constants';
 
 // ─── Tournaments ─────────────────────────────────────────────────────────────
@@ -665,4 +665,41 @@ export async function getReedRuleStatus(tournamentId: string): Promise<boolean> 
 
 export async function setReedRuleStatus(tournamentId: string, active: boolean): Promise<void> {
   await set(ref(db, `reedRule/${tournamentId}`), active);
+}
+
+// ─── Season Archive ───────────────────────────────────────────────────────────
+
+export async function getSeasonArchive(year: number): Promise<SeasonArchive | null> {
+  const snap = await get(ref(db, `seasons/${year}`));
+  return snap.exists() ? (snap.val() as SeasonArchive) : null;
+}
+
+export async function saveSeasonArchive(year: number, data: SeasonArchive): Promise<void> {
+  await set(ref(db, `seasons/${year}`), data);
+}
+
+// ─── Multi-season Support ─────────────────────────────────────────────────────
+
+export async function getTournamentsByYear(year: number): Promise<Tournament[]> {
+  const snap = await get(ref(db, 'tournaments'));
+  if (!snap.exists()) return [];
+  const all = Object.values(snap.val() as Record<string, Tournament>);
+  return all
+    .filter(t => t.year === year)
+    .sort((a, b) => (a.sequence ?? 99) - (b.sequence ?? 99));
+}
+
+export async function createTournamentsBatch(tournaments: Tournament[]): Promise<void> {
+  const updates: Record<string, unknown> = {};
+  for (const t of tournaments) {
+    updates[`tournaments/${t.id}`] = t;
+  }
+  await update(ref(db), updates);
+}
+
+export async function getAlltimeGolferStats(): Promise<GolferAllTimeStats[]> {
+  const snap = await get(ref(db, 'allTimeGolferStats'));
+  if (!snap.exists()) return [];
+  return Object.values(snap.val() as Record<string, GolferAllTimeStats>)
+    .sort((a, b) => a.totalPoints - b.totalPoints);
 }

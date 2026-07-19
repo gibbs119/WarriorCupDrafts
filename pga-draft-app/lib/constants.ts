@@ -28,6 +28,7 @@ export const TOURNAMENTS = [
     draftOrder: [],
     draftComplete: false,
     cutLine: 65,
+    sequence: 1,
   },
   {
     id: 'masters',
@@ -44,6 +45,7 @@ export const TOURNAMENTS = [
     draftOrder: [],
     draftComplete: false,
     cutLine: 50,
+    sequence: 2,
   },
   {
     id: 'pga-championship',
@@ -60,6 +62,7 @@ export const TOURNAMENTS = [
     draftOrder: [],
     draftComplete: false,
     cutLine: 70,
+    sequence: 3,
   },
   {
     id: 'us-open',
@@ -77,6 +80,7 @@ export const TOURNAMENTS = [
     draftOrder: [],
     draftComplete: false,
     cutLine: 60,
+    sequence: 4,
   },
   {
     id: 'the-open',
@@ -94,7 +98,25 @@ export const TOURNAMENTS = [
     draftOrder: [],
     draftComplete: false,
     cutLine: 65,
+    sequence: 5,
   },
+];
+
+// ─── Standard tournament template (constant per-season values, no dates/ESPN IDs) ────
+export const STANDARD_TOURNAMENTS: Array<{
+  id: string;
+  name: string;
+  shortName: string;
+  fieldSize: number;
+  maxPicks: number;
+  cutLine: number;
+  sequence: number;
+}> = [
+  { id: 'players-championship', name: 'The Players Championship', shortName: 'THE PLAYERS', fieldSize: 123, maxPicks: 5, cutLine: 65, sequence: 1 },
+  { id: 'masters',              name: 'The Masters',              shortName: 'MASTERS',      fieldSize: 91,  maxPicks: 4, cutLine: 50, sequence: 2 },
+  { id: 'pga-championship',     name: 'PGA Championship',         shortName: 'PGA CHAMP.',   fieldSize: 156, maxPicks: 5, cutLine: 70, sequence: 3 },
+  { id: 'us-open',              name: 'U.S. Open',                shortName: 'U.S. OPEN',    fieldSize: 156, maxPicks: 5, cutLine: 60, sequence: 4 },
+  { id: 'the-open',             name: 'The Open Championship',    shortName: 'THE OPEN',     fieldSize: 156, maxPicks: 5, cutLine: 65, sequence: 5 },
 ];
 
 // ─── Scoring ─────────────────────────────────────────────────────────────────
