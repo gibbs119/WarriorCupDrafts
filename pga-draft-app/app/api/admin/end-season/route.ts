@@ -357,35 +357,51 @@ async function buildRecap(archive: SeasonArchive, year = 2026): Promise<string> 
       }).filter(Boolean).join('\n')
     : '';
 
-  const bestGolfer = archive.golferStats[0];
+  // Best/worst golfers judged by AVERAGE points (fair regardless of how many
+  // times they were drafted). Lower points = better in this league.
+  const rankedByAvg = [...archive.golferStats].sort((a, b) => a.avgPoints - b.avgPoints);
+  const bestGolfer = rankedByAvg[0];
+  const biggestBust = [...archive.golferStats]
+    .filter(g => g.avgPickSpot > 0 && g.avgPickSpot <= 20)   // drafted reasonably early…
+    .sort((a, b) => b.avgPoints - a.avgPoints)[0]             // …but scored the worst
+    ?? [...archive.golferStats].sort((a, b) => b.avgPoints - a.avgPoints)[0];
   const bestSteal = archive.userDraftStats
     .map(u => u.biggestSteal)
     .filter(s => s.playerName && s.playerName !== '—')
     .sort((a, b) => b.valueScore - a.valueScore)[0];
   const mostDrafted = [...archive.golferStats].sort((a, b) => b.timesDrafted - a.timesDrafted)[0];
-  const biggestBust = [...archive.golferStats].sort((a, b) => b.totalPoints - a.totalPoints)[0];
 
   const notableMoments = [
-    bestGolfer ? `Best golfer: ${bestGolfer.playerName} scored ${bestGolfer.totalPoints} total pts across ${bestGolfer.timesDrafted} draft(s)` : null,
-    bestSteal ? `Biggest steal: ${bestSteal.playerName} (pick #${bestSteal.pickNumber}, finished ${bestSteal.positionDisplay}, ${bestSteal.points} pts)` : null,
-    mostDrafted ? `Most drafted: ${mostDrafted.playerName} (drafted ${mostDrafted.timesDrafted}x, avg pick #${mostDrafted.avgPickSpot}, avg ${mostDrafted.avgPoints} pts)` : null,
-    biggestBust ? `Biggest bust: ${biggestBust.playerName} averaged ${biggestBust.avgPoints} pts — ouch` : null,
+    bestGolfer ? `Best-value golfer: ${bestGolfer.playerName} averaged ${bestGolfer.avgPoints} pts across ${bestGolfer.timesDrafted} draft(s) — lowest is best` : null,
+    bestSteal ? `Biggest steal: ${bestSteal.playerName} was pick #${bestSteal.pickNumber} (late) yet finished ${bestSteal.positionDisplay} for ${bestSteal.points} pts` : null,
+    mostDrafted ? `Most drafted: ${mostDrafted.playerName} (${mostDrafted.timesDrafted}x, avg draft slot #${mostDrafted.avgPickSpot}, avg ${mostDrafted.avgPoints} pts)` : null,
+    biggestBust ? `Biggest bust: ${biggestBust.playerName} was drafted around slot #${biggestBust.avgPickSpot} but averaged ${biggestBust.avgPoints} pts — brutal` : null,
   ].filter(Boolean).join('\n');
 
-  const prompt = `You are the commissioner of a private golf fantasy draft league called "Warrior Cup." The ${year} major championship season just ended. Write a fun, punchy 3-4 paragraph season recap for the group chat. Use a casual, slightly trash-talking tone — like you're texting your buddies. No asterisks, no headers, no special formatting — plain text only.
+  const prompt = `You are the commissioner of a private golf fantasy draft league called "Warrior Cup." The ${year} major championship season just ended. Write a fun, punchy 3-4 paragraph season recap for the group chat. Casual, slightly trash-talking tone — like texting your buddies. No asterisks, no headers, no markdown — plain text only.
 
-SEASON CHAMPION: ${archive.champion.username} (${archive.champion.totalPoints > 0 ? '+' : ''}${archive.champion.totalPoints} pts)
+HOW WARRIOR CUP SCORING WORKS (critical — get this right):
+- LOWER SCORES ARE BETTER. It's like golf — you want the fewest points.
+- Each major, every manager drafts golfers, and only their BEST 3 golfers count that week.
+- A golfer's points come from where they finish: 1st = -25, 2nd = -15, 3rd = -10, 4th = -8, 5th = -6, 6th = -5, 7th = -4, 8th = -3, 9th = -2, 10th = -1. Finishing 11th or worse = that finishing position as points (T15 = +15). Missing the cut / WD / DQ = roughly the cut line + 1 (a bad score in the +50 to +70 range).
+- A manager's tournament score = the sum of their best 3 golfers' points. Lower = better.
+- Season total = the sum of all tournament scores. The LOWEST season total wins the Warrior Cup.
+- So a NEGATIVE season total is elite; a big positive total is bad. A "steal" is a golfer drafted late who scored very low (great value). A "bust" is a golfer drafted early who scored high (bad).
 
-FINAL SEASON STANDINGS:
+Never describe a high/positive score as good, and never say "scored the most points" as praise — that's a bad thing here.
+
+SEASON CHAMPION: ${archive.champion.username} with ${archive.champion.totalPoints > 0 ? '+' : ''}${archive.champion.totalPoints} pts (lowest total wins)
+
+FINAL SEASON STANDINGS (lower = better, rank 1 = champion):
 ${standingsText}
 
-TOURNAMENT-BY-TOURNAMENT FANTASY WINNERS:
+TOURNAMENT-BY-TOURNAMENT WINNERS (lowest score each major):
 ${tourneyWinners}
 
 NOTABLE MOMENTS:
 ${notableMoments}
 
-Write the recap now — make it memorable and fun. Congratulate the champion, roast whoever finished last, and highlight the biggest steal and bust of the season.`;
+Write the recap now — accurate to the scoring above. Congratulate the champion, roast whoever finished last (highest total), and call out the biggest steal and bust.`;
 
   return callAI(prompt);
 }

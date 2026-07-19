@@ -571,6 +571,7 @@ export default function HistoryPage() {
   const [archive, setArchive] = useState<SeasonArchive | null>(null);
   const [recapCopied, setRecapCopied] = useState(false);
   const [analyticsOpen, setAnalyticsOpen] = useState(false);
+  const [seasonGolferShowAll, setSeasonGolferShowAll] = useState(false);
   const confettiFiredRef = useRef(false);
 
   // All-time golfer stats
@@ -1068,12 +1069,18 @@ export default function HistoryPage() {
                       </div>
 
                       {/* Top Golfer Performances */}
+                      {(() => {
+                        const recomputed = golfersForSeason(allTimeGolferStats, archive.year);
+                        const gsAll = (recomputed.length ? recomputed : archive.golferStats)
+                          .slice().sort((a, b) => a.avgPoints - b.avgPoints);
+                        const gs = seasonGolferShowAll ? gsAll : gsAll.slice(0, 20);
+                        return (
                       <div className="card" style={{padding:0}}>
                         <div className="px-4 pt-4 pb-3" style={{borderBottom:'1px solid rgba(255,255,255,0.06)'}}>
                           <h3 className="font-bebas text-lg tracking-wider text-white flex items-center gap-2">
                             <Trophy size={14} style={{color:'#C9A227'}} /> Golfer Season Stats
                           </h3>
-                          <p className="text-xs mt-0.5" style={{color:'rgba(148,163,184,0.4)'}}>Players drafted across all {CURRENT_YEAR} tournaments · sorted by total points (lower = better)</p>
+                          <p className="text-xs mt-0.5" style={{color:'rgba(148,163,184,0.4)'}}>{gsAll.length} golfers drafted across {archive.year} · sorted by avg pts (lower = better)</p>
                         </div>
                         <div className="overflow-x-auto">
                           <table className="w-full text-sm min-w-[480px]">
@@ -1085,11 +1092,7 @@ export default function HistoryPage() {
                               </tr>
                             </thead>
                             <tbody>
-                              {(() => {
-                                const recomputed = golfersForSeason(allTimeGolferStats, archive.year);
-                                const gs = (recomputed.length ? recomputed : archive.golferStats)
-                                  .slice().sort((a, b) => a.totalPoints - b.totalPoints);
-                                return gs.slice(0, 20).map((g, i) => (
+                              {gs.map((g, i) => (
                                 <tr key={g.playerName} style={{borderBottom:'1px solid rgba(255,255,255,0.03)'}}>
                                   <td className="px-3 py-2.5">
                                     <span className="text-xs font-mono mr-1.5" style={{color:'rgba(148,163,184,0.3)'}}>{i+1}.</span>
@@ -1115,12 +1118,20 @@ export default function HistoryPage() {
                                     </span>
                                   </td>
                                 </tr>
-                                ));
-                              })()}
+                              ))}
                             </tbody>
                           </table>
                         </div>
+                        {gsAll.length > 20 && (
+                          <button onClick={() => setSeasonGolferShowAll(v => !v)}
+                            className="w-full py-3 text-xs transition-colors hover:text-white"
+                            style={{color:'rgba(148,163,184,0.35)',borderTop:'1px solid rgba(255,255,255,0.05)'}}>
+                            {seasonGolferShowAll ? 'Show top 20' : `Show all ${gsAll.length} golfers`}
+                          </button>
+                        )}
                       </div>
+                        );
+                      })()}
                     </div>
                   )}
 
