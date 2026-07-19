@@ -6,6 +6,11 @@ import type { GolferAllTimeStats, SeasonArchive, ManagerAllTimeStats, AllTimeTea
 const SENTINEL = 9000;        // points >= this = unmatched / no-show (9999) or DQ (99999)
 const MISSED_CUT_RANK = 60;   // nominal finishing rank used for slot math when cut/no-show
 
+// Firebase may return arrays as keyed objects — normalize either shape to an array.
+function asArray<T>(v: T[] | Record<string, T> | null | undefined): T[] {
+  return Array.isArray(v) ? v : Object.values(v ?? {});
+}
+
 const STD_LABELS: Record<string, string> = {
   'players-championship': 'The Players Championship',
   'masters': 'The Masters',
@@ -95,10 +100,10 @@ export async function POST(_req: NextRequest) {
         const year = +yearStr;
         archivedYears.add(year);
 
-        const golferStats = Array.isArray(archive.golferStats) ? archive.golferStats : Object.values(archive.golferStats ?? {});
+        const golferStats = asArray(archive.golferStats);
         for (const gs of golferStats) {
           if (!gs || !gs.playerName) continue;
-          const perfs = Array.isArray(gs.performances) ? gs.performances : Object.values(gs.performances ?? {});
+          const perfs = asArray(gs.performances);
           for (const perf of perfs) {
             pushPerf({
               playerName: gs.playerName, year,
@@ -109,7 +114,7 @@ export async function POST(_req: NextRequest) {
           }
         }
 
-        const standings = (Array.isArray(archive.seasonStandings) ? archive.seasonStandings : Object.values(archive.seasonStandings ?? {}))
+        const standings = asArray(archive.seasonStandings)
           .filter(Boolean)
           .map(s => ({ username: s.username, total: s.total, rank: s.rank, byTournament: s.byTournament ?? {} }));
         seasonBlocks.push({ year, champion: archive.champion?.username ?? null, standings, final: true });
@@ -139,7 +144,7 @@ export async function POST(_req: NextRequest) {
       diag.unarchivedTournaments = unarchived.length;
 
       await Promise.all(unarchived.map(async (lt) => {
-        const teams = Array.isArray(lt.teamScores) ? lt.teamScores : Object.values(lt.teamScores ?? {});
+        const teams = asArray(lt.teamScores);
         const year = lt.year ?? 0;
 
         // Season standings accumulation + tournament records
@@ -164,7 +169,7 @@ export async function POST(_req: NextRequest) {
         for (const ts of teams) {
           if (!ts || !ts.userId) continue;
           scoreByUser[ts.userId] = {};
-          const players = Array.isArray(ts.players) ? ts.players : Object.values(ts.players ?? {});
+          const players = asArray(ts.players);
           for (const ps of players) {
             if (ps && ps.playerName) scoreByUser[ts.userId][ps.playerName] = { points: ps.points, positionDisplay: ps.positionDisplay ?? '-' };
           }
