@@ -141,6 +141,21 @@
     "scores": {
       ".read": "auth != null",
       ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'"
+    },
+
+    "seasons": {
+      // Season archives (end-of-season standings, analytics, AI recap)
+      // read by the History page's "Season" tab.
+      ".read": "auth != null",
+      // Written only by Firebase Admin SDK (end-season route) — block client writes
+      ".write": false
+    },
+
+    "allTimeGolferStats": {
+      // Cross-season golfer aggregate read by the History "All-Time → Golfers" tab.
+      ".read": "auth != null",
+      // Written only by Firebase Admin SDK (refresh-alltime-stats route) — block client writes
+      ".write": false
     }
 
   }
