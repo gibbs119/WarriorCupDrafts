@@ -542,8 +542,21 @@ export default function AdminPage() {
     try {
       const res = await fetch('/api/admin/refresh-alltime-stats', { method: 'POST' });
       const data = await res.json();
-      if (res.ok) toast.success(`All-time stats updated: ${data.golfers} golfers, ${data.performances} performances.`, { id: toastId, duration: 5000 });
-      else toast.error(`Failed: ${data.error}`, { id: toastId });
+      if (res.ok) {
+        if (data.golfers === 0) {
+          const d = data.diag ?? {};
+          toast.error(
+            `0 golfers computed. Locked tournaments: ${d.lockedTournaments ?? 0}, unarchived: ${d.unarchivedTournaments ?? 0}. ` +
+            (d.tournamentsWithoutPicks?.length ? `Missing picks: ${d.tournamentsWithoutPicks.join(', ')}. ` : '') +
+            `Make sure at least one tournament is locked AND has draft picks.`,
+            { id: toastId, duration: 9000 }
+          );
+        } else {
+          toast.success(`All-time stats updated: ${data.golfers} golfers, ${data.performances} performances.`, { id: toastId, duration: 5000 });
+        }
+      } else {
+        toast.error(`Failed: ${data.error}`, { id: toastId });
+      }
     } catch {
       toast.error('Network error.', { id: toastId });
     } finally {
