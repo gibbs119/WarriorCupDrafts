@@ -7,10 +7,9 @@ import Navigation from '@/components/Navigation';
 import { get, ref } from 'firebase/database';
 import { db } from '@/lib/firebase';
 import { Trophy, Lock, ChevronDown, ChevronRight, Users, Calendar, TrendingUp, RefreshCw, Radio, Star, Copy, Check, BarChart2 } from 'lucide-react';
-import { TOURNAMENTS } from '@/lib/constants';
 import { parseLeaderboard } from '@/lib/espn';
 import { calculateLeaderboard } from '@/lib/scoring';
-import { getDraftState, getSeasonArchive } from '@/lib/db';
+import { getDraftState, getSeasonArchive, getTournamentsByYear } from '@/lib/db';
 import confetti from 'canvas-confetti';
 import type { SeasonArchive } from '@/lib/types';
 
@@ -40,19 +39,26 @@ interface SeasonRow {
   rank: number;
 }
 
-// ─── 2026 season column definitions ──────────────────────────────────────────
+// ─── Season column definition ─────────────────────────────────────────────────
 
-const SEASON_COLS = [
-  { id: 'players-championship', label: 'Players' },
-  { id: 'masters',              label: 'Masters'  },
-  { id: 'pga-championship',    label: 'PGA'       },
-  { id: 'us-open',             label: 'US Open'   },
-  { id: 'the-open',            label: 'The Open', live: true },
-] as const;
+interface SeasonColDef {
+  id: string;
+  label: string;
+  live?: boolean;
+  espnEventId?: string;
+  cutLine?: number;
+  liveScoresStart?: string;
+}
 
-const LIVE_COL_IDX  = SEASON_COLS.findIndex(c => c.live);
-const LIVE_COL_ID   = SEASON_COLS[LIVE_COL_IDX]?.id ?? 'the-open';
-const OPEN_CONFIG   = TOURNAMENTS.find(t => t.id === LIVE_COL_ID)!;
+const SEASON_SHORT_LABELS: Record<string, string> = {
+  'players-championship': 'Players',
+  'masters': 'Masters',
+  'pga-championship': 'PGA',
+  'us-open': 'US Open',
+  'the-open': 'The Open',
+};
+
+const CURRENT_YEAR = new Date().getFullYear();
 
 // ─── Colours ──────────────────────────────────────────────────────────────────
 
@@ -72,11 +78,12 @@ const fmtScore = (s: number | null) => {
 
 // ─── Season Trend Chart ───────────────────────────────────────────────────────
 
-function SeasonChart({ rows, liveIdx }: { rows: SeasonRow[]; liveIdx: number }) {
+function SeasonChart({ rows, liveIdx, cols }: { rows: SeasonRow[]; liveIdx: number; cols: SeasonColDef[] }) {
   const W = 500, H = 180, PAD = { t: 12, r: 16, b: 48, l: 36 };
   const cW = W - PAD.l - PAD.r;
   const cH = H - PAD.t - PAD.b;
-  const n  = SEASON_COLS.length;
+  const n  = cols.length;
+  if (n < 2) return null;
 
   // Build cumulative scores per row: cumRow[ci] = sum of scores[0..ci]
   const cumRows = rows.map(row => {
@@ -127,7 +134,7 @@ function SeasonChart({ rows, liveIdx }: { rows: SeasonRow[]; liveIdx: number }) 
       ))}
 
       {/* Column (tournament) vertical guides */}
-      {SEASON_COLS.map((col, ci) => (
+      {cols.map((col, ci) => (
         <line key={col.id}
           x1={toX(ci)} y1={PAD.t} x2={toX(ci)} y2={PAD.t + cH}
           stroke="rgba(255,255,255,0.04)" strokeWidth="1"
@@ -161,7 +168,7 @@ function SeasonChart({ rows, liveIdx }: { rows: SeasonRow[]; liveIdx: number }) 
       })}
 
       {/* X-axis tournament labels */}
-      {SEASON_COLS.map((col, ci) => (
+      {cols.map((col, ci) => (
         <g key={col.id}>
           <text
             x={toX(ci)} y={PAD.t + cH + 16}
@@ -210,6 +217,10 @@ export default function HistoryPage() {
   const [fetching, setFetching] = useState(true);
   const [stats, setStats] = useState<{ username: string; wins: number; podiums: number; total: number; count: number }[]>([]);
 
+  // Dynamic season column definitions (loaded from Firebase)
+  const [seasonCols, setSeasonCols] = useState<SeasonColDef[]>([]);
+  const seasonColsRef = useRef<SeasonColDef[]>([]);
+
   // Season-standings state
   const [season2026, setSeason2026] = useState<SeasonRow[]>([]);
   const [liveLoading, setLiveLoading] = useState(false);
@@ -231,10 +242,11 @@ export default function HistoryPage() {
   useEffect(() => {
     if (!appUser) return;
     async function load() {
-      const [lockedSnap, histSnap, archiveData] = await Promise.all([
+      const [lockedSnap, histSnap, archiveData, yearTournaments] = await Promise.all([
         get(ref(db, 'lockedScores')),
         get(ref(db, 'historicalDrafts')),
-        getSeasonArchive(2026).catch(() => null),
+        getSeasonArchive(CURRENT_YEAR).catch(() => null),
+        getTournamentsByYear(CURRENT_YEAR),
       ]);
       if (archiveData) setArchive(archiveData);
       const locked: Record<string, LockedTournament> = lockedSnap.exists() ? lockedSnap.val() : {};
@@ -280,10 +292,35 @@ export default function HistoryPage() {
       }
       setStats(Object.entries(st).map(([username, s]) => ({ username, ...s })).sort((a,b) => a.total - b.total));
 
-      // ── Build 2026 season from locked data ─────────────────────────────────
-      // Match by tournament ID (no year filter — IDs are unique per season).
-      // If somehow multiple entries share an ID, keep the most recently locked one.
-      const seasonIds = new Set(SEASON_COLS.map(c => c.id));
+      // ── Build season column definitions from Firebase tournaments ──────────
+      const sorted = yearTournaments.sort((a, b) => (a.sequence ?? 99) - (b.sequence ?? 99));
+
+      // Determine which tournament is "live": active one, else last non-upcoming
+      let liveTournId: string | null = null;
+      const active = sorted.filter(t => t.status === 'active');
+      if (active.length > 0) {
+        liveTournId = active[0].id;
+      } else {
+        const nonUpcoming = sorted.filter(t => t.status !== 'upcoming');
+        liveTournId = nonUpcoming.length > 0
+          ? nonUpcoming[nonUpcoming.length - 1].id
+          : sorted.length > 0 ? sorted[sorted.length - 1].id : null;
+      }
+
+      const cols: SeasonColDef[] = sorted.map(t => ({
+        id: t.id,
+        label: SEASON_SHORT_LABELS[t.id] ?? t.shortName ?? t.name,
+        live: t.id === liveTournId,
+        espnEventId: t.espnEventId,
+        cutLine: t.cutLine,
+        liveScoresStart: t.liveScoresStart,
+      }));
+
+      setSeasonCols(cols);
+      seasonColsRef.current = cols;
+
+      // ── Build current season from locked data ──────────────────────────────
+      const seasonIds = new Set(cols.map(c => c.id));
       const lockedByTournId: Record<string, LockedTournament> = {};
       for (const lt of Object.values(locked)) {
         if (!seasonIds.has(lt.tournamentId)) continue;
@@ -293,17 +330,15 @@ export default function HistoryPage() {
         }
       }
 
-      // Collect all usernames that appear in any 2026 locked tournament
       const allUsernames = new Set<string>();
       for (const lt of Object.values(lockedByTournId)) {
         for (const ts of lt.teamScores ?? []) allUsernames.add(ts.username);
       }
 
-      // Build per-user per-tournament scores (only locked ones — live score added separately)
       const rowMap: Record<string, { username: string; scores: (number | null)[] }> = {};
       for (const username of allUsernames) {
-        rowMap[username] = { username, scores: SEASON_COLS.map(() => null) };
-        SEASON_COLS.forEach((col, ci) => {
+        rowMap[username] = { username, scores: cols.map(() => null) };
+        cols.forEach((col, ci) => {
           if (col.live) return; // filled by live fetch below
           const lt = lockedByTournId[col.id];
           if (!lt) return;
@@ -312,12 +347,10 @@ export default function HistoryPage() {
         });
       }
 
-      // Store incomplete rows (live slot = null); refreshLive will fill it
       setSeason2026(buildRankedRows(rowMap));
       setFetching(false);
 
-      // Kick off live fetch immediately
-      fetchLiveOpen(rowMap);
+      fetchLiveOpen(rowMap, cols);
     }
     load().catch(() => setFetching(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -327,27 +360,31 @@ export default function HistoryPage() {
   useEffect(() => {
     liveTimer.current = setInterval(() => {
       setSeason2026(prev => {
-        // Rebuild the rowMap from existing state to pass to fetchLiveOpen
         const rowMap: Record<string, { username: string; scores: (number | null)[] }> = {};
         for (const row of prev) {
           rowMap[row.username] = { username: row.username, scores: [...row.scores] };
         }
-        fetchLiveOpen(rowMap);
-        return prev; // state update happens inside fetchLiveOpen
+        fetchLiveOpen(rowMap, seasonColsRef.current);
+        return prev;
       });
     }, 60_000);
     return () => { if (liveTimer.current) clearInterval(liveTimer.current); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Fetch live Open scores and merge ─────────────────────────────────────
-  async function fetchLiveOpen(rowMap: Record<string, { username: string; scores: (number | null)[] }>) {
-    if (LIVE_COL_IDX < 0) return;
+  // ── Fetch live scores for the active/latest tournament ───────────────────
+  async function fetchLiveOpen(
+    rowMap: Record<string, { username: string; scores: (number | null)[] }>,
+    cols: SeasonColDef[],
+  ) {
+    const liveColIdx = cols.findIndex(c => c.live);
+    if (liveColIdx < 0 || cols.length === 0) return;
+    const liveCol = cols[liveColIdx];
+    if (!liveCol.espnEventId) return;
 
     const now = Date.now();
-    const liveStart = OPEN_CONFIG.liveScoresStart ? new Date(OPEN_CONFIG.liveScoresStart).getTime() : 0;
+    const liveStart = liveCol.liveScoresStart ? new Date(liveCol.liveScoresStart).getTime() : 0;
     if (liveStart > 0 && now < liveStart) {
-      // Tournament not started — no live scores
       setSeason2026(buildRankedRows(rowMap));
       return;
     }
@@ -355,35 +392,32 @@ export default function HistoryPage() {
     setLiveLoading(true);
     try {
       const [espnRes, draftState] = await Promise.all([
-        fetch(`/api/espn/leaderboard?eventId=${OPEN_CONFIG.espnEventId}`),
-        getDraftState('the-open'),
+        fetch(`/api/espn/leaderboard?eventId=${liveCol.espnEventId}`),
+        getDraftState(liveCol.id),
       ]);
       if (!espnRes.ok || !draftState) return;
 
       const espnData = await espnRes.json();
       const { players } = parseLeaderboard(espnData);
 
-      // Build userPicksMap from draft state
       const userPicksMap: Record<string, { username: string; picks: import('@/lib/types').DraftPick[] }> = {};
       for (const pick of draftState.picks) {
         userPicksMap[pick.userId] ??= { username: pick.username, picks: [] };
         userPicksMap[pick.userId].picks.push(pick);
-        // ensure this user exists in rowMap
         if (!rowMap[pick.username]) {
-          rowMap[pick.username] = { username: pick.username, scores: SEASON_COLS.map(() => null) };
+          rowMap[pick.username] = { username: pick.username, scores: cols.map(() => null) };
         }
       }
 
-      const liveTeams = calculateLeaderboard(userPicksMap, players, OPEN_CONFIG.cutLine);
+      const liveTeams = calculateLeaderboard(userPicksMap, players, liveCol.cutLine ?? 65);
 
-      // Merge live scores — deep-copy scores arrays to avoid mutating rowMap
       const merged: Record<string, { username: string; scores: (number | null)[] }> = {};
       for (const [u, v] of Object.entries(rowMap)) merged[u] = { username: v.username, scores: [...v.scores] };
       for (const team of liveTeams) {
         if (!merged[team.username]) {
-          merged[team.username] = { username: team.username, scores: SEASON_COLS.map(() => null) };
+          merged[team.username] = { username: team.username, scores: cols.map(() => null) };
         }
-        merged[team.username].scores[LIVE_COL_IDX] = team.top3Score >= 9000 ? null : team.top3Score;
+        merged[team.username].scores[liveColIdx] = team.top3Score >= 9000 ? null : team.top3Score;
       }
 
       setSeason2026(buildRankedRows(merged));
@@ -405,16 +439,18 @@ export default function HistoryPage() {
   // Fire confetti once per session when season archive loads
   useEffect(() => {
     if (!archive || confettiFiredRef.current) return;
-    if (sessionStorage.getItem('warrior-cup-confetti-2026')) return;
+    const confettiKey = `warrior-cup-confetti-${archive.year}`;
+    if (sessionStorage.getItem(confettiKey)) return;
     confettiFiredRef.current = true;
-    sessionStorage.setItem('warrior-cup-confetti-2026', '1');
+    sessionStorage.setItem(confettiKey, '1');
     // Gold + white burst
     confetti({ particleCount: 150, spread: 100, origin: { y: 0.35 }, colors: ['#E8C94A','#C9A227','#fff','#fbbf24','#f59e0b'] });
     setTimeout(() => confetti({ particleCount: 80, spread: 80, origin: { y: 0.4, x: 0.2 }, colors: ['#E8C94A','#C9A227','#fff'] }), 350);
     setTimeout(() => confetti({ particleCount: 80, spread: 80, origin: { y: 0.4, x: 0.8 }, colors: ['#E8C94A','#C9A227','#fff'] }), 500);
   }, [archive]);
 
-  const hasLiveScores = season2026.some(r => r.scores[LIVE_COL_IDX] !== null);
+  const liveColIdx = seasonCols.findIndex(c => c.live);
+  const hasLiveScores = liveColIdx >= 0 && season2026.some(r => r.scores[liveColIdx] !== null);
 
   if (loading || !appUser) return (
     <div className="min-h-screen page"><Navigation />
@@ -436,7 +472,7 @@ export default function HistoryPage() {
         {/* ── Tab navigation ── */}
         <div className="flex gap-2">
           {([
-            { key: 'season',  label: '2026 Season',  icon: '🏆' },
+            { key: 'season',  label: `${CURRENT_YEAR} Season`,  icon: '🏆' },
             { key: 'alltime', label: 'All-Time',      icon: '📜' },
           ] as const).map(({ key, label, icon }) => (
             <button
@@ -464,7 +500,7 @@ export default function HistoryPage() {
               <div className="relative flex items-center gap-4">
                 <div className="text-5xl select-none" style={{filter:'drop-shadow(0 0 16px rgba(232,201,74,0.6))'}}>🏆</div>
                 <div>
-                  <p className="text-xs uppercase tracking-widest font-semibold" style={{color:'rgba(201,162,39,0.7)'}}>2026 Warrior Cup Champion</p>
+                  <p className="text-xs uppercase tracking-widest font-semibold" style={{color:'rgba(201,162,39,0.7)'}}>{archive.year} Warrior Cup Champion</p>
                   <h2 className="font-bebas text-4xl tracking-widest mt-0.5" style={{color:'#E8C94A',textShadow:'0 0 20px rgba(232,201,74,0.4)'}}>{archive.champion.username}</h2>
                   <p className="text-sm mt-1" style={{color:'rgba(201,162,39,0.6)'}}>
                     {archive.champion.totalPoints > 0 ? '+' : ''}{archive.champion.totalPoints} pts season total
@@ -487,7 +523,7 @@ export default function HistoryPage() {
             <div>
               <p className="text-xs uppercase tracking-widest font-semibold mb-0.5" style={{color:'rgba(148,163,184,0.5)'}}>Current Year</p>
               <h2 className="font-bebas text-3xl tracking-widest text-white flex items-center gap-2">
-                <TrendingUp size={24} style={{color:'#E8C94A'}} /> 2026 Season Standings
+                <TrendingUp size={24} style={{color:'#E8C94A'}} /> {CURRENT_YEAR} Season Standings
               </h2>
             </div>
             <div className="flex items-center gap-3">
@@ -501,7 +537,7 @@ export default function HistoryPage() {
                 onClick={() => {
                   const rowMap: Record<string, { username: string; scores: (number | null)[] }> = {};
                   for (const row of season2026) rowMap[row.username] = { username: row.username, scores: [...row.scores] };
-                  fetchLiveOpen(rowMap);
+                  fetchLiveOpen(rowMap, seasonCols);
                 }}
                 className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs transition-all"
                 style={{background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.08)',color:'rgba(148,163,184,0.6)'}}
@@ -528,12 +564,12 @@ export default function HistoryPage() {
                     <tr style={{borderBottom:'1px solid rgba(255,255,255,0.07)'}}>
                       <th className="text-left px-4 py-2.5 font-semibold text-xs uppercase tracking-wider" style={{color:'rgba(148,163,184,0.4)',width:'28px'}}>#</th>
                       <th className="text-left px-2 py-2.5 font-semibold text-xs uppercase tracking-wider" style={{color:'rgba(148,163,184,0.4)'}}>Player</th>
-                      {SEASON_COLS.map((col, ci) => (
+                      {seasonCols.map((col, ci) => (
                         <th key={col.id} className="text-center px-2 py-2.5 font-semibold text-xs uppercase tracking-wider whitespace-nowrap" style={{
-                          color: ci === LIVE_COL_IDX ? '#E8C94A' : 'rgba(148,163,184,0.4)',
+                          color: ci === liveColIdx ? '#E8C94A' : 'rgba(148,163,184,0.4)',
                           minWidth: '52px',
                         }}>
-                          {col.label}{ci === LIVE_COL_IDX && hasLiveScores ? ' 🔴' : ''}
+                          {col.label}{ci === liveColIdx && hasLiveScores ? ' 🔴' : ''}
                         </th>
                       ))}
                       <th className="text-center px-3 py-2.5 font-bold text-xs uppercase tracking-wider" style={{color:'rgba(148,163,184,0.6)',minWidth:'52px'}}>Total</th>
@@ -556,7 +592,7 @@ export default function HistoryPage() {
                             {isMe && <span className="ml-1.5 text-xs" style={{color:'rgba(0,107,182,0.8)'}}>you</span>}
                           </td>
                           {row.scores.map((s, ci) => {
-                            const isLive = ci === LIVE_COL_IDX;
+                            const isLive = ci === liveColIdx;
                             const val = fmtScore(s);
                             const color = s === null ? 'rgba(148,163,184,0.2)'
                               : s < 0 ? '#34d399'
@@ -594,7 +630,7 @@ export default function HistoryPage() {
                   <TrendingUp size={15} style={{color:'#E8C94A'}} /> Cumulative Season Score
                   <span className="text-xs font-sans font-normal ml-1" style={{color:'rgba(148,163,184,0.4)'}}>lower = better</span>
                 </h3>
-                <SeasonChart rows={season2026} liveIdx={LIVE_COL_IDX} />
+                <SeasonChart rows={season2026} liveIdx={liveColIdx} cols={seasonCols} />
                 <ChartLegend rows={season2026} appUsername={appUser.username} />
               </div>
 
@@ -673,7 +709,7 @@ export default function HistoryPage() {
                           <h3 className="font-bebas text-lg tracking-wider text-white flex items-center gap-2">
                             <Trophy size={14} style={{color:'#C9A227'}} /> Golfer Season Stats
                           </h3>
-                          <p className="text-xs mt-0.5" style={{color:'rgba(148,163,184,0.4)'}}>Players drafted across all 5 majors · sorted by total points (lower = better)</p>
+                          <p className="text-xs mt-0.5" style={{color:'rgba(148,163,184,0.4)'}}>Players drafted across all {CURRENT_YEAR} tournaments · sorted by total points (lower = better)</p>
                         </div>
                         <div className="overflow-x-auto">
                           <table className="w-full text-sm min-w-[480px]">

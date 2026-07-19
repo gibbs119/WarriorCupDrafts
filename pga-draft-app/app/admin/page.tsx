@@ -9,16 +9,36 @@ import {
   getAllTournaments, updateTournament, initializeDraft,
   getAllUsers, getDraftState, getDraftOrderFromResults, saveRankedOrder,
   resetDraft, clearDraftPicks, undoLastPick, getReedRuleStatus, setReedRuleStatus,
-  importDraftPicks,
+  importDraftPicks, createTournamentsBatch,
 } from '@/lib/db';
 import { buildSnakeDraftOrder, calculateLeaderboard } from '@/lib/scoring';
 import { parseLeaderboard } from '@/lib/espn';
-import { USERS, TOURNAMENTS } from '@/lib/constants';
+import { USERS, TOURNAMENTS, STANDARD_TOURNAMENTS } from '@/lib/constants';
 import type { Tournament, AppUser } from '@/lib/types';
-import { Settings, Users, Trophy, Plus, Shuffle } from 'lucide-react';
+import { Settings, Users, Trophy, Plus, Shuffle, Calendar, ChevronDown, ChevronRight } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const TOURNAMENT_SEQUENCE = TOURNAMENTS.map((t) => t.id);
+
+interface SeasonSlot {
+  id: string;
+  name: string;
+  shortName: string;
+  fieldSize: number;
+  maxPicks: number;
+  cutLine: number;
+  sequence: number;
+  espnEventId: string;
+  startDate: string;
+  draftDate: string;
+  liveScoresStart: string;
+}
+
+function makeDefaultSlots(): SeasonSlot[] {
+  return STANDARD_TOURNAMENTS.map(t => ({
+    ...t, espnEventId: '', startDate: '', draftDate: '', liveScoresStart: '',
+  }));
+}
 
 function shuffleArray<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -52,6 +72,13 @@ export default function AdminPage() {
   const [importPicksId, setImportPicksId] = useState<string | null>(null);
   const [importPickInputs, setImportPickInputs] = useState<Record<string, string>>({});
 
+  // Season setup
+  const [seasonSetupOpen, setSeasonSetupOpen] = useState(false);
+  const [newSeasonYear, setNewSeasonYear] = useState(new Date().getFullYear() + 1);
+  const [stdSlots, setStdSlots] = useState<SeasonSlot[]>(makeDefaultSlots());
+  const [extraSlots, setExtraSlots] = useState<SeasonSlot[]>([]);
+  const [creatingSeason, setCreatingSeason] = useState(false);
+
   const [newUsername, setNewUsername] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -73,7 +100,11 @@ export default function AdminPage() {
     if (!appUser) return;
     async function load() {
       const [ts, us] = await Promise.all([getAllTournaments(), getAllUsers()]);
-      ts.sort((a, b) => TOURNAMENT_SEQUENCE.indexOf(a.id) - TOURNAMENT_SEQUENCE.indexOf(b.id));
+      ts.sort((a, b) => {
+        const seqA = a.sequence ?? TOURNAMENT_SEQUENCE.indexOf(a.id) + 1;
+        const seqB = b.sequence ?? TOURNAMENT_SEQUENCE.indexOf(b.id) + 1;
+        return seqA - seqB;
+      });
       setTournaments(ts);
       setUsers(us);
       // Load Reed Rule status for all tournaments
@@ -502,6 +533,55 @@ export default function AdminPage() {
     }
   }
 
+  async function handleCreateSeason() {
+    const allSlots = [...stdSlots, ...extraSlots];
+    for (const slot of allSlots) {
+      if (!slot.espnEventId.trim()) {
+        toast.error(`ESPN Event ID required for ${slot.name}`);
+        return;
+      }
+      if (!slot.startDate.trim()) {
+        toast.error(`Start date required for ${slot.name}`);
+        return;
+      }
+    }
+    if (!confirm(`Create ${newSeasonYear} season with ${allSlots.length} tournament(s)?\n\nThis will overwrite any existing tournaments with the same IDs.`)) return;
+
+    setCreatingSeason(true);
+    const toastId = toast.loading(`Creating ${newSeasonYear} season…`);
+    try {
+      const newTournaments: import('@/lib/types').Tournament[] = allSlots.map(slot => ({
+        id: slot.id,
+        name: slot.name,
+        shortName: slot.shortName,
+        year: newSeasonYear,
+        startDate: slot.startDate,
+        liveScoresStart: slot.liveScoresStart || undefined,
+        draftDate: slot.draftDate || undefined,
+        espnEventId: slot.espnEventId,
+        fieldSize: slot.fieldSize,
+        maxPicks: slot.maxPicks,
+        status: 'upcoming' as const,
+        draftOrder: [],
+        draftComplete: false,
+        cutLine: slot.cutLine,
+        sequence: slot.sequence,
+      }));
+      await createTournamentsBatch(newTournaments);
+      toast.success(`${newSeasonYear} season created with ${newTournaments.length} tournament(s)!`, { id: toastId, duration: 6000 });
+      const ts = await getAllTournaments();
+      ts.sort((a, b) => (a.sequence ?? 99) - (b.sequence ?? 99));
+      setTournaments(ts);
+      setExtraSlots([]);
+      setStdSlots(makeDefaultSlots());
+      setSeasonSetupOpen(false);
+    } catch (err) {
+      toast.error(`Failed: ${String(err)}`, { id: toastId });
+    } finally {
+      setCreatingSeason(false);
+    }
+  }
+
   if (loading || !appUser) {
     return (
       <div className="min-h-screen page"><Navigation />
@@ -820,6 +900,201 @@ export default function AdminPage() {
               <button onClick={seedHistoricalData} disabled={seeding} className="btn-secondary text-sm disabled:opacity-50">
                 {seeding ? 'Importing…' : '📂 Import Historical Picks'}
               </button>
+            </div>
+
+            {/* Season Setup */}
+            <div className="card mt-4" style={{ border: '1px solid rgba(0,107,182,0.3)', background: 'rgba(0,107,182,0.04)' }}>
+              <button
+                className="w-full flex items-center justify-between"
+                onClick={() => setSeasonSetupOpen(o => !o)}>
+                <h3 className="font-bebas text-lg tracking-wider text-white flex items-center gap-2">
+                  <Calendar size={16} className="text-blue-400" /> New Season Setup
+                </h3>
+                {seasonSetupOpen
+                  ? <ChevronDown size={14} style={{ color: 'rgba(148,163,184,0.5)' }} />
+                  : <ChevronRight size={14} style={{ color: 'rgba(148,163,184,0.5)' }} />}
+              </button>
+
+              {!seasonSetupOpen && (
+                <p className="text-slate-400 text-sm mt-2">Configure the tournament schedule for a new season.</p>
+              )}
+
+              {seasonSetupOpen && (
+                <div className="mt-4 space-y-4">
+                  <div className="flex items-center gap-3">
+                    <label className="text-sm text-slate-300 font-semibold">Season Year</label>
+                    <input
+                      type="number"
+                      value={newSeasonYear}
+                      onChange={e => setNewSeasonYear(+e.target.value)}
+                      className="input w-24 text-sm"
+                      min={2026}
+                      max={2040}
+                    />
+                    <span className="text-xs text-slate-500">Tournaments with the same IDs will be updated.</span>
+                  </div>
+
+                  <div className="space-y-3">
+                    <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'rgba(148,163,184,0.4)' }}>
+                      Standard Tournaments
+                    </p>
+                    {stdSlots.map((slot, i) => (
+                      <div key={slot.id} className="rounded-xl p-3 space-y-2" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-mono text-slate-500">{slot.sequence}.</span>
+                          <span className="text-sm font-semibold text-white">{slot.name}</span>
+                          <span className="text-xs text-slate-500">· max {slot.maxPicks} picks</span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-xs text-slate-400 block mb-0.5">ESPN Event ID *</label>
+                            <input
+                              type="text"
+                              value={slot.espnEventId}
+                              onChange={e => setStdSlots(prev => prev.map((s, j) => j === i ? { ...s, espnEventId: e.target.value } : s))}
+                              placeholder="e.g. 401900000"
+                              className="input text-xs w-full font-mono"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs text-slate-400 block mb-0.5">Start Date *</label>
+                            <input
+                              type="text"
+                              value={slot.startDate}
+                              onChange={e => setStdSlots(prev => prev.map((s, j) => j === i ? { ...s, startDate: e.target.value } : s))}
+                              placeholder={`April 9–12, ${newSeasonYear}`}
+                              className="input text-xs w-full"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs text-slate-400 block mb-0.5">Draft Date</label>
+                            <input
+                              type="text"
+                              value={slot.draftDate}
+                              onChange={e => setStdSlots(prev => prev.map((s, j) => j === i ? { ...s, draftDate: e.target.value } : s))}
+                              placeholder={`April 5, ${newSeasonYear}`}
+                              className="input text-xs w-full"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs text-slate-400 block mb-0.5">Live Scores Start (UTC)</label>
+                            <input
+                              type="text"
+                              value={slot.liveScoresStart}
+                              onChange={e => setStdSlots(prev => prev.map((s, j) => j === i ? { ...s, liveScoresStart: e.target.value } : s))}
+                              placeholder={`${newSeasonYear}-04-10T11:00:00Z`}
+                              className="input text-xs w-full font-mono"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {extraSlots.length > 0 && (
+                    <div className="space-y-3">
+                      <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'rgba(148,163,184,0.4)' }}>
+                        Extra Tournaments
+                      </p>
+                      {extraSlots.map((slot, i) => (
+                        <div key={i} className="rounded-xl p-3 space-y-2" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-semibold text-white">{slot.name || 'New Tournament'}</span>
+                            <button onClick={() => setExtraSlots(prev => prev.filter((_, j) => j !== i))} className="text-xs" style={{ color: '#f87171' }}>Remove</button>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <div>
+                              <label className="text-xs text-slate-400 block mb-0.5">Tournament Name *</label>
+                              <input
+                                type="text"
+                                value={slot.name}
+                                onChange={e => {
+                                  const name = e.target.value;
+                                  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+                                  const id = slug ? `${slug}-${newSeasonYear}` : `extra-${i + 1}-${newSeasonYear}`;
+                                  setExtraSlots(prev => prev.map((s, j) => j === i ? { ...s, name, id } : s));
+                                }}
+                                placeholder="e.g. The Genesis Invitational"
+                                className="input text-xs w-full"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-xs text-slate-400 block mb-0.5">Short Name</label>
+                              <input
+                                type="text"
+                                value={slot.shortName}
+                                onChange={e => setExtraSlots(prev => prev.map((s, j) => j === i ? { ...s, shortName: e.target.value.toUpperCase() } : s))}
+                                placeholder="GENESIS"
+                                className="input text-xs w-full"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-xs text-slate-400 block mb-0.5">ESPN Event ID *</label>
+                              <input
+                                type="text"
+                                value={slot.espnEventId}
+                                onChange={e => setExtraSlots(prev => prev.map((s, j) => j === i ? { ...s, espnEventId: e.target.value } : s))}
+                                placeholder="e.g. 401900000"
+                                className="input text-xs w-full font-mono"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-xs text-slate-400 block mb-0.5">Start Date *</label>
+                              <input
+                                type="text"
+                                value={slot.startDate}
+                                onChange={e => setExtraSlots(prev => prev.map((s, j) => j === i ? { ...s, startDate: e.target.value } : s))}
+                                placeholder={`Feb 12–15, ${newSeasonYear}`}
+                                className="input text-xs w-full"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-xs text-slate-400 block mb-0.5">Draft Date</label>
+                              <input
+                                type="text"
+                                value={slot.draftDate}
+                                onChange={e => setExtraSlots(prev => prev.map((s, j) => j === i ? { ...s, draftDate: e.target.value } : s))}
+                                placeholder={`Feb 8, ${newSeasonYear}`}
+                                className="input text-xs w-full"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-xs text-slate-400 block mb-0.5">Max Picks</label>
+                              <input
+                                type="number"
+                                value={slot.maxPicks}
+                                onChange={e => setExtraSlots(prev => prev.map((s, j) => j === i ? { ...s, maxPicks: +e.target.value } : s))}
+                                className="input text-xs w-full"
+                                min={1} max={8}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="flex gap-2 flex-wrap">
+                    <button
+                      onClick={() => setExtraSlots(prev => [...prev, {
+                        id: `extra-${prev.length + 1}-${newSeasonYear}`,
+                        name: '', shortName: '', fieldSize: 100, maxPicks: 5, cutLine: 65,
+                        sequence: STANDARD_TOURNAMENTS.length + prev.length + 1,
+                        espnEventId: '', startDate: '', draftDate: '', liveScoresStart: '',
+                      }])}
+                      className="btn-secondary text-xs">
+                      <Plus size={12} className="inline mr-1" /> Add Extra Tournament
+                    </button>
+                    <button
+                      onClick={handleCreateSeason}
+                      disabled={creatingSeason}
+                      className="text-sm py-2 px-4 rounded-lg font-bold transition-all disabled:opacity-40"
+                      style={{ background: '#1B3A9E', color: '#fff' }}>
+                      {creatingSeason ? '⏳ Creating…' : `Create ${newSeasonYear} Season`}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* End Season */}

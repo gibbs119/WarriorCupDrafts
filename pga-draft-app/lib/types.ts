@@ -27,6 +27,7 @@ export interface Tournament {
   cutLine: number;           // Position number of cut line (e.g. 65)
   year: number;
   scoreLocked?: boolean;     // True after admin runs Lock Scores
+  sequence?: number;         // Position within the season schedule (1-indexed)
 }
 
 // ─── Draft ───────────────────────────────────────────────────────────────────

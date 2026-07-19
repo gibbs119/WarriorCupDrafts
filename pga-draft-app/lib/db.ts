@@ -677,3 +677,22 @@ export async function getSeasonArchive(year: number): Promise<SeasonArchive | nu
 export async function saveSeasonArchive(year: number, data: SeasonArchive): Promise<void> {
   await set(ref(db, `seasons/${year}`), data);
 }
+
+// ─── Multi-season Support ─────────────────────────────────────────────────────
+
+export async function getTournamentsByYear(year: number): Promise<Tournament[]> {
+  const snap = await get(ref(db, 'tournaments'));
+  if (!snap.exists()) return [];
+  const all = Object.values(snap.val() as Record<string, Tournament>);
+  return all
+    .filter(t => t.year === year)
+    .sort((a, b) => (a.sequence ?? 99) - (b.sequence ?? 99));
+}
+
+export async function createTournamentsBatch(tournaments: Tournament[]): Promise<void> {
+  const updates: Record<string, unknown> = {};
+  for (const t of tournaments) {
+    updates[`tournaments/${t.id}`] = t;
+  }
+  await update(ref(db), updates);
+}
