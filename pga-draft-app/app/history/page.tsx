@@ -772,7 +772,7 @@ export default function HistoryPage() {
               )}
 
               {/* AI Season Recap — shown directly on the season tab, not buried in analytics */}
-              {archive.recap && (
+              {archive?.recap && (
                 <div className="card" style={{background:'rgba(139,92,246,0.06)',border:'1px solid rgba(139,92,246,0.2)'}}>
                   <div className="flex items-start justify-between mb-3">
                     <h3 className="font-bebas text-lg tracking-wider text-white flex items-center gap-2">
